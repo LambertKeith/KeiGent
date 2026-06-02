@@ -248,6 +248,44 @@ export class WideAttention implements AttentionStrategy {
   }
 }
 
+/**
+ * 对话注意力（ConversationalAttention）：专为闲聊/兜底设计。
+ * - 不匹配 skill、不注入 body（skillsUsed 为空 → 不触发学习）
+ * - 每轮都暴露全部传入工具，绝不移除 ask_user —— 支持多次追问
+ *   （这是不能复用 WideAttention 的原因：后者会移除已用工具）
+ * - system prompt 注入动态 skill 索引作为「能力清单」
+ * 无实例级可变状态，reset() 空实现。
+ */
+export class ConversationalAttention implements AttentionStrategy {
+  constructor(private readonly systemPromptBase: string) {}
+
+  reset(): void {}
+
+  matchSkills(_task: Task, _metas: SkillMeta[]): string[] {
+    return [];
+  }
+
+  async renderInjection(_matchedNames: string[], _skillContext: SkillContext): Promise<string> {
+    return "";
+  }
+
+  buildContext(state: LoopState, skillContext: SkillContext, availableTools: Tool[]): Promise<Context> {
+    const index = renderSkillIndex(skillContext.metas);
+    const systemPrompt = [
+      this.systemPromptBase,
+      index ? `## 你能帮用户做的事\n\n${index}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    return Promise.resolve({
+      systemPrompt,
+      messages: state.messages,
+      tools: availableTools.length > 0 ? availableTools : undefined,
+    });
+  }
+}
+
 // ── TerminateStrategy 实现 ─────────────────────────────────────────────
 
 /**

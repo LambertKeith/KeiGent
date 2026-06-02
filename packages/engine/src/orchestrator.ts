@@ -5,6 +5,7 @@ import type { LoopProfile, SkillMeta, Task } from "./types.js";
 import { makeConvergentExecProfile } from "./profiles/convergent-exec.js";
 import { makeDivergentResearchProfile } from "./profiles/divergent-research.js";
 import { makeConvergentVerifiedProfile } from "./profiles/convergent-verified.js";
+import { makeConversationalProfile } from "./profiles/conversational.js";
 import { extractToolCalls } from "./utils.js";
 import { scoreSkill } from "./profiles/strategies.js";
 
@@ -40,12 +41,8 @@ function makeDefaultRegistry(opts: RegistryOptions = {}): ProfileRegistry {
           return makeConvergentVerifiedProfile(opts.model, opts.apiKey);
         case "divergent-research":
           return makeDivergentResearchProfile(memoryDir, skillsUsed);
-        case "conversational": {
-          // 懒加载：conversational.ts 由 Task 4 创建，静态导入会导致测试在 Task 4 前失败
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const { makeConversationalProfile } = require("./profiles/conversational.js");
+        case "conversational":
           return makeConversationalProfile();
-        }
       }
     },
     names: () => ["convergent-exec", "convergent-verified", "divergent-research", "conversational"],
