@@ -10,7 +10,7 @@ import { scoreSkill } from "./profiles/strategies.js";
 
 // ── Profile 注册表 ────────────────────────────────────────────────────
 
-export type ProfileName = "convergent-exec" | "convergent-verified" | "divergent-research";
+export type ProfileName = "convergent-exec" | "convergent-verified" | "divergent-research" | "conversational";
 
 export interface ProfileRegistry {
   get(name: ProfileName): LoopProfile;
@@ -40,9 +40,15 @@ function makeDefaultRegistry(opts: RegistryOptions = {}): ProfileRegistry {
           return makeConvergentVerifiedProfile(opts.model, opts.apiKey);
         case "divergent-research":
           return makeDivergentResearchProfile(memoryDir, skillsUsed);
+        case "conversational": {
+          // 懒加载：conversational.ts 由 Task 4 创建，静态导入会导致测试在 Task 4 前失败
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const { makeConversationalProfile } = require("./profiles/conversational.js");
+          return makeConversationalProfile();
+        }
       }
     },
-    names: () => ["convergent-exec", "convergent-verified", "divergent-research"],
+    names: () => ["convergent-exec", "convergent-verified", "divergent-research", "conversational"],
   };
 }
 
@@ -55,6 +61,20 @@ export function makeRegistry(opts: RegistryOptions): ProfileRegistry {
 // ── 规则分类（档位 2）────────────────────────────────────────────────
 
 /**
+ * 高置信度闲聊识别（零 LLM）。只拦最高频最确定的纯问候/感谢；
+ * 故意从严——漏判会落到 LLM 意图兜底，误判才是要避免的。
+ */
+function isObviousChitchat(task: Task): boolean {
+  if (task.successDef) return false;
+  const goal = task.goal.trim();
+  if (/https?:\/\//.test(goal) || goal.length > 20) return false;
+  return [
+    /^(你好|您好|hi|hello|hey|嗨|在吗|早|晚上好)[\s!！。.~]*$/i,
+    /^(谢谢|感谢|thanks|thank\s?you|好的|ok|okay|拜拜|再见|bye)[\s!！。.~]*$/i,
+  ].some((p) => p.test(goal));
+}
+
+/**
  * 基于任务硬信号选择 profile，无需 LLM 调用。
  * 返回 null 表示规则无法确定，需要升级到分类 agent。
  */
@@ -62,6 +82,11 @@ export function classifyByRules(task: Task, metas: SkillMeta[]): ProfileName | n
   // 规则 0：显式指定 profile → 直接用（向后兼容）
   if (task.profile && (task.profile as ProfileName) in { "convergent-exec": 1, "divergent-research": 1 }) {
     return task.profile as ProfileName;
+  }
+
+  // 规则 0.5：高置信度闲聊 → 对话兜底（在所有任务规则之前，但尊重规则0的显式指定）
+  if (isObviousChitchat(task)) {
+    return "conversational";
   }
 
   // 规则 1：有 successDef + assertions → 用真实裁判的验证收敛 profile
@@ -111,7 +136,11 @@ const classifyTool = {
   description: "选择最适合当前任务的 agent loop profile",
   parameters: Type.Object({
     profile: Type.Union(
-      [Type.Literal("convergent-exec"), Type.Literal("divergent-research")],
+      [
+        Type.Literal("convergent-exec"),
+        Type.Literal("divergent-research"),
+        Type.Literal("conversational"),
+      ],
       { description: "选择的 profile" },
     ),
     reasoning: Type.String({ description: "选择理由（1-2 句话）" }),
@@ -134,6 +163,7 @@ async function classifyByLLM(
 可用策略：
 - convergent-exec：收敛执行。适用于有明确目标、具体操作步骤、需要精确完成某件事的任务。如抓取网页、填写表单、提取数据。
 - divergent-research：发散研究。适用于开放性探索、信息收集、知识沉淀类任务。如调研、分析、比较。
+- conversational：闲聊、问候、感谢、询问你的能力、或没有明确可执行目标的对话。
 
 可用 Skills：
 ${skillList || "(无)"}

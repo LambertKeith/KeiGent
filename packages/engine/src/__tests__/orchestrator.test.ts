@@ -19,3 +19,23 @@ describe("classifyByRules — 规则4 误判修复", () => {
     expect(classifyByRules(task("帮我用 web-summarize 总结这个网页"), METAS)).toBe("convergent-exec");
   });
 });
+
+describe("classifyByRules — 闲聊快路径", () => {
+  it("「你好」走 conversational", () => {
+    expect(classifyByRules(task("你好"), METAS)).toBe("conversational");
+  });
+  it("「谢谢」走 conversational", () => {
+    expect(classifyByRules(task("谢谢"), METAS)).toBe("conversational");
+  });
+  it("短执行任务「用 web-summarize 总结网页」不被当闲聊", () => {
+    expect(classifyByRules(task("用 web-summarize 总结网页"), METAS)).toBe("convergent-exec");
+  });
+  it("带 URL 的输入即使短也不当闲聊", () => {
+    const r = classifyByRules(task("你好 https://example.com"), METAS);
+    expect(r).not.toBe("conversational");
+  });
+  it("超 20 字的问候不进快路径（交后续规则/LLM）", () => {
+    const long = "你好你好你好你好你好你好你好你好你好你好你好你好"; // 24 字
+    expect(classifyByRules(task(long), METAS)).not.toBe("conversational");
+  });
+});
