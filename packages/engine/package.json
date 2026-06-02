@@ -1,0 +1,29 @@
+{
+  "name": "@keigent/engine",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/lib.ts",
+  "types": "./src/lib.ts",
+  "exports": {
+    ".": "./src/lib.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "verify:attention": "tsx src/verify-attention.ts",
+    "verify:browser": "tsx src/verify-browser.ts",
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.77.0",
+    "@nut-tree-fork/nut-js": "^4.2.6",
+    "playwright-core": "^1.60.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.8"
+  }
+}
