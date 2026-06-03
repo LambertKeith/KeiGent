@@ -1,0 +1,71 @@
+{
+  "task": {
+    "goal": "请抓取 https://example.com 的页面内容，并用 web-summarize skill 的方式总结。",
+    "profile": "divergent-research",
+    "successDef": {
+      "goal": "成功抓取并总结页面",
+      "assertions": [
+        {
+          "description": "已调用 fetch_url 工具",
+          "signal": "text"
+        },
+        {
+          "description": "产出了包含要点的总结",
+          "signal": "text"
+        }
+      ]
+    }
+  },
+  "profile": "divergent-research",
+  "exitReason": "success",
+  "finalResponse": "- **标题**：Example Domain  \n- **一句话概述**：用于文档示例的保留域名。  \n- **要点**：\n  - 该页面说明 example.com 是一个示例域名。\n  - 该域名可用于文档示例，无需事先申请许可。\n  - 页面建议不要将该域名用于实际运营场景。\n  - 页面提供了 “Learn more” 链接以了解更多信息。\n- **原文链接**：https://example.com",
+  "skillsUsed": [
+    "web-summarize"
+  ],
+  "steps": [
+    {
+      "iteration": 1,
+      "kind": "tool_call",
+      "toolName": "fetch_url",
+      "toolArgs": {},
+      "toolResult": "标题: Example Domain\n内容: Example Domain This domain is for use in documentation examples without needing permission. Avoid use in operations. Learn more",
+      "toolSucceeded": true
+    },
+    {
+      "iteration": 2,
+      "kind": "checkpoint",
+      "checkpointDesc": "(无描述)",
+      "snapshot": {
+        "url": "https://example.com/",
+        "domDigest": "<h1>Example Domain | <p>This domain is for use in docu | <p>Learn more | <a>Learn more",
+        "visibleText": "Example Domain This domain is for use in documentation examples without needing permission. Avoid use in operations. Learn more",
+        "raw": {
+          "title": "Example Domain"
+        }
+      },
+      "verdictPassed": true,
+      "verdictEvidence": "NoVerify: 跳过验证"
+    },
+    {
+      "iteration": 3,
+      "kind": "checkpoint",
+      "checkpointDesc": "(无描述)",
+      "snapshot": {
+        "url": "https://example.com/",
+        "domDigest": "<h1>Example Domain | <p>This domain is for use in docu | <p>Learn more | <a>Learn more",
+        "visibleText": "Example Domain This domain is for use in documentation examples without needing permission. Avoid use in operations. Learn more",
+        "raw": {
+          "title": "Example Domain"
+        }
+      },
+      "verdictPassed": true,
+      "verdictEvidence": "NoVerify: 跳过验证"
+    },
+    {
+      "iteration": 4,
+      "kind": "text_output",
+      "text": "- **标题**：Example Domain  \n- **一句话概述**：用于文档示例的保留域名。  \n- **要点**：\n  - 该页面说明 example.com 是一个示例域名。\n  - 该域名可用于文档示例，无需事先申请许可。\n  - 页面建议不要将该域名用于实际运营场景。\n  - 页面提供了 “Learn more” 链接以了解更多信息。\n- **原文链接**：https://example.com"
+    }
+  ],
+  "durationMs": 15364
+}

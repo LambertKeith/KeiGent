@@ -1,0 +1,78 @@
+{
+  "task": {
+    "goal": "请抓取 https://example.com 的页面内容，并用 web-summarize skill 的方式总结。",
+    "profile": "auto",
+    "successDef": {
+      "goal": "成功抓取 https://example.com 并产出结构化总结",
+      "assertions": [
+        {
+          "description": "当前页面 URL 是 https://example.com/ 或 https://example.com",
+          "signal": "url"
+        },
+        {
+          "description": "页面可见文本包含 Example Domain 或类似内容",
+          "signal": "text"
+        }
+      ]
+    }
+  },
+  "profile": "auto",
+  "exitReason": "success",
+  "finalResponse": "已完成。",
+  "skillsUsed": [
+    "web-summarize"
+  ],
+  "steps": [
+    {
+      "iteration": 1,
+      "kind": "tool_call",
+      "toolName": "fetch_url",
+      "toolArgs": {
+        "url": "https://example.com"
+      },
+      "toolResult": "标题: Example Domain\n内容: Example Domain This domain is for use in documentation examples without needing permission. Avoid use in operations. Learn more",
+      "toolSucceeded": true
+    },
+    {
+      "iteration": 2,
+      "kind": "text_output",
+      "text": "<tool_call name=\"request_verification\">\n  <arg name=\"checkpoint_desc\">页面已抓取，准备总结</arg>\n</tool_call>- **标题**：Example Domain  \n- **一句话概述**：示例用途的保留域名。  \n- **要点**：  \n  - 该页面说明 example.com 是用于文档示例的域名。  \n  - 使用该域名不需要额外许可，适合在示例材料中引用。  \n  - 页面提醒不要将该域名用于实际业务或运营场景。  \n  - 页面提供了“Learn more”链接以了解更多信息。  \n- **原文链接**：https://example.com  \n\ncheckpoint_desc=\"总结已完成\""
+    },
+    {
+      "iteration": 3,
+      "kind": "checkpoint",
+      "checkpointDesc": "步骤3已完成：已调用 request_verification 声明完成",
+      "snapshot": {
+        "url": "https://example.com/",
+        "domDigest": "<h1>Example Domain | <p>This domain is for use in docu | <p>Learn more | <a>Learn more",
+        "visibleText": "Example Domain This domain is for use in documentation examples without needing permission. Avoid use in operations. Learn more",
+        "raw": {
+          "title": "Example Domain"
+        }
+      },
+      "verdictPassed": true,
+      "verdictEvidence": "3/3 裁判通过。状态快照显示当前 URL 为 https://example.com/，符合允许的 URL；可见文本前 300 字包含 “Example Domain” 以及示例域说明文本。未发现与期望断言不符的证据。"
+    },
+    {
+      "iteration": 4,
+      "kind": "text_output",
+      "text": "已完成。"
+    },
+    {
+      "iteration": 5,
+      "kind": "checkpoint",
+      "checkpointDesc": "步骤4已完成：已调用 request_verification 工具声明步骤完成",
+      "snapshot": {
+        "url": "https://example.com/",
+        "domDigest": "<h1>Example Domain | <p>This domain is for use in docu | <p>Learn more | <a>Learn more",
+        "visibleText": "Example Domain This domain is for use in documentation examples without needing permission. Avoid use in operations. Learn more",
+        "raw": {
+          "title": "Example Domain"
+        }
+      },
+      "verdictPassed": true,
+      "verdictEvidence": "3/3 裁判通过。状态快照显示当前 URL 为 https://example.com/，符合期望 URL；可见文本前 300 字包含“Example Domain”及相关说明文本，满足页面可见文本要求。未发现不符合证据。"
+    }
+  ],
+  "durationMs": 43040
+}

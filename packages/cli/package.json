@@ -1,0 +1,22 @@
+{
+  "name": "@keigent/cli",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "keigent": "./src/main.ts"
+  },
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.77.0",
+    "@keigent/engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3"
+  }
+}

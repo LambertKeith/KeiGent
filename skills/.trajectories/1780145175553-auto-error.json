@@ -1,0 +1,25 @@
+{
+  "task": {
+    "goal": "请抓取 https://example.com 的页面内容，并用 web-summarize skill 的方式总结。",
+    "profile": "auto",
+    "successDef": {
+      "goal": "成功抓取并总结页面",
+      "assertions": [
+        {
+          "description": "已调用 fetch_url 工具",
+          "signal": "text"
+        },
+        {
+          "description": "产出了包含要点的总结",
+          "signal": "text"
+        }
+      ]
+    }
+  },
+  "profile": "auto",
+  "exitReason": "error",
+  "steps": [],
+  "finalResponse": "[错误] 400 Invalid 'input[2].call_id': empty string. Expected a string with minimum length 1, but got an empty string instead.",
+  "durationMs": 0,
+  "skillsUsed": []
+}

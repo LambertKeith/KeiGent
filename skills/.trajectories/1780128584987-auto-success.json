@@ -1,0 +1,81 @@
+{
+  "task": {
+    "goal": "请抓取 https://example.com 的页面内容，并用 web-summarize skill 的方式总结。",
+    "profile": "auto",
+    "successDef": {
+      "goal": "成功抓取并总结页面",
+      "assertions": [
+        {
+          "description": "已调用 fetch_url 工具",
+          "signal": "text"
+        },
+        {
+          "description": "产出了包含要点的总结",
+          "signal": "text"
+        }
+      ]
+    }
+  },
+  "profile": "auto",
+  "exitReason": "success",
+  "finalResponse": "已完成页面总结。",
+  "skillsUsed": [
+    "web-summarize"
+  ],
+  "steps": [
+    {
+      "iteration": 1,
+      "kind": "tool_call",
+      "toolName": "fetch_url",
+      "toolArgs": {},
+      "toolResult": "标题: Example Domain\n内容: Example Domain This domain is for use in documentation examples without needing permission. Avoid use in operations. Learn more",
+      "toolSucceeded": true
+    },
+    {
+      "iteration": 2,
+      "kind": "text_output",
+      "text": "**标题**：Example Domain\n\n**一句话概述**：用于文档示例的演示页面。\n\n**要点**：\n- 这是一个示例域名页面，专门用于文档、教程或测试场景。  \n- 页面说明该域名不需要额外许可即可用于示例用途。  \n- 同时提醒不要将其用于实际业务操作。  \n- 页面内容非常简短，没有其他实质性信息。\n\n**原文链接**：https://example.com"
+    },
+    {
+      "iteration": 3,
+      "kind": "checkpoint",
+      "checkpointDesc": "(无描述)",
+      "snapshot": {
+        "url": "https://example.com/",
+        "domDigest": "<h1>Example Domain | <p>This domain is for use in docu | <p>Learn more | <a>Learn more",
+        "visibleText": "Example Domain This domain is for use in documentation examples without needing permission. Avoid use in operations. Learn more",
+        "raw": {
+          "title": "Example Domain"
+        }
+      },
+      "verdictPassed": true,
+      "verdictEvidence": "[mock] 验证通过（真实裁判待第 3 步实现）"
+    },
+    {
+      "iteration": 4,
+      "kind": "text_output",
+      "text": "已完成页面总结。"
+    },
+    {
+      "iteration": 5,
+      "kind": "text_output",
+      "text": "已完成页面总结。"
+    },
+    {
+      "iteration": 6,
+      "kind": "checkpoint",
+      "checkpointDesc": "(无描述)",
+      "snapshot": {
+        "url": "https://example.com/",
+        "domDigest": "<h1>Example Domain | <p>This domain is for use in docu | <p>Learn more | <a>Learn more",
+        "visibleText": "Example Domain This domain is for use in documentation examples without needing permission. Avoid use in operations. Learn more",
+        "raw": {
+          "title": "Example Domain"
+        }
+      },
+      "verdictPassed": true,
+      "verdictEvidence": "[mock] 验证通过（真实裁判待第 3 步实现）"
+    }
+  ],
+  "durationMs": 22719
+}
