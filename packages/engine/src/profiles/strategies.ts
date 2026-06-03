@@ -215,8 +215,11 @@ export class WideAttention implements AttentionStrategy {
     this.usedTools.clear();
   }
 
-  matchSkills(_task: Task, metas: SkillMeta[]): string[] {
-    return metas.map((m) => m.name);
+  matchSkills(task: Task, metas: SkillMeta[]): string[] {
+    // 发散：返回所有「相关」的 skill（score>0），按相关度排序——而非无条件全返回。
+    // 无关任务（如查天气、闲聊式提问）匹配 0 篇 → skillsUsed 为空 →
+    // 不会误触发学习 loop 把无关经验写进 skill 库（防污染），也不会注入无关 body。
+    return rankSkills(task, metas);
   }
 
   async renderInjection(matchedNames: string[], skillContext: SkillContext): Promise<string> {
