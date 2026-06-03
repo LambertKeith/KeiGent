@@ -188,6 +188,12 @@ export class LoopEngine {
           continue;
         }
 
+        // 模型既无工具也无文本：若之前已产出过答案，用它收尾（防止凑 checkpoint
+        // 过程中模型吐空导致整轮 error）；否则才算真的无输出。
+        if (state.finalResponse) {
+          vlog("[engine] 模型本轮无输出，但已有答案，用既有答案收尾");
+          return this.result(state, "success", undefined, collector, matchedSkills);
+        }
         return this.result(state, "error", "[错误] 模型无输出", collector, matchedSkills);
       }
 

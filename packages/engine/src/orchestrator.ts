@@ -13,6 +13,11 @@ import { scoreSkill } from "./profiles/strategies.js";
 
 export type ProfileName = "convergent-exec" | "convergent-verified" | "divergent-research" | "conversational";
 
+// convergent-exec 的 skill 匹配阈值：scoreSkill 中 name 命中 +10、tags 命中 +2、
+// description 弱命中 +1。设为 2 可滤掉「仅 description 弱命中一个英文词」的噪声。
+// 规则分类（rule 4）和兜底守卫（guardProfileChoice）共用此阈值。
+const SKILL_MATCH_THRESHOLD = 2;
+
 export interface ProfileRegistry {
   get(name: ProfileName): LoopProfile;
   names(): ProfileName[];
@@ -117,7 +122,6 @@ export function classifyByRules(task: Task, metas: SkillMeta[]): ProfileName | n
 
   // 规则 4：任务对某 skill 真实相关（复用 attention 层的 scoreSkill 评分）→ 收敛执行
   // 修复：旧逻辑检查「库里有没有执行 skill」（与任务无关），导致任何输入都误判。
-  const SKILL_MATCH_THRESHOLD = 2; // name 命中 +10、tags 命中 +2、description 弱命中 +1
   const bestSkillScore = metas
     .map((m) => scoreSkill(m, task.goal))
     .reduce((max, s) => Math.max(max, s), 0);
@@ -171,7 +175,8 @@ ${skillList || "(无)"}
 选择原则：
 - 有 URL 且需要具体操作 → convergent-exec
 - 需要分析、比较、探索 → divergent-research
-- 不确定时优先选 convergent-exec（更安全）
+- convergent-exec 仅适合有对应 skill 工作流的精确执行任务；通用的"查一下/找一下/问答"类任务（无对应 skill）应选 divergent-research
+- 不确定时优先选 divergent-research（更灵活，有答案即可结束）
 
 必须调用 select_profile 工具返回决策。`,
       messages: [
@@ -215,6 +220,38 @@ ${skillList || "(无)"}
   return "convergent-exec";
 }
 
+// ── Profile 选择兜底守卫 ──────────────────────────────────────────────
+
+/**
+ * convergent-exec 的步骤机（fetch→输出→verify→verify + 强制 2 个 checkpoint）
+ * 是为「有匹配 skill 的工作流」设计的。若任务既没有匹配的 skill、也没有
+ * successDef，硬塞进 convergent-exec 会让模型被反复逼着补 checkpoint——
+ * 要么啰嗦重复输出，要么吐空导致 error。
+ *
+ * 这个确定性守卫拦住这种错配：无论选择来自规则还是 LLM，只要选了
+ * convergent-exec 却没有可依据的 skill / successDef，就改走 divergent-research
+ * （开放工具 + 模型自判 + 有答案即退），适合「查天气」这类通用 fetch-and-answer。
+ */
+function guardProfileChoice(
+  choice: ProfileName,
+  task: Task,
+  metas: SkillMeta[],
+): ProfileName {
+  if (choice !== "convergent-exec") return choice;
+  if (task.successDef && task.successDef.assertions.length > 0) return choice;
+
+  const bestSkillScore = metas
+    .map((m) => scoreSkill(m, task.goal))
+    .reduce((max, s) => Math.max(max, s), 0);
+  if (bestSkillScore >= SKILL_MATCH_THRESHOLD) return choice;
+
+  vlog("[orchestrator] convergent-exec 无匹配 skill/successDef，改走 divergent-research");
+  return "divergent-research";
+}
+
+/** 测试用导出：守卫逻辑是纯函数，直接单测无需 LLM。 */
+export const __guardProfileChoice = guardProfileChoice;
+
 // ── Orchestrator 主类 ─────────────────────────────────────────────────
 
 export interface OrchestratorOptions {
@@ -248,14 +285,16 @@ export class Orchestrator {
     // 档位 2：规则分类
     const ruleResult = classifyByRules(task, metas);
     if (ruleResult) {
-      vlog(`[orchestrator] 规则分类 → ${ruleResult}`);
-      return { profile: this.registry.get(ruleResult), name: ruleResult, method: "rule" };
+      const guarded = guardProfileChoice(ruleResult, task, metas);
+      vlog(`[orchestrator] 规则分类 → ${ruleResult}${guarded !== ruleResult ? ` → ${guarded}（守卫修正）` : ""}`);
+      return { profile: this.registry.get(guarded), name: guarded, method: "rule" };
     }
 
     // 档位 3：LLM 分类 agent
     vlog("[orchestrator] 规则无法判断，升级到 LLM 分类...");
     const llmResult = await classifyByLLM(task, metas, this.model, this.apiKey);
-    vlog(`[orchestrator] LLM 分类 → ${llmResult}`);
-    return { profile: this.registry.get(llmResult), name: llmResult, method: "llm" };
+    const guarded = guardProfileChoice(llmResult, task, metas);
+    vlog(`[orchestrator] LLM 分类 → ${llmResult}${guarded !== llmResult ? ` → ${guarded}（守卫修正）` : ""}`);
+    return { profile: this.registry.get(guarded), name: guarded, method: "llm" };
   }
 }
