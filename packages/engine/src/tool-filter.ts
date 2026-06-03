@@ -9,6 +9,8 @@ import type { ToolRegistry } from "./tools/index.js";
  */
 export function toolsForProfile(registry: ToolRegistry, profileName: string): Tool[] {
   if (profileName === "conversational") {
+    // ask_user 当前是 readonly，已被谓词涵盖；显式列出 name 作为防御——
+    // 即便将来收紧 ask_user 权限，对话 profile 也必须保留追问能力。
     return registry.toPiAiTools((t) => t.permission === "readonly" || t.name === "ask_user");
   }
   return registry.toPiAiTools();

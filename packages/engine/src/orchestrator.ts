@@ -76,8 +76,11 @@ function isObviousChitchat(task: Task): boolean {
  * 返回 null 表示规则无法确定，需要升级到分类 agent。
  */
 export function classifyByRules(task: Task, metas: SkillMeta[]): ProfileName | null {
-  // 规则 0：显式指定 profile → 直接用（向后兼容）
-  if (task.profile && (task.profile as ProfileName) in { "convergent-exec": 1, "divergent-research": 1 }) {
+  // 规则 0：显式指定 profile → 直接用（向后兼容）。
+  // 仅放行这两个由 task.profile 字段直接指定的 profile：convergent-verified 需要 model+apiKey
+  // 不宜走这条无参路径，conversational 只应由闲聊识别或 /profile 手动强制触发。
+  const explicitProfiles: ProfileName[] = ["convergent-exec", "divergent-research"];
+  if (task.profile && explicitProfiles.includes(task.profile as ProfileName)) {
     return task.profile as ProfileName;
   }
 

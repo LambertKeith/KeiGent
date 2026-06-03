@@ -7,13 +7,12 @@ import {
   loadSkillContext,
   makeRegistry,
   buildDefaultRegistry,
-  saveTrajectory,
-  formatLearningResult,
   AllowAllGate,
   toolsForProfile,
   type Task,
 } from "@keigent/engine";
 import { loadConfig, buildModel } from "./config.js";
+import { persistAndLearn } from "./post-run.js";
 import { renderProgress, printResponse, printError, printInfo } from "./renderer.js";
 
 /**
@@ -67,12 +66,7 @@ export async function runOnce(goal: string): Promise<void> {
     );
     printResponse(result.finalResponse);
 
-    await saveTrajectory(result.trajectory, config.skillsDir).catch(() => {});
-    if (result.exitReason === "success" && result.trajectory.skillsUsed.length > 0) {
-      printInfo("（学习 loop 分析中…）");
-      const learning = await learner.learn(result.trajectory, config.skillsDir, skillBodies).catch(() => null);
-      if (learning) printInfo(formatLearningResult(learning).split("\n")[0] ?? "");
-    }
+    await persistAndLearn(result, config, learner, skillBodies);
   } catch (e) {
     printError(`执行出错: ${e instanceof Error ? e.message : String(e)}`);
   } finally {

@@ -9,14 +9,13 @@ import {
   loadSkillContext,
   makeRegistry,
   buildDefaultRegistry,
-  saveTrajectory,
-  formatLearningResult,
   toolsForProfile,
   type ApprovalGate,
   type Task,
 } from "@keigent/engine";
 import { loadConfig, buildModel, type KeigentConfig } from "./config.js";
 import { handleCommand, type ReplState } from "./commands.js";
+import { persistAndLearn } from "./post-run.js";
 import { renderProgress, printBanner, printResponse, printError, printInfo, colors as c } from "./renderer.js";
 
 // ── 交互式审批门：dangerous 工具弹 [y/N] ──────────────────────────────
@@ -43,17 +42,20 @@ export async function runRepl(): Promise<void> {
   printInfo(`model=${config.modelId} | skills=${skillContext.metas.length} | workspace=${config.workspace}`);
   printInfo(`浏览器: ${config.headless ? "headless" : "headed"}\n`);
 
+  const approval = new InteractiveApprovalGate(rl);
+  const profileRegistry = makeRegistry({ model, apiKey: config.apiKey, memoryDir: config.memoryDir });
+
   const replState: ReplState = {
     forcedProfile: null,
     headless: config.headless,
     skillContext,
+    profileNames: profileRegistry.names(),
   };
 
-  const approval = new InteractiveApprovalGate(rl);
   const orchestrator = new Orchestrator({
     model,
     apiKey: config.apiKey,
-    registry: makeRegistry({ model, apiKey: config.apiKey, memoryDir: config.memoryDir }),
+    registry: profileRegistry,
   });
   const learner = new Learner(model, config.apiKey);
   const stateCapture = new PlaywrightStateCapture();
@@ -88,7 +90,7 @@ export async function runRepl(): Promise<void> {
     // 作为任务执行
     await runTask(input, {
       config, model, replState, orchestrator, learner, stateCapture,
-      registry, approval, skillBodies, rl,
+      registry, profileRegistry, approval, skillBodies, rl,
     });
   }
 
@@ -105,13 +107,14 @@ interface TaskDeps {
   learner: Learner;
   stateCapture: PlaywrightStateCapture;
   registry: ReturnType<typeof buildDefaultRegistry>;
+  profileRegistry: ReturnType<typeof makeRegistry>;
   approval: ApprovalGate;
   skillBodies: Map<string, string>;
   rl: import("node:readline/promises").Interface;
 }
 
 async function runTask(goal: string, deps: TaskDeps): Promise<void> {
-  const { config, model, replState, orchestrator, learner, stateCapture, registry, approval, skillBodies, rl } = deps;
+  const { config, model, replState, orchestrator, learner, stateCapture, registry, profileRegistry, approval, skillBodies, rl } = deps;
 
   const task: Task = {
     goal,
@@ -122,8 +125,7 @@ async function runTask(goal: string, deps: TaskDeps): Promise<void> {
   let profileName: string;
   let profile;
   if (replState.forcedProfile) {
-    const reg = makeRegistry({ model, apiKey: config.apiKey, memoryDir: config.memoryDir });
-    profile = reg.get(replState.forcedProfile as never);
+    profile = profileRegistry.get(replState.forcedProfile);
     profileName = replState.forcedProfile;
     renderProgress({ kind: "profile_selected", profile: profileName, via: "rule" });
   } else {
@@ -159,16 +161,7 @@ async function runTask(goal: string, deps: TaskDeps): Promise<void> {
 
     printResponse(result.finalResponse);
 
-    // 后台学习（不阻塞下一轮输入太久，但等它完成以保证 LEARNING.md 写入）
-    await saveTrajectory(result.trajectory, config.skillsDir).catch(() => {});
-    if (result.exitReason === "success" && result.trajectory.skillsUsed.length > 0) {
-      printInfo("（学习 loop 分析中…）");
-      const learning = await learner.learn(result.trajectory, config.skillsDir, skillBodies).catch((e) => {
-        printError(`学习 loop 失败: ${e}`);
-        return null;
-      });
-      if (learning) printInfo(formatLearningResult(learning).split("\n")[0] ?? "");
-    }
+    await persistAndLearn(result, config, learner, skillBodies);
   } catch (e) {
     printError(`执行出错: ${e instanceof Error ? e.message : String(e)}`);
   }

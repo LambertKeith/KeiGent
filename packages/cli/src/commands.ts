@@ -1,10 +1,11 @@
-import type { SkillContext } from "@keigent/engine";
+import type { ProfileName, SkillContext } from "@keigent/engine";
 import { printInfo, printError, colors as c } from "./renderer.js";
 
 export interface ReplState {
-  forcedProfile: string | null;   // /profile 强制指定
+  forcedProfile: ProfileName | null;   // /profile 强制指定
   headless: boolean;
   skillContext: SkillContext;
+  profileNames: readonly string[];     // 合法 profile 名（来自 registry，用于 /profile 校验）
 }
 
 export interface CommandResult {
@@ -34,13 +35,15 @@ export function handleCommand(input: string, state: ReplState): CommandResult {
     case "profile":
       if (!arg) {
         printInfo(`当前强制 profile: ${state.forcedProfile ?? "（自动调度）"}`);
-        printInfo("可选: convergent-exec / convergent-verified / divergent-research / conversational / auto");
+        printInfo(`可选: ${state.profileNames.join(" / ")} / auto`);
       } else if (arg === "auto") {
         state.forcedProfile = null;
         printInfo("已恢复自动 profile 调度");
-      } else {
-        state.forcedProfile = arg;
+      } else if (state.profileNames.includes(arg)) {
+        state.forcedProfile = arg as ProfileName;
         printInfo(`下个任务强制使用 profile: ${arg}`);
+      } else {
+        printError(`未知 profile: ${arg}（可选: ${state.profileNames.join(" / ")} / auto）`);
       }
       return { handled: true };
 
