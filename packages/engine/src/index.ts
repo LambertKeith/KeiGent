@@ -1,6 +1,6 @@
 import { join } from "path";
 import { fileURLToPath } from "url";
-import { type Model } from "@earendil-works/pi-ai";
+import { type Api, type Model } from "@earendil-works/pi-ai";
 import { LoopEngine } from "./engine.js";
 import { loadSkillContext } from "./skills.js";
 import { Orchestrator, makeRegistry } from "./orchestrator.js";
@@ -15,13 +15,20 @@ import type { Task } from "./types.js";
 // demo 模式开启内部日志（看完整执行过程）
 setVerbose(true);
 
-// ── Model（packyapi / gpt-5.5）────────────────────────────────────────
-const model: Model<"openai-completions"> = {
-  id: "gpt-5.5",
-  name: "gpt-5.5 (packyapi)",
-  api: "openai-completions",
-  provider: "packyapi",
-  baseUrl: "https://www.packyapi.com/v1",
+// ── Model（protocol-compatible demo config）──────────────────────────────
+type DemoProtocol = "openai" | "anthropic";
+
+function demoProtocol(): DemoProtocol {
+  return process.env["KEIGENT_API_PROTOCOL"] === "anthropic" ? "anthropic" : "openai";
+}
+
+const protocol = demoProtocol();
+const model: Model<Api> = {
+  id: process.env["KEIGENT_MODEL_ID"] ?? (protocol === "anthropic" ? "claude-3-5-sonnet-latest" : "gpt-4o-mini"),
+  name: "KeiGent demo model",
+  api: protocol === "anthropic" ? "anthropic-messages" : "openai-completions",
+  provider: protocol === "anthropic" ? "anthropic-compatible" : "openai-compatible",
+  baseUrl: process.env["KEIGENT_BASE_URL"] ?? (protocol === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"),
   reasoning: false,
   input: ["text", "image"],
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -29,9 +36,15 @@ const model: Model<"openai-completions"> = {
   maxTokens: 16384,
 };
 
-const API_KEY =
-  process.env["PACKY_API_KEY"] ??
-  "sk-UoqCIPbdsLMm2KsSTWVX3hpQ1g0GreMW7HmbnUr3zmWaRyPH";
+function requireApiKey(): string {
+  const apiKey = process.env["KEIGENT_API_KEY"];
+  if (!apiKey) {
+    throw new Error("KEIGENT_API_KEY is required to run the engine demo entrypoint");
+  }
+  return apiKey;
+}
+
+const API_KEY = requireApiKey();
 
 // ── 工具注册表（B0：工具与引擎解耦）────────────────────────────────────
 

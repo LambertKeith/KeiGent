@@ -1,23 +1,20 @@
 {
-  "name": "@keigent/cli",
+  "name": "@keigent/web",
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "bin": {
-    "keigent": "./src/main.ts"
-  },
   "scripts": {
-    "start": "tsx src/main.ts",
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
     "check": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^0.77.0",
-    "@keigent/engine": "workspace:*"
+    "@keigent/engine": "workspace:*",
+    "@keigent/cli": "workspace:*",
+    "vite": "^7.2.4"
   },
   "devDependencies": {
-    "@types/node": "^25.9.1",
-    "tsx": "^4.19.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.8"
   }

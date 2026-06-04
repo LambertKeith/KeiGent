@@ -1,4 +1,4 @@
-import type { Model } from "@earendil-works/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { LoopProfile } from "../types.js";
 import {
   DiagnoseRepair,
@@ -21,7 +21,7 @@ const SYSTEM_PROMPT = `你是一个精确执行任务的 AI 助手。
  * - memory:     NoWrite（执行不写记忆）
  */
 export function makeConvergentVerifiedProfile(
-  model: Model<"openai-completions">,
+  model: Model<Api>,
   apiKey: string,
   opts: {
     requiredCheckpoints?: number;

@@ -647,20 +647,27 @@ interface Task {
 - MIT 许可，可商用/二次开发
 - 2026-05-07 起从 `@mariozechner` 迁移至 `@earendil-works` scope
 
-### 10.3 LLM 端点（已核实，2026-05-29）
+### 10.3 LLM 端点（协议优先）
 
-实际使用 packyapi（OpenAI-compatible 代理）接入 gpt-5.5：
+KeiGent 不为某个第三方转发平台设置专门入口，而是按 API 协议配置模型端点：
 
 ```typescript
-const model: Model<"openai-completions"> = {
-  id: "gpt-5.5",
-  api: "openai-completions",
-  provider: "packyapi",
-  baseUrl: "https://www.packyapi.com/v1",
+const model: Model<Api> = {
+  id: process.env["KEIGENT_MODEL_ID"] ?? "gpt-4o-mini",
+  api: protocol === "anthropic" ? "anthropic-messages" : "openai-completions",
+  provider: protocol === "anthropic" ? "anthropic-compatible" : "openai-compatible",
+  baseUrl: process.env["KEIGENT_BASE_URL"] ?? protocolDefaultBaseUrl,
   // ...
 };
 // getModel() 只接受 KnownProvider，自定义端点直接构造 Model 对象
 ```
+
+配置层支持：
+
+- `KEIGENT_API_PROTOCOL=openai|anthropic`
+- `KEIGENT_BASE_URL=<任意兼容端点>`
+- `KEIGENT_MODEL_ID=<模型名>`
+- `KEIGENT_API_KEY=<密钥>`
 
 **已知工程问题（gpt-5.5 + pi-ai 流式解析）**：
 - pi-ai 的 `openai-completions` 流式解析器在处理 gpt-5.5 的响应时会产生 id 为空字符串的幽灵 ToolCall block。

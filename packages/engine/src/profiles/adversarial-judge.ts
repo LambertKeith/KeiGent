@@ -1,5 +1,5 @@
 import { vlog, vwarn } from "../logger.js";
-import { complete, type Model, Type } from "@earendil-works/pi-ai";
+import { complete, type Api, type Model, Type } from "@earendil-works/pi-ai";
 import type {
   AssertionResult,
   SkillContext,
@@ -36,7 +36,7 @@ const submitVerdictTool = {
 // ── 单个裁判的内部实现 ───────────────────────────────────────────────
 
 async function runSingleJudge(
-  model: Model<"openai-completions">,
+  model: Model<Api>,
   apiKey: string,
   snapshot: StateSnapshot,
   successDef: SuccessDef | undefined,
@@ -133,7 +133,7 @@ ${snapshotText || "（无快照信息）"}
 // ── AdversarialJudge ──────────────────────────────────────────────────
 
 export interface AdversarialJudgeOptions {
-  model: Model<"openai-completions">;
+  model: Model<Api>;
   apiKey: string;
   voters?: number;       // 裁判数量，默认 3
   threshold?: number;    // 通过需要的最少同意票，默认 2
@@ -147,7 +147,7 @@ export interface AdversarialJudgeOptions {
  * - 多裁判投票对冲单裁判随机性
  */
 export class AdversarialJudge implements VerifyStrategy {
-  private readonly model: Model<"openai-completions">;
+  private readonly model: Model<Api>;
   private readonly apiKey: string;
   private readonly voters: number;
   private readonly threshold: number;

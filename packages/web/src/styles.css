@@ -1,0 +1,109 @@
+:root {
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #30384a;
+  background: #fffaf2;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; overflow-x: hidden; }
+button { font: inherit; }
+
+#app {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 292px minmax(0, 1fr);
+  background:
+    radial-gradient(circle at 12% 8%, rgba(255,255,255,.98), transparent 31%),
+    radial-gradient(circle at 86% 13%, rgba(255,231,186,.72), transparent 32%),
+    radial-gradient(circle at 72% 18%, rgba(217,240,220,.40), transparent 28%),
+    radial-gradient(circle at 28% 16%, rgba(219,234,248,.26), transparent 24%),
+    linear-gradient(135deg, #fffdf8 0%, #fff7eb 46%, #ffeede 100%);
+}
+
+.ambient {
+  position: fixed;
+  inset: -20% -10% auto -10%;
+  height: 56vh;
+  pointer-events: none;
+  opacity: .42;
+  filter: blur(30px) saturate(1.06);
+  background: conic-gradient(from 160deg at 50% 45%, rgba(255,214,164,.62), rgba(217,240,220,.34), rgba(219,234,248,.30), rgba(255,206,188,.44), rgba(255,238,178,.58), rgba(255,214,164,.62));
+  mask-image: radial-gradient(ellipse at center, #000 0%, rgba(0,0,0,.72) 42%, transparent 76%);
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 32px 22px;
+  border-right: 1px solid rgba(78,88,110,.10);
+  background: rgba(255,253,248,.72);
+  backdrop-filter: blur(18px);
+}
+.brand { font-size: 28px; font-weight: 760; letter-spacing: -.04em; }
+.subtitle { color: rgba(48,56,72,.62); margin: 6px 0 28px; }
+nav { display: grid; gap: 10px; }
+.nav-item {
+  border: 1px solid rgba(78,88,110,.10);
+  background: rgba(255,255,255,.48);
+  border-radius: 18px;
+  padding: 14px;
+  text-align: left;
+  color: #30384a;
+  cursor: pointer;
+}
+.nav-item span { display: block; font-weight: 700; }
+.nav-item small { display: block; color: rgba(48,56,72,.58); margin-top: 4px; line-height: 1.35; }
+.nav-item.active { background: rgba(255,238,222,.86); border-color: rgba(255,179,107,.38); box-shadow: 0 14px 40px rgba(236,194,180,.18); }
+
+.main { position: relative; padding: 38px; min-width: 0; }
+.hero { max-width: 860px; margin-bottom: 28px; }
+.eyebrow { text-transform: uppercase; letter-spacing: .16em; font-size: 12px; color: rgba(48,56,72,.56); font-weight: 800; }
+h1 { font-size: clamp(38px, 7vw, 76px); line-height: .94; margin: 8px 0 16px; letter-spacing: -.065em; color: #2f3440; }
+h2 { margin: 0 0 14px; letter-spacing: -.03em; }
+.hero p:not(.eyebrow) { font-size: 18px; line-height: 1.65; color: rgba(48,56,72,.66); max-width: 740px; }
+
+.grid { display: grid; gap: 18px; }
+.grid.three { grid-template-columns: 260px minmax(320px, 1fr) 320px; align-items: start; }
+.grid.kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 18px; }
+.panel, .kpi {
+  border: 1px solid rgba(78,88,110,.10);
+  background: rgba(255,253,248,.84);
+  border-radius: 26px;
+  box-shadow: 0 22px 70px rgba(78,88,110,.08);
+  padding: 22px;
+}
+.panel.warning { border-color: rgba(213,107,95,.22); background: rgba(255,246,240,.88); }
+.kpi span { color: rgba(48,56,72,.58); font-size: 13px; }
+.kpi strong { display: block; margin-top: 8px; font-size: 34px; letter-spacing: -.05em; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; }
+dt { color: rgba(48,56,72,.58); } dd { margin: 0; font-weight: 700; }
+.timeline { max-height: 72vh; overflow: auto; }
+.timeline-card {
+  border: 1px solid rgba(78,88,110,.09);
+  border-radius: 18px;
+  background: rgba(255,255,255,.60);
+  padding: 14px;
+  margin: 10px 0;
+}
+.timeline-card.checkpoint { border-color: rgba(217,154,66,.34); }
+.timeline-card.tool_activity { border-color: rgba(95,159,175,.28); }
+.timeline-card.done { border-color: rgba(95,168,120,.32); }
+pre { overflow: auto; white-space: pre-wrap; color: rgba(48,56,72,.70); font-size: 12px; }
+.config-table { display: grid; gap: 10px; }
+.config-table div { display: grid; grid-template-columns: 160px minmax(0, 1fr) 90px; gap: 12px; padding: 12px; border-radius: 14px; background: rgba(255,255,255,.54); }
+.config-table span { overflow-wrap: anywhere; }
+.config-table small { color: rgba(48,56,72,.56); }
+
+@media (max-width: 1050px) {
+  #app { grid-template-columns: 1fr; }
+  .sidebar { position: relative; height: auto; }
+  .grid.three, .grid.kpis { grid-template-columns: 1fr; }
+  .main { padding: 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient { display: none; }
+}
