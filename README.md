@@ -39,7 +39,8 @@ pnpm install
 
 # 2. 配置 API key（复制模板后填入）
 cp .env.example .env.local
-#   编辑 .env.local，填入 PACKY_API_KEY=sk-xxx
+#   编辑 .env.local，填入 KEIGENT_API_KEY=sk-xxx
+#   可选：KEIGENT_API_PROTOCOL=openai|anthropic，KEIGENT_BASE_URL=自定义兼容端点
 
 # 3. 进入对话式 REPL
 pnpm --filter @keigent/cli start
@@ -93,7 +94,7 @@ LoopEngine（引擎层）     唯一的参数化循环骨架，行为由 LoopPro
 pnpm install          # 安装所有依赖
 pnpm check            # TypeScript 类型检查（所有包）
 pnpm test             # 运行单元测试（vitest）
-pnpm dev              # 运行 @keigent/engine demo（需 PACKY_API_KEY）
+pnpm dev              # 运行 @keigent/engine demo（需 KEIGENT_API_KEY）
 
 # CLI（@keigent/cli）—— agent 的实际入口
 pnpm --filter @keigent/cli start                 # 对话式 REPL
@@ -106,7 +107,7 @@ pnpm --filter @keigent/engine verify:browser     # 浏览器 snapshot+ref
 
 REPL 内斜杠命令：`/help` `/profile <name>` `/skills` `/headed` `/headless` `/quit`。
 
-环境变量：复制 `.env.example` 为 `.env.local`，填入 `PACKY_API_KEY`（packyapi，OpenAI 兼容代理）。
+环境变量：复制 `.env.example` 为 `.env.local`，填入 `KEIGENT_API_KEY`。可选设置 `KEIGENT_API_PROTOCOL=openai|anthropic` 和 `KEIGENT_BASE_URL` 指向任意兼容端点。
 
 ---
 

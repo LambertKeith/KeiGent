@@ -1,5 +1,5 @@
 import { vlog, vwarn } from "./logger.js";
-import { complete, type Model } from "@earendil-works/pi-ai";
+import { complete, type Api, type Model } from "@earendil-works/pi-ai";
 import { Type } from "@earendil-works/pi-ai";
 import type { LoopProfile, SkillMeta, Task } from "./types.js";
 import { makeConvergentExecProfile } from "./profiles/convergent-exec.js";
@@ -23,10 +23,26 @@ export interface ProfileRegistry {
   names(): ProfileName[];
 }
 
+export type ProfileSelectionRuleId =
+  | "explicit_profile"
+  | "obvious_chitchat"
+  | "success_def_assertions"
+  | "research_keyword"
+  | "url_execution_keyword"
+  | "skill_match";
+
+export interface ProfileClassificationDecision {
+  profile: ProfileName;
+  method: "rule";
+  ruleId: ProfileSelectionRuleId;
+  rationale: string;
+  signals: string[];
+}
+
 export interface RegistryOptions {
   memoryDir?: string;
   skillsUsed?: string[];
-  model?: Model<"openai-completions">;
+  model?: Model<Api>;
   apiKey?: string;
 }
 
@@ -80,23 +96,41 @@ function isObviousChitchat(task: Task): boolean {
  * 基于任务硬信号选择 profile，无需 LLM 调用。
  * 返回 null 表示规则无法确定，需要升级到分类 agent。
  */
-export function classifyByRules(task: Task, metas: SkillMeta[]): ProfileName | null {
+export function classifyByRulesDetailed(task: Task, metas: SkillMeta[]): ProfileClassificationDecision | null {
   // 规则 0：显式指定 profile → 直接用（向后兼容）。
   // 仅放行这两个由 task.profile 字段直接指定的 profile：convergent-verified 需要 model+apiKey
   // 不宜走这条无参路径，conversational 只应由闲聊识别或 /profile 手动强制触发。
   const explicitProfiles: ProfileName[] = ["convergent-exec", "divergent-research"];
   if (task.profile && explicitProfiles.includes(task.profile as ProfileName)) {
-    return task.profile as ProfileName;
+    return {
+      profile: task.profile as ProfileName,
+      method: "rule",
+      ruleId: "explicit_profile",
+      rationale: `任务显式指定 profile=${task.profile}`,
+      signals: [`profile:${task.profile}`],
+    };
   }
 
   // 规则 0.5：高置信度闲聊 → 对话兜底（在所有任务规则之前，但尊重规则0的显式指定）
   if (isObviousChitchat(task)) {
-    return "conversational";
+    return {
+      profile: "conversational",
+      method: "rule",
+      ruleId: "obvious_chitchat",
+      rationale: "任务是短问候/感谢等高置信度闲聊，无需工具或研究循环",
+      signals: ["short_chitchat"],
+    };
   }
 
   // 规则 1：有 successDef + assertions → 用真实裁判的验证收敛 profile
   if (task.successDef && task.successDef.assertions.length > 0) {
-    return "convergent-verified";
+    return {
+      profile: "convergent-verified",
+      method: "rule",
+      ruleId: "success_def_assertions",
+      rationale: "任务携带 successDef assertions，需要验证型收敛执行",
+      signals: [`assertions:${task.successDef.assertions.length}`],
+    };
   }
 
   const goal = task.goal.toLowerCase();
@@ -106,8 +140,15 @@ export function classifyByRules(task: Task, metas: SkillMeta[]): ProfileName | n
     "调研", "分析", "了解", "探索", "研究", "比较", "评估",
     "overview", "research", "analyze", "explore", "compare",
   ];
-  if (researchKeywords.some((kw) => goal.includes(kw))) {
-    return "divergent-research";
+  const matchedResearchKeyword = researchKeywords.find((kw) => goal.includes(kw));
+  if (matchedResearchKeyword) {
+    return {
+      profile: "divergent-research",
+      method: "rule",
+      ruleId: "research_keyword",
+      rationale: `任务包含开放探索关键词 ${matchedResearchKeyword}`,
+      signals: [`keyword:${matchedResearchKeyword}`],
+    };
   }
 
   // 规则 3：目标含具体执行词 + URL → 收敛执行
@@ -116,21 +157,40 @@ export function classifyByRules(task: Task, metas: SkillMeta[]): ProfileName | n
     "fetch", "summarize", "extract", "submit", "download", "navigate",
   ];
   const hasUrl = /https?:\/\//.test(task.goal);
-  if (hasUrl && executionKeywords.some((kw) => goal.includes(kw))) {
-    return "convergent-exec";
+  const matchedExecutionKeyword = executionKeywords.find((kw) => goal.includes(kw));
+  if (hasUrl && matchedExecutionKeyword) {
+    return {
+      profile: "convergent-exec",
+      method: "rule",
+      ruleId: "url_execution_keyword",
+      rationale: `任务同时包含 URL 和执行关键词 ${matchedExecutionKeyword}`,
+      signals: ["url", `keyword:${matchedExecutionKeyword}`],
+    };
   }
 
   // 规则 4：任务对某 skill 真实相关（复用 attention 层的 scoreSkill 评分）→ 收敛执行
   // 修复：旧逻辑检查「库里有没有执行 skill」（与任务无关），导致任何输入都误判。
-  const bestSkillScore = metas
-    .map((m) => scoreSkill(m, task.goal))
-    .reduce((max, s) => Math.max(max, s), 0);
-  if (bestSkillScore >= SKILL_MATCH_THRESHOLD) {
-    return "convergent-exec";
+  const skillScores = metas.map((m) => ({ meta: m, score: scoreSkill(m, task.goal) }));
+  const bestSkill = skillScores.reduce<{ name?: string; score: number }>(
+    (best, current) => current.score > best.score ? { name: current.meta.name, score: current.score } : best,
+    { score: 0 },
+  );
+  if (bestSkill.score >= SKILL_MATCH_THRESHOLD) {
+    return {
+      profile: "convergent-exec",
+      method: "rule",
+      ruleId: "skill_match",
+      rationale: `任务匹配执行 skill ${bestSkill.name}，score=${bestSkill.score}`,
+      signals: [`skill:${bestSkill.name}`, `score:${bestSkill.score}`],
+    };
   }
 
   // 规则无法判断
   return null;
+}
+
+export function classifyByRules(task: Task, metas: SkillMeta[]): ProfileName | null {
+  return classifyByRulesDetailed(task, metas)?.profile ?? null;
 }
 
 // ── 分类 Agent（档位 3 简化版）────────────────────────────────────────
@@ -154,7 +214,7 @@ const classifyTool = {
 async function classifyByLLM(
   task: Task,
   metas: SkillMeta[],
-  model: Model<"openai-completions">,
+  model: Model<Api>,
   apiKey: string,
 ): Promise<ProfileName> {
   const skillList = metas.map((m) => `- ${m.name}: ${m.description}`).join("\n");
@@ -255,13 +315,13 @@ export const __guardProfileChoice = guardProfileChoice;
 // ── Orchestrator 主类 ─────────────────────────────────────────────────
 
 export interface OrchestratorOptions {
-  model: Model<"openai-completions">;
+  model: Model<Api>;
   apiKey: string;
   registry?: ProfileRegistry;
 }
 
 export class Orchestrator {
-  private readonly model: Model<"openai-completions">;
+  private readonly model: Model<Api>;
   private readonly apiKey: string;
   private readonly registry: ProfileRegistry;
 
@@ -281,20 +341,46 @@ export class Orchestrator {
   async selectProfile(
     task: Task,
     metas: SkillMeta[],
-  ): Promise<{ profile: LoopProfile; name: ProfileName; method: "rule" | "llm" }> {
+  ): Promise<{
+    profile: LoopProfile;
+    name: ProfileName;
+    method: "rule" | "llm";
+    ruleId?: ProfileSelectionRuleId;
+    rationale?: string;
+    signals?: string[];
+    guardApplied?: boolean;
+    unguardedName?: ProfileName;
+  }> {
     // 档位 2：规则分类
-    const ruleResult = classifyByRules(task, metas);
-    if (ruleResult) {
-      const guarded = guardProfileChoice(ruleResult, task, metas);
-      vlog(`[orchestrator] 规则分类 → ${ruleResult}${guarded !== ruleResult ? ` → ${guarded}（守卫修正）` : ""}`);
-      return { profile: this.registry.get(guarded), name: guarded, method: "rule" };
+    const ruleDecision = classifyByRulesDetailed(task, metas);
+    if (ruleDecision) {
+      const guarded = guardProfileChoice(ruleDecision.profile, task, metas);
+      const guardApplied = guarded !== ruleDecision.profile;
+      vlog(`[orchestrator] 规则分类 → ${ruleDecision.profile}${guardApplied ? ` → ${guarded}（守卫修正）` : ""}`);
+      return {
+        profile: this.registry.get(guarded),
+        name: guarded,
+        method: "rule",
+        ruleId: ruleDecision.ruleId,
+        rationale: ruleDecision.rationale,
+        signals: ruleDecision.signals,
+        guardApplied,
+        unguardedName: ruleDecision.profile,
+      };
     }
 
     // 档位 3：LLM 分类 agent
     vlog("[orchestrator] 规则无法判断，升级到 LLM 分类...");
     const llmResult = await classifyByLLM(task, metas, this.model, this.apiKey);
     const guarded = guardProfileChoice(llmResult, task, metas);
-    vlog(`[orchestrator] LLM 分类 → ${llmResult}${guarded !== llmResult ? ` → ${guarded}（守卫修正）` : ""}`);
-    return { profile: this.registry.get(guarded), name: guarded, method: "llm" };
+    const guardApplied = guarded !== llmResult;
+    vlog(`[orchestrator] LLM 分类 → ${llmResult}${guardApplied ? ` → ${guarded}（守卫修正）` : ""}`);
+    return {
+      profile: this.registry.get(guarded),
+      name: guarded,
+      method: "llm",
+      guardApplied,
+      unguardedName: llmResult,
+    };
   }
 }

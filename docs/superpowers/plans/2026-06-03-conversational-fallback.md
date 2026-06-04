@@ -727,7 +727,7 @@ git commit -m "feat: CLI 接通 askUser 追问 + conversational 工具过滤 + /
 
 ---
 
-## Task 7: 端到端手动验证（需 PACKY_API_KEY，调真实 LLM）
+## Task 7: 端到端手动验证（需 KEIGENT_API_KEY，调真实 LLM）
 
 单测已覆盖纯逻辑（规则分类、attention 行为）。本任务验证 LLM 在环的整体行为——`classifyByLLM` 的 conversational 分支和死循环修复，无法用零 LLM 单测覆盖。
 

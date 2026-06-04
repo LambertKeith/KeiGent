@@ -1,5 +1,5 @@
 import { vlog, vwarn } from "./logger.js";
-import { complete, type Model, type Tool, Type } from "@earendil-works/pi-ai";
+import { complete, type Api, type Model, type Tool, Type } from "@earendil-works/pi-ai";
 import { randomUUID } from "crypto";
 import type {
   LearningResult,
@@ -86,7 +86,7 @@ ${skillBody || "(skill 内容为空)"}
 
 export class Learner {
   constructor(
-    private readonly model: Model<"openai-completions">,
+    private readonly model: Model<Api>,
     private readonly apiKey: string,
   ) {}
 
@@ -128,7 +128,7 @@ export class Learner {
         {
           apiKey: this.apiKey,
           // 通过 onPayload 直接注入 tool_choice 到原始 API payload
-          // gpt-5.5 @ packyapi 有大内置 system prompt，会压制我们的 system 指令
+          // Some hosted models include large provider/system prompts that can suppress our system instructions.
           // 强制工具调用是确保学习 loop 产出结构化结果的唯一可靠方式
           onPayload: (payload) => {
             if (payload && typeof payload === "object") {

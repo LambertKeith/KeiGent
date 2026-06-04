@@ -1,5 +1,5 @@
 import { vlog, vwarn } from "./logger.js";
-import { complete, type AssistantMessage, type Model, type Tool, type ToolCall, type ToolResultMessage } from "@earendil-works/pi-ai";
+import { complete, type Api, type AssistantMessage, type Model, type Tool, type ToolCall, type ToolResultMessage } from "@earendil-works/pi-ai";
 import type {
   ExitReason,
   LoopProfile,
@@ -19,7 +19,7 @@ import { AllowAllGate } from "./tools/types.js";
 const CHECKPOINT_TOOL = CHECKPOINT_TOOL_NAME;
 
 export interface EngineOptions {
-  model: Model<"openai-completions">;
+  model: Model<Api>;
   apiKey: string;
   maxIterations?: number;
   registry: ToolRegistry;       // 工具注册表（B0：工具与引擎解耦）
@@ -30,7 +30,7 @@ export interface EngineOptions {
 }
 
 export class LoopEngine {
-  private readonly model: Model<"openai-completions">;
+  private readonly model: Model<Api>;
   private readonly apiKey: string;
   private readonly maxIterations: number;
   private readonly registry: ToolRegistry;

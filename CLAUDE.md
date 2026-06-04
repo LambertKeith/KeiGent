@@ -37,11 +37,11 @@ pnpm --filter @keigent/engine exec tsx src/verify-tools.ts  # B3/B4: 文件/shel
 
 ```bash
 pnpm check            # tsc --noEmit
-pnpm dev              # tsx src/index.ts（需 PACKY_API_KEY 环境变量）
+pnpm dev              # tsx src/index.ts（需 KEIGENT_API_KEY 环境变量）
 pnpm build            # tsc（输出到 dist/）
 ```
 
-环境变量：复制 `.env.example` 为 `.env.local` 并填入 `PACKY_API_KEY`。
+环境变量：复制 `.env.example` 为 `.env.local` 并填入 `KEIGENT_API_KEY`；可选设置 `KEIGENT_API_PROTOCOL=openai|anthropic` 和自定义 `KEIGENT_BASE_URL`。
 
 ---
 
@@ -105,7 +105,7 @@ LoopEngine（引擎层）     唯一的参数化循环骨架，行为由 LoopPro
 
 ### pi-ai 使用注意
 
-底层依赖 `@earendil-works/pi-ai`（v0.77.0，MIT）。自定义端点（如 packyapi）直接构造 `Model<"openai-completions">` 对象，不用 `getModel()`（后者只接受 KnownProvider）。
+底层依赖 `@earendil-works/pi-ai`（v0.77.0，MIT）。自定义端点直接构造 `Model<Api>` 对象，不用 `getModel()`（后者只接受 KnownProvider）。KeiGent 配置层按协议区分 `openai` / `anthropic`，再映射到 `openai-completions` / `anthropic-messages`。
 
 **已知 bug**：pi-ai 流式解析 gpt-5.5 并发工具调用时，会把一次调用拆成两个互补的 block——一个有 id/name 但 args 空，一个 args 有内容但 id/name 空。`utils.ts` 的 `deduplicateToolCalls` 统一**合并**这两个 block（取有 id 的元数据 + 有内容的 args），所有调用 LLM 的地方（engine/learner/orchestrator/adversarial-judge）都通过 `extractToolCalls` 走这个统一处理，不要各自手写过滤。
 
@@ -113,7 +113,7 @@ LoopEngine（引擎层）     唯一的参数化循环骨架，行为由 LoopPro
 
 ## 当前进度
 
-- **第 0 步**：✅ pi-ai 类型签名核实，gpt-5.5 @ packyapi 工具调用链路跑通，checkpoint 机制验证。
+- **第 0 步**：✅ pi-ai 类型签名核实，协议兼容端点的工具调用链路跑通，checkpoint 机制验证。
 - **第 1 步**：✅ 五旋钮引擎（`engine.ts`）+ 两个基线 profile + mock skill（`skills/web-summarize/`）。
 - **第 2/3 步**：✅ 真实 Playwright（系统 Chrome）接入，两个 profile 行为差异验证，`allowEarlyTextExit` 语义设计成立。
 - **第 4 步**：✅ 执行轨迹（`trajectory.ts`）→ 学习 loop LLM 分析（`learner.ts`）→ LEARNING.md 自动写入（`skill-patch.ts`）全量闭环。

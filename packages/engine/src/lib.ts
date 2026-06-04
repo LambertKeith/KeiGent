@@ -2,7 +2,16 @@
 
 export { LoopEngine, type EngineOptions } from "./engine.js";
 export { loadSkillContext, renderSkillIndex } from "./skills.js";
-export { Orchestrator, makeRegistry, defaultRegistry, type ProfileName } from "./orchestrator.js";
+export {
+  Orchestrator,
+  makeRegistry,
+  defaultRegistry,
+  classifyByRules,
+  classifyByRulesDetailed,
+  type ProfileName,
+  type ProfileSelectionRuleId,
+  type ProfileClassificationDecision,
+} from "./orchestrator.js";
 export { PlaywrightStateCapture, closeBrowser } from "./browser.js";
 export { Learner } from "./learner.js";
 export { saveTrajectory } from "./trajectory.js";
@@ -26,4 +35,43 @@ export type {
 } from "./types.js";
 
 export { makeConversationalProfile } from "./profiles/conversational.js";
+export { makeConvergentExecProfile } from "./profiles/convergent-exec.js";
+export { makeConvergentVerifiedProfile } from "./profiles/convergent-verified.js";
+export { makeDivergentResearchProfile } from "./profiles/divergent-research.js";
 export { toolsForProfile } from "./tool-filter.js";
+export { runEvalCases, buildEvalReport, toolsUsedFromResult, successfulToolsUsedFromResult } from "./evals/runner.js";
+export { DEFAULT_EVAL_CASES, createSmokeEvalExecutor } from "./evals/cases.js";
+export { createEngineEvalExecutor } from "./evals/engine-executor.js";
+export {
+  createTrajectoryReplayExecutor,
+  createTrajectoryReplayExecutorFromFiles,
+  loopResultFromTrajectory,
+} from "./evals/replay.js";
+export { parseEvalCliArgs } from "./evals/cli-options.js";
+export { DEFAULT_ORCHESTRATOR_EVAL_CASES, runOrchestratorEvalCases } from "./evals/orchestrator-eval.js";
+export type {
+  EngineEvalExecutorOptions,
+  EngineEvalOrchestrator,
+  EngineEvalRunner,
+  EngineProfileSelection,
+} from "./evals/engine-executor.js";
+export type {
+  EvalAcceptance,
+  EvalCase,
+  EvalCaseResult,
+  EvalCategory,
+  EvalFailureCode,
+  EvalExecution,
+  EvalExecutor,
+  EvalReport,
+} from "./evals/types.js";
+export type {
+  TrajectoryReplayExecutorOptions,
+  TrajectoryReplayFileOptions,
+} from "./evals/replay.js";
+export type { EvalCliMode, EvalCliOptions } from "./evals/cli-options.js";
+export type {
+  OrchestratorEvalCase,
+  OrchestratorEvalCaseResult,
+  OrchestratorEvalReport,
+} from "./evals/orchestrator-eval.js";
