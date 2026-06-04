@@ -51,6 +51,13 @@ pnpm --filter @keigent/cli start "总结一下 https://example.com"
 
 运行时配置在 `~/.keigent/config.json`（model / apiKey / headless 等）；skill 库在 `~/.keigent/skills/`；文件沙箱在 `~/.keigent/workspace/`。
 
+**首次运行前**，建议先做配置诊断：
+
+```bash
+pnpm --filter @keigent/cli start doctor        # 离线检查配置
+pnpm --filter @keigent/cli start config show   # 查看生效配置（密钥已脱敏）
+```
+
 ---
 
 ## 四个内置 Profile
@@ -99,15 +106,74 @@ pnpm dev              # 运行 @keigent/engine demo（需 KEIGENT_API_KEY）
 # CLI（@keigent/cli）—— agent 的实际入口
 pnpm --filter @keigent/cli start                 # 对话式 REPL
 pnpm --filter @keigent/cli start "任务描述"        # 单次执行模式
+pnpm --filter @keigent/cli start doctor          # 配置诊断
+pnpm --filter @keigent/cli start doctor --json   # 诊断结果 JSON（机器可读）
+pnpm --filter @keigent/cli start config show     # 查看生效配置（密钥已脱敏）
 
-# 验收脚本（不调 LLM 的快速验证）
+# Eval Harness（不调 LLM 的快速验证）
+pnpm --filter @keigent/engine eval:smoke         # 运行默认 smoke eval 套件
+pnpm --filter @keigent/engine eval:replay        # 回放已保存轨迹并重评分
+pnpm --filter @keigent/engine eval:orchestrator  # Orchestrator profile 选择矩阵回归
+
+# 验收脚本（单项功能验证）
 pnpm --filter @keigent/engine verify:attention   # attention 注入篇数
 pnpm --filter @keigent/engine verify:browser     # 浏览器 snapshot+ref
 ```
 
 REPL 内斜杠命令：`/help` `/profile <name>` `/skills` `/headed` `/headless` `/quit`。
 
-环境变量：复制 `.env.example` 为 `.env.local`，填入 `KEIGENT_API_KEY`。可选设置 `KEIGENT_API_PROTOCOL=openai|anthropic` 和 `KEIGENT_BASE_URL` 指向任意兼容端点。
+环境变量：复制 `.env.example` 为 `.env.local`，填入 `KEIGENT_API_KEY`。可选设置 `KEIGENT_API_PROTOCOL=openai|anthropic` 和 `KEIGENT_BASE_URL` 指向任意兼容端点，也支持 `KEIGENT_MODEL_ID` 覆盖模型 ID。
+
+---
+
+## 配置系统
+
+KeiGent 使用**协议优先（provider-neutral）**的配置模型，不绑定特定厂商：
+
+| 字段 | 说明 | 默认值 |
+|---|---|---|
+| `apiKey` | LLM 密钥（必填）| 无 |
+| `apiProtocol` | `openai` 或 `anthropic` | `openai` |
+| `baseUrl` | 端点 URL（支持任意兼容端点）| 协议默认值 |
+| `modelId` | 模型 ID | `gpt-4o-mini` |
+| `headless` | 浏览器是否无头 | `false` |
+| `maxIterations` | 最大轮次上限 | `12` |
+
+**优先级**：CLI 运行时参数 > `KEIGENT_*` 环境变量 > `~/.keigent/config.json` > 内置默认值（密钥无默认值）。
+
+`keigent doctor` 会检查配置文件、密钥是否存在、协议合法性、端点 URL 安全性、路径可写性等，并以 `ready / warning / error` 状态报告。密钥在任何日志和 UI 中均只显示脱敏指纹 `[REDACTED:...xxxx]`，从不明文输出。
+
+---
+
+## Eval Harness
+
+Eval Harness 是 KeiGent 的**工程化验收层**，不新增 agent 行为，只负责：
+
+1. 定义任务集（`EvalCase`）
+2. 运行任务并收集事件与轨迹
+3. 按验收规则评分（exit reason、required/forbidden tools、minCheckpoints、finalResponseIncludes）
+4. 输出机器可读 JSON 报告（`EvalReport`）
+
+三个运行模式：
+
+| 命令 | 说明 |
+|---|---|
+| `eval:smoke` | 不调 LLM，用 smoke executor 验证 runner/report 本身，全套通过才放行 |
+| `eval:replay` | 从已保存的 trajectory JSON 文件派生结果，离线重评历史轨迹 |
+| `eval:orchestrator` | 纯规则跑 ≥12 个 fixture，验证 Orchestrator profile 选择零退化 |
+
+**EvalCase 验收维度**：
+
+```
+exitReasons        — 允许的退出原因列表
+requiredTools      — 必须出现成功调用的工具
+forbiddenTools     — 禁止使用的工具
+minCheckpoints     — 最少 checkpoint 数
+finalResponseIncludes — 最终回答必须包含的字符串
+expectedProfile    — 期望选中的 profile（可选，失配记 profile_mismatch）
+```
+
+评估失败码（`EvalFailureCode`）：`profile_mismatch` / `exit_reason` / `tool_missing` / `tool_forbidden` / `checkpoint_missing` / `output_missing` / `executor_error` / `timeout`。
 
 ---
 
@@ -128,15 +194,25 @@ packages/
 │       ├── tool-filter.ts       # 按 profile 过滤暴露的工具集
 │       ├── profiles/            # 五旋钮策略实现 + 四个 profile 工厂
 │       ├── tools/               # ToolRegistry + 工具实现（浏览器/文件/shell/…）
+│       ├── evals/               # Eval Harness（runner、cases、replay、orchestrator eval）
 │       └── __tests__/           # vitest 单元测试
-└── cli/                         # @keigent/cli —— REPL + 单次模式
+├── cli/                         # @keigent/cli —— REPL + 单次模式
+│   └── src/
+│       ├── main.ts              # 入口（bin: keigent）
+│       ├── repl.ts              # 对话式 REPL（交互审批、ask_user 注入）
+│       ├── run-once.ts          # 单次执行模式（非交互）
+│       ├── commands.ts          # 斜杠命令
+│       ├── renderer.ts          # 流式进度渲染
+│       ├── config.ts            # 配置加载（resolveConfig / buildModel / redactConfig）
+│       ├── config-doctor.ts     # 配置诊断（validateConfig / doctorConfig）
+│       └── config-commands.ts   # doctor / config show 命令实现
+└── web/                         # @keigent/web —— Web 界面（设计阶段）
     └── src/
-        ├── main.ts              # 入口（bin: keigent）
-        ├── repl.ts              # 对话式 REPL（交互审批、ask_user 注入）
-        ├── run-once.ts          # 单次执行模式（非交互）
-        ├── commands.ts          # 斜杠命令
-        ├── renderer.ts          # 流式进度渲染
-        └── config.ts            # ~/.keigent/config.json 加载
+        ├── conversation/        # 对话面板视图模型（ConversationRunView）
+        ├── dashboard/           # Eval dashboard 报告模型（DashboardRun）
+        ├── config/              # Web 配置页 shell
+        ├── shared/redaction.ts  # 前端密钥脱敏
+        └── app/nav.ts           # 导航结构
 
 skills/                          # 标准 SKILL.md mock skill 库
 doc/design/                      # 架构与特性设计文档
@@ -149,6 +225,10 @@ doc/references/                  # 参考项目研读（hermes-agent、openhuman
 
 - [`doc/design/01-architecture.md`](doc/design/01-architecture.md) —— 主架构设计（五旋钮、三层结构的完整推导）
 - [`doc/design/02-conversational-fallback.md`](doc/design/02-conversational-fallback.md) —— 对话兜底分支 + 分类误判修复设计
+- [`doc/design/03-eval-harness.md`](doc/design/03-eval-harness.md) —— Eval Harness 设计与验收标准
+- [`doc/design/04-web-conversation-panel.md`](doc/design/04-web-conversation-panel.md) —— Web 对话面板设计
+- [`doc/design/05-web-dashboard.md`](doc/design/05-web-dashboard.md) —— Web Eval Dashboard 设计
+- [`doc/design/06-cli-config-and-web-config.md`](doc/design/06-cli-config-and-web-config.md) —— CLI 与 Web 配置系统设计
 - [`CLAUDE.md`](CLAUDE.md) —— 给 AI 协作者的项目指引（含 pi-ai 使用注意、已知 bug）
 
 ---
@@ -159,9 +239,10 @@ doc/references/                  # 参考项目研读（hermes-agent、openhuman
 
 ```bash
 pnpm --filter @keigent/engine test
+pnpm --filter @keigent/cli test
 ```
 
-覆盖：Orchestrator 规则分类与错配守卫、闲聊识别、`ConversationalAttention` 行为、`WideAttention` 相关度匹配。
+覆盖：Orchestrator 规则分类与错配守卫、闲聊识别、`ConversationalAttention` 行为、`WideAttention` 相关度匹配、Eval runner 汇总/失败分类/profile 准确率、trajectory replay、CLI 配置加载与脱敏、`doctor` 离线诊断。
 
 ---
 
@@ -170,3 +251,4 @@ pnpm --filter @keigent/engine test
 - **REPL 跨轮无对话历史**——每轮输入是独立的一次 `engine.run`，多轮追问只发生在同一轮 run 内部（模型调 `ask_user` → REPL 弹问 → 答案回到同一 loop）。
 - **单次模式非交互**——`ask_user` 在单次/批处理模式下无人可答，返回降级提示让模型自行决策。
 - **pi-ai gpt-5.5 并发工具调用 bug**——流式解析会把一次调用拆成两个互补 block；`utils.ts` 的 `deduplicateToolCalls` 统一合并处理，所有调 LLM 的地方都走 `extractToolCalls`。详见 [`CLAUDE.md`](CLAUDE.md)。
+- **Web 界面为设计阶段**——`packages/web` 已有视图模型和脱敏逻辑的类型定义与测试，但可视化渲染尚未实现。
