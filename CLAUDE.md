@@ -119,6 +119,14 @@ LoopEngine（引擎层）     唯一的参数化循环骨架，行为由 LoopPro
 - **第 4 步**：✅ 执行轨迹（`trajectory.ts`）→ 学习 loop LLM 分析（`learner.ts`）→ LEARNING.md 自动写入（`skill-patch.ts`）全量闭环。
 - **第 5 步**：✅ Orchestrator 自动调度（`orchestrator.ts`）——规则分类（档位 2）+ LLM 分类降级（档位 3），`profile: "auto"` 不再需要手动指定。
 - **验收修复**：✅ 三个 profile 与 spec §7.1 对齐；skill body 注入移入 attention 旋钮；profile 实例 `reset()` 防复用污染；skill 匹配支持中英跨语言 + tags。
+- **第 6 步**：✅ 对话兜底 + 分类健壮性（设计见 `doc/design/02-conversational-fallback.md`）：
+  - 新增 `conversational` profile（`profiles/conversational.ts` + `ConversationalAttention`）——闲聊/问候/能力询问走轻量对话，有文本即退，可调 `ask_user` 反问，动态能力清单。修复闲聊「你好」被误判成 convergent-exec 死循环升级。
+  - 闲聊识别两层：规则快路径 `isObviousChitchat`（零 LLM）+ LLM 意图兜底（分类器加 `conversational` 选项）。
+  - 修规则 4：从「库里有执行 skill」改为复用 `scoreSkill` 按任务真实相关度判断（阈值 2）。
+  - `guardProfileChoice` 错配守卫：选中 convergent-exec 但无匹配 skill/successDef 时确定性改走 divergent-research——修复通用任务（如查天气）被硬塞执行流程导致的啰嗦/吐空崩溃。
+  - `WideAttention.matchSkills` 收紧为 `rankSkills`（只匹配相关 skill）——防通用任务误触发学习 loop 污染知识库。
+  - `ask_user` 注入链路接通（`EngineOptions.askUser` → `toolCtx`）+ `toolsForProfile` 按 profile 过滤工具（对话只给 ask_user + 只读）。
+  - 引入 vitest 单元测试（`__tests__/`，零 LLM），覆盖分类、守卫、attention 行为。
 
 ### 工具集 + CLI（让 KeiGent 成为可用 agent）
 
