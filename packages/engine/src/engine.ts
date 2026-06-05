@@ -114,7 +114,7 @@ export class LoopEngine {
     while (!profile.terminate.shouldStop(state)) {
       if (state.iteration >= this.maxIterations) {
         vlog(`[engine] 达到最大迭代次数 ${this.maxIterations}`);
-        return this.result(state, "max_iterations");
+        return this.result(state, "max_iterations", undefined, collector, matchedSkills);
       }
 
       state.iteration++;
@@ -134,7 +134,8 @@ export class LoopEngine {
       if (response.stopReason === "error") {
         console.error(`[engine] LLM 错误: ${response.errorMessage}`);
         state.failed = true;
-        return this.result(state, "error", `[错误] ${response.errorMessage}`);
+        collector.addError(state.iteration, response.errorMessage ?? "LLM error");
+        return this.result(state, "error", `[错误] ${response.errorMessage}`, collector, matchedSkills);
       }
 
       // 提取文本（剥离 <think> 思考块——它们是模型内部推理，不该作为回复）

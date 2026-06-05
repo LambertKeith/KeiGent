@@ -23,4 +23,14 @@ describe("@keigent/engine public API", () => {
     expect(api).toHaveProperty("DEFAULT_ORCHESTRATOR_EVAL_CASES");
     expect(api).toHaveProperty("classifyByRulesDetailed");
   });
+
+  it("exports workflow envelope APIs for external runners", () => {
+    expect(api).toHaveProperty("DEFAULT_WORKFLOW_BUDGET");
+    expect(api).toHaveProperty("chooseExecutionMode");
+    expect(api).toHaveProperty("createWorkflowSpec");
+    expect(api).toHaveProperty("WorkflowRunner");
+    expect(api).toHaveProperty("saveWorkflowTrajectory");
+    expect(api).toHaveProperty("loadWorkflowTrajectory");
+    expect(api).toHaveProperty("replayWorkflowTrajectory");
+  });
 });

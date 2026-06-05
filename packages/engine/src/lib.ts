@@ -49,6 +49,32 @@ export {
 } from "./evals/replay.js";
 export { parseEvalCliArgs } from "./evals/cli-options.js";
 export { DEFAULT_ORCHESTRATOR_EVAL_CASES, runOrchestratorEvalCases } from "./evals/orchestrator-eval.js";
+export {
+  DEFAULT_WORKFLOW_BUDGET,
+  WorkflowRunner,
+  chooseExecutionMode,
+  createWorkflowSpec,
+  loadWorkflowTrajectory,
+  replayWorkflowTrajectory,
+  saveWorkflowTrajectory,
+} from "./workflow/index.js";
+export type {
+  ChildRunResult,
+  ChildRunSpec,
+  ExecutionMode,
+  WorkflowBudget,
+  WorkflowBudgetUsage,
+  WorkflowChildRole,
+  WorkflowEvent,
+  WorkflowEvidence,
+  WorkflowExitReason,
+  WorkflowPolicy,
+  WorkflowProgressCallback,
+  WorkflowResult,
+  WorkflowSpec,
+  WorkflowTrajectory,
+  WorkflowVerificationPolicy,
+} from "./workflow/index.js";
 export type {
   EngineEvalExecutorOptions,
   EngineEvalOrchestrator,
