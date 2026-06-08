@@ -1,9 +1,12 @@
 import {
   saveTrajectory,
+  saveWorkflowTrajectory,
   formatLearningResult,
   type Learner,
   type LoopResult,
+  type WorkflowResult,
 } from "@keigent/engine";
+import { join } from "node:path";
 import type { KeigentConfig } from "./config.js";
 import { printInfo, printError } from "./renderer.js";
 
@@ -29,4 +32,20 @@ export async function persistAndLearn(
       });
     if (learning) printInfo(formatLearningResult(learning).split("\n")[0] ?? "");
   }
+}
+
+export async function persistWorkflowAndLearn(
+  result: WorkflowResult,
+  config: KeigentConfig,
+  learner: Learner,
+  skillBodies: Map<string, string>,
+): Promise<void> {
+  await saveWorkflowTrajectory(result.trajectory, { dir: join(config.skillsDir, ".trajectories", "workflows") }).catch(() => {});
+
+  if (result.exitReason !== "success") return;
+
+  const workerResult = result.childRuns.find((child) => child.role === "worker")?.result;
+  if (!workerResult) return;
+
+  await persistAndLearn(workerResult, config, learner, skillBodies);
 }

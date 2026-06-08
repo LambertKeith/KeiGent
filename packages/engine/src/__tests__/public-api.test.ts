@@ -29,6 +29,7 @@ describe("@keigent/engine public API", () => {
     expect(api).toHaveProperty("chooseExecutionMode");
     expect(api).toHaveProperty("createWorkflowSpec");
     expect(api).toHaveProperty("WorkflowRunner");
+    expect(api).toHaveProperty("createEngineWorkflowChildRunner");
     expect(api).toHaveProperty("saveWorkflowTrajectory");
     expect(api).toHaveProperty("loadWorkflowTrajectory");
     expect(api).toHaveProperty("replayWorkflowTrajectory");

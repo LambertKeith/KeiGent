@@ -57,16 +57,19 @@ export const httpRequestTool: ToolDef = {
     headers: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "请求头" })),
     body: Type.Optional(Type.String({ description: "请求体" })),
   }),
-  async execute(args) {
+  async execute(args, ctx) {
     const url = String(args["url"] ?? "");
     if (!url) return err("http_request 需要 url 参数");
     const method = String(args["method"] ?? "GET").toUpperCase();
     const headers = (args["headers"] as Record<string, string>) ?? {};
     const body = args["body"] ? String(args["body"]) : undefined;
 
+    if (ctx.signal?.aborted) return err("http_request aborted");
+    const controller = new AbortController();
+    const abortFromParent = () => controller.abort();
+    ctx.signal?.addEventListener("abort", abortFromParent, { once: true });
+    const timer = setTimeout(() => controller.abort(), 30_000);
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 30_000);
       const resp = await fetch(url, {
         method,
         headers,
@@ -74,10 +77,14 @@ export const httpRequestTool: ToolDef = {
         signal: controller.signal,
       });
       clearTimeout(timer);
+      ctx.signal?.removeEventListener("abort", abortFromParent);
       const text = (await resp.text()).slice(0, 50_000);
       return ok(`HTTP ${resp.status} ${resp.statusText}\nURL: ${resp.url}\n\n${text}`);
     } catch (e) {
       return err(`请求失败: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      clearTimeout(timer);
+      ctx.signal?.removeEventListener("abort", abortFromParent);
     }
   },
 };

@@ -91,14 +91,22 @@ export class WorkflowRunner {
 
     const durationMs = Date.now() - startMs;
     const budgetUsage = computeBudgetUsage([childRun], durationMs);
-    const budgetExit = findBudgetExit(spec, budgetUsage);
+    const budgetFailure = findBudgetFailure(spec, budgetUsage, [childRun]);
     const verification = evaluateVerification(spec, childRun);
     const mappedExit = timedOut
       ? "timeout"
-      : budgetExit ?? mapChildExit(childResult.exitReason, spec, verification.passed);
+      : budgetFailure?.exitReason ?? mapChildExit(childResult.exitReason, spec, verification.passed);
+
+    const budgetEvidenceItem = budgetFailure ? budgetEvidence(budgetFailure.message, budgetFailure.sourceChildRunId) : undefined;
+    const workflowEvidence = [...verification.evidence, ...(budgetEvidenceItem ? [budgetEvidenceItem] : [])];
 
     if (spec.mode === "verified-loop") {
-      emit({ kind: "workflow_verdict", workflowId: spec.id, passed: verification.passed, evidence: verification.evidence });
+      emit({
+        kind: "workflow_verdict",
+        workflowId: spec.id,
+        passed: verification.passed && !budgetFailure,
+        evidence: workflowEvidence,
+      });
     }
 
     return this.finish({
@@ -108,7 +116,7 @@ export class WorkflowRunner {
       exitReason: mappedExit,
       finalResponse: childResult.finalResponse,
       childRuns: [childRun],
-      evidence: [...verification.evidence, ...(budgetExit ? [budgetEvidence(`budget exceeded: ${budgetExit}`)] : [])],
+      evidence: workflowEvidence,
       events,
       emit,
       budgetUsage,
@@ -246,16 +254,36 @@ function countNormalToolCalls(result: LoopResult): number {
   return result.trajectory?.steps.filter((step) => step.kind === "tool_call").length ?? result.totalToolCalls;
 }
 
-function findBudgetExit(spec: WorkflowSpec, usage: WorkflowBudgetUsage): WorkflowExitReason | undefined {
-  if (usage.childRuns > spec.budget.maxChildRuns) return "budget_exceeded";
-  if (usage.iterations > (spec.budget.maxAggregateIterations ?? Number.POSITIVE_INFINITY)) return "budget_exceeded";
-  if (usage.toolCalls > (spec.budget.maxAggregateToolCalls ?? Number.POSITIVE_INFINITY)) return "budget_exceeded";
-  if (usage.durationMs > (spec.budget.timeoutMs ?? Number.POSITIVE_INFINITY)) return "timeout";
+function findBudgetFailure(
+  spec: WorkflowSpec,
+  usage: WorkflowBudgetUsage,
+  childRuns: ChildRunResult[],
+): { exitReason: WorkflowExitReason; message: string; sourceChildRunId?: string } | undefined {
+  if (usage.childRuns > spec.budget.maxChildRuns) {
+    return { exitReason: "budget_exceeded", message: "budget exceeded: maxChildRuns" };
+  }
+  const overIterationChild = childRuns.find((child) => child.result.iterations > spec.budget.maxIterationsPerRun);
+  if (overIterationChild) {
+    return {
+      exitReason: "budget_exceeded",
+      message: `budget exceeded: maxIterationsPerRun (${overIterationChild.result.iterations} > ${spec.budget.maxIterationsPerRun})`,
+      sourceChildRunId: overIterationChild.id,
+    };
+  }
+  if (usage.iterations > (spec.budget.maxAggregateIterations ?? Number.POSITIVE_INFINITY)) {
+    return { exitReason: "budget_exceeded", message: "budget exceeded: maxAggregateIterations" };
+  }
+  if (usage.toolCalls > (spec.budget.maxAggregateToolCalls ?? Number.POSITIVE_INFINITY)) {
+    return { exitReason: "budget_exceeded", message: "budget exceeded: maxAggregateToolCalls" };
+  }
+  if (usage.durationMs > (spec.budget.timeoutMs ?? Number.POSITIVE_INFINITY)) {
+    return { exitReason: "timeout", message: "budget exceeded: timeoutMs" };
+  }
   return undefined;
 }
 
-function budgetEvidence(message: string): WorkflowEvidence {
-  return { kind: "budget", passed: false, message };
+function budgetEvidence(message: string, sourceChildRunId?: string): WorkflowEvidence {
+  return { kind: "budget", passed: false, message, ...(sourceChildRunId ? { sourceChildRunId } : {}) };
 }
 
 class WorkflowTimeoutError extends Error {

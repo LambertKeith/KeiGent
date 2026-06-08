@@ -9,6 +9,8 @@ import { makeConversationalProfile } from "./profiles/conversational.js";
 import { extractToolCalls } from "./utils.js";
 import { scoreSkill } from "./profiles/strategies.js";
 
+const DEFAULT_ORCHESTRATOR_LLM_TIMEOUT_MS = 30_000;
+
 // ── Profile 注册表 ────────────────────────────────────────────────────
 
 export type ProfileName = "convergent-exec" | "convergent-verified" | "divergent-research" | "conversational";
@@ -216,13 +218,24 @@ async function classifyByLLM(
   metas: SkillMeta[],
   model: Model<Api>,
   apiKey: string,
+  llmTimeoutMs = DEFAULT_ORCHESTRATOR_LLM_TIMEOUT_MS,
 ): Promise<ProfileName> {
   const skillList = metas.map((m) => `- ${m.name}: ${m.description}`).join("\n");
 
-  const response = await complete(
-    model,
-    {
-      systemPrompt: `你是一个 AI agent 调度器，负责根据任务描述选择最合适的执行策略。
+  const controller = new AbortController();
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeoutResult = new Promise<null>((resolve) => {
+    timeoutHandle = setTimeout(() => {
+      controller.abort();
+      resolve(null);
+    }, llmTimeoutMs);
+  });
+
+  const response = await Promise.race([
+    complete(
+      model,
+      {
+        systemPrompt: `你是一个 AI agent 调度器，负责根据任务描述选择最合适的执行策略。
 
 可用策略：
 - convergent-exec：收敛执行。适用于有明确目标、具体操作步骤、需要精确完成某件事的任务。如抓取网页、填写表单、提取数据。
@@ -239,27 +252,39 @@ ${skillList || "(无)"}
 - 不确定时优先选 divergent-research（更灵活，有答案即可结束）
 
 必须调用 select_profile 工具返回决策。`,
-      messages: [
-        {
-          role: "user",
-          content: `请为以下任务选择 profile：\n\n${task.goal}`,
-          timestamp: Date.now(),
-        },
-      ],
-      tools: [classifyTool],
-    },
-    {
-      apiKey,
-      onPayload: (payload) => {
-        if (payload && typeof payload === "object") {
-          const p = payload as Record<string, unknown>;
-          p["parallel_tool_calls"] = false;
-          p["tool_choice"] = { type: "function", function: { name: "select_profile" } };
-        }
-        return payload;
+        messages: [
+          {
+            role: "user",
+            content: `请为以下任务选择 profile：\n\n${task.goal}`,
+            timestamp: Date.now(),
+          },
+        ],
+        tools: [classifyTool],
       },
-    },
-  );
+      {
+        apiKey,
+        signal: controller.signal,
+        onPayload: (payload) => {
+          if (payload && typeof payload === "object") {
+            const p = payload as Record<string, unknown>;
+            p["parallel_tool_calls"] = false;
+            p["tool_choice"] = { type: "function", function: { name: "select_profile" } };
+          }
+          return payload;
+        },
+      },
+    ).catch((error) => {
+      vwarn(`[orchestrator] LLM 分类错误: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }),
+    timeoutResult,
+  ]);
+  if (timeoutHandle) clearTimeout(timeoutHandle);
+
+  if (!response) {
+    vwarn(`[orchestrator] LLM 分类超时/失败，降级使用 divergent-research`);
+    return "divergent-research";
+  }
 
   // 解析结果（用统一的幽灵去重工具）
   const toolCalls = extractToolCalls([...response.content]);
@@ -318,16 +343,19 @@ export interface OrchestratorOptions {
   model: Model<Api>;
   apiKey: string;
   registry?: ProfileRegistry;
+  llmTimeoutMs?: number;
 }
 
 export class Orchestrator {
   private readonly model: Model<Api>;
   private readonly apiKey: string;
   private readonly registry: ProfileRegistry;
+  private readonly llmTimeoutMs: number;
 
   constructor(opts: OrchestratorOptions) {
     this.model = opts.model;
     this.apiKey = opts.apiKey;
+    this.llmTimeoutMs = opts.llmTimeoutMs ?? DEFAULT_ORCHESTRATOR_LLM_TIMEOUT_MS;
     this.registry = opts.registry ?? makeDefaultRegistry({
       model: opts.model,
       apiKey: opts.apiKey,
@@ -371,7 +399,7 @@ export class Orchestrator {
 
     // 档位 3：LLM 分类 agent
     vlog("[orchestrator] 规则无法判断，升级到 LLM 分类...");
-    const llmResult = await classifyByLLM(task, metas, this.model, this.apiKey);
+    const llmResult = await classifyByLLM(task, metas, this.model, this.apiKey, this.llmTimeoutMs);
     const guarded = guardProfileChoice(llmResult, task, metas);
     const guardApplied = guarded !== llmResult;
     vlog(`[orchestrator] LLM 分类 → ${llmResult}${guardApplied ? ` → ${guarded}（守卫修正）` : ""}`);

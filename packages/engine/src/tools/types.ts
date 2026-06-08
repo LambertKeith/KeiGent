@@ -44,6 +44,7 @@ export interface ToolContext {
   headless: boolean;                  // 浏览器可见性
   memoryDir?: string;                 // 记忆存储目录（memory_recall 用）
   askUser?: (question: string) => Promise<string>;  // 向用户提问（CLI 注入）
+  signal?: AbortSignal;               // workflow 父级取消信号
 }
 
 // ── 工具结果 ──────────────────────────────────────────────────────────

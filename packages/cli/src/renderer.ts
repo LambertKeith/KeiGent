@@ -1,4 +1,4 @@
-import type { ProgressEvent } from "@keigent/engine";
+import type { ProgressEvent, WorkflowEvent } from "@keigent/engine";
 
 // ── ANSI 颜色（不引依赖）──────────────────────────────────────────────
 
@@ -67,6 +67,35 @@ export function renderProgress(ev: ProgressEvent): void {
       const color = ev.exitReason === "success" ? c.green : c.yellow;
       console.log(`${c.gray}  └────────────────${c.reset}`);
       console.log(`${color}◆ 完成 (${ev.exitReason})${c.reset}`);
+      break;
+    }
+  }
+}
+
+export function renderWorkflowProgress(ev: WorkflowEvent): void {
+  switch (ev.kind) {
+    case "workflow_start":
+      console.log(`${c.magenta}◇ workflow${c.reset} ${c.bold}${ev.mode}${c.reset} ${c.dim}${ev.workflowId}${c.reset}`);
+      break;
+    case "child_start":
+      console.log(`${c.gray}  child ${ev.role} start ${ev.childRunId}${c.reset}`);
+      break;
+    case "child_event":
+      renderProgress(ev.event);
+      break;
+    case "child_done":
+      console.log(`${c.gray}  child done (${ev.exitReason})${c.reset}`);
+      break;
+    case "workflow_verdict": {
+      const color = ev.passed ? c.green : c.red;
+      const mark = ev.passed ? "✓ workflow verdict" : "✗ workflow verdict";
+      const evidence = ev.evidence.map((item) => `${item.kind}:${item.passed ? "pass" : "fail"}`).join(", ");
+      console.log(`${color}◆ ${mark}${c.reset} ${c.dim}${trunc(evidence, 90)}${c.reset}`);
+      break;
+    }
+    case "workflow_done": {
+      const color = ev.exitReason === "success" ? c.green : c.red;
+      console.log(`${color}◇ workflow done (${ev.exitReason})${c.reset}`);
       break;
     }
   }

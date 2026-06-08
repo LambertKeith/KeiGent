@@ -30,6 +30,17 @@ describe("CLI config", () => {
     expect(model.baseUrl).toBe("https://gateway.example.com/v1");
   });
 
+  it("normalizes bare OpenAI-compatible gateway roots to /v1", () => {
+    const config = resolveConfig(
+      { apiProtocol: "openai", baseUrl: "https://www.packyapi.com/", modelId: "gpt-5.5", apiKey: "file-key" },
+      {},
+      "/tmp/keigent-home",
+    );
+    const model = buildModel(config);
+
+    expect(model.baseUrl).toBe("https://www.packyapi.com/v1");
+  });
+
   it("resolves Anthropic-compatible protocol with a custom URL", () => {
     const config = resolveConfig(
       { apiProtocol: "anthropic", baseUrl: "https://anthropic-gateway.example.com", modelId: "claude-custom", apiKey: "file-key" },

@@ -66,9 +66,16 @@ export class ToolRegistry {
       return err(`未知工具: ${name}`);
     }
 
+    if (ctx.signal?.aborted) {
+      return err(`工具 ${name} aborted`);
+    }
+
     // dangerous 工具过审批门
     if (tool.permission === "dangerous") {
       const approved = await ctx.approval.request(name, args);
+      if (ctx.signal?.aborted) {
+        return err(`工具 ${name} aborted`);
+      }
       if (!approved) {
         return err(`工具 ${name} 未获授权，已拒绝执行`);
       }
@@ -78,7 +85,7 @@ export class ToolRegistry {
     const timeoutMs = tool.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     let result: ToolResult;
     try {
-      result = await withTimeout(tool.execute(args, ctx), timeoutMs, name);
+      result = await withTimeout(tool.execute(args, ctx), timeoutMs, name, ctx.signal);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       return err(`工具 ${name} 执行异常: ${msg}`);
@@ -97,11 +104,27 @@ export class ToolRegistry {
   }
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} 超时（${ms}ms）`)), ms),
-    ),
-  ]);
+function withTimeout<T>(p: Promise<T>, ms: number, label: string, signal?: AbortSignal): Promise<T> {
+  if (signal?.aborted) {
+    return Promise.reject(new Error(`${label} aborted`));
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      fn();
+    };
+    const onAbort = () => finish(() => reject(new Error(`${label} aborted`)));
+    const timer = setTimeout(() => finish(() => reject(new Error(`${label} 超时（${ms}ms）`))), ms);
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+    p.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+  });
 }

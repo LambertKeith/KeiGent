@@ -258,6 +258,118 @@ describe("WorkflowRunner", () => {
     expect(events.find((event) => event.kind === "workflow_verdict")).toMatchObject({ passed: false });
   });
 
+  it("passes maxIterationsPerRun to the child runner", async () => {
+    let observedMaxIterations: number | undefined;
+    const runner = new WorkflowRunner({
+      async runChild(_child, options) {
+        observedMaxIterations = options?.maxIterations;
+        return loopResult({ iterations: 1 });
+      },
+    });
+
+    await runner.run(
+      createWorkflowSpec({
+        id: "wf-pass-max-iterations",
+        task: task(),
+        budget: { maxIterationsPerRun: 3 },
+      }),
+    );
+
+    expect(observedMaxIterations).toBe(3);
+  });
+
+  it("marks budget_exceeded when a child result exceeds maxIterationsPerRun", async () => {
+    const childTrajectory = trajectory({
+      steps: [{ iteration: 2, kind: "text_output", text: "late done" }],
+    });
+    const child = loopResult({ iterations: 2, trajectory: childTrajectory });
+    const runner = new WorkflowRunner(fakeChildRunner(child));
+    const events: Array<{ kind: string; exitReason?: string }> = [];
+
+    const result = await runner.run(
+      createWorkflowSpec({
+        id: "wf-per-run-iteration-budget",
+        task: task(),
+        budget: {
+          maxIterationsPerRun: 1,
+          maxAggregateIterations: 10,
+        },
+      }),
+      (event) => events.push(event),
+    );
+
+    expect(result.exitReason).toBe("budget_exceeded");
+    expect(result.childRuns).toHaveLength(1);
+    expect(result.childRuns[0]?.result).toBe(child);
+    expect(result.childRuns[0]?.trajectory).toBe(childTrajectory);
+    expect(result.trajectory.childRuns[0]?.trajectory).toBe(childTrajectory);
+    expect(result.evidence).toContainEqual(
+      expect.objectContaining({
+        kind: "budget",
+        passed: false,
+        message: expect.stringContaining("maxIterationsPerRun"),
+      }),
+    );
+    expect(events.filter((event) => event.kind === "workflow_done")).toHaveLength(1);
+    expect(events[events.length - 1]).toMatchObject({
+      kind: "workflow_done",
+      exitReason: "budget_exceeded",
+    });
+  });
+
+  it("keeps verified-loop verdict false when checkpoint passes but per-run budget is exceeded", async () => {
+    const assertionTask = task({
+      successDef: {
+        goal: "Done",
+        assertions: [{ description: "answer visible", signal: "text" }],
+      },
+    });
+    const passedCheckpoint = trajectory({
+      steps: [
+        {
+          iteration: 2,
+          kind: "checkpoint",
+          checkpointDesc: "answer visible",
+          verdictPassed: true,
+          verdictEvidence: "observed answer",
+          snapshot: { raw: {}, visibleText: "answer" },
+        },
+      ],
+    });
+    const child = loopResult({ iterations: 2, trajectory: passedCheckpoint, checkpointsPassed: 1 });
+    const runner = new WorkflowRunner(fakeChildRunner(child));
+    const events: Array<{ kind: string; passed?: boolean; evidence?: unknown[]; exitReason?: string }> = [];
+
+    const result = await runner.run(
+      createWorkflowSpec({
+        id: "wf-verified-budget-exceeded",
+        task: assertionTask,
+        budget: { maxIterationsPerRun: 1, maxAggregateIterations: 10 },
+      }),
+      (event) => events.push(event),
+    );
+
+    expect(result.exitReason).toBe("budget_exceeded");
+    expect(result.evidence).toContainEqual(
+      expect.objectContaining({
+        kind: "budget",
+        passed: false,
+        sourceChildRunId: "wf-verified-budget-exceeded:worker-1",
+        message: expect.stringContaining("maxIterationsPerRun"),
+      }),
+    );
+    expect(events.find((event) => event.kind === "workflow_verdict")).toMatchObject({
+      passed: false,
+      evidence: expect.arrayContaining([
+        expect.objectContaining({
+          kind: "budget",
+          passed: false,
+          sourceChildRunId: "wf-verified-budget-exceeded:worker-1",
+        }),
+      ]),
+    });
+  });
+
   it("enforces child, iteration, tool-call, and timeout budgets", async () => {
     const child = loopResult({
       iterations: 2,

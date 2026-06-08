@@ -50,6 +50,7 @@ export {
 export { parseEvalCliArgs } from "./evals/cli-options.js";
 export { DEFAULT_ORCHESTRATOR_EVAL_CASES, runOrchestratorEvalCases } from "./evals/orchestrator-eval.js";
 export {
+  createEngineWorkflowChildRunner,
   DEFAULT_WORKFLOW_BUDGET,
   WorkflowRunner,
   chooseExecutionMode,
@@ -74,6 +75,8 @@ export type {
   WorkflowSpec,
   WorkflowTrajectory,
   WorkflowVerificationPolicy,
+  EngineWorkflowChildRunnerOptions,
+  EngineWorkflowRunner,
 } from "./workflow/index.js";
 export type {
   EngineEvalExecutorOptions,

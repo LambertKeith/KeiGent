@@ -9,14 +9,16 @@ import {
   loadSkillContext,
   makeRegistry,
   buildDefaultRegistry,
-  toolsForProfile,
+  createWorkflowSpec,
+  WorkflowRunner,
+  createEngineWorkflowChildRunner,
   type ApprovalGate,
   type Task,
 } from "@keigent/engine";
 import { loadConfig, buildModel, type KeigentConfig } from "./config.js";
 import { handleCommand, type ReplState } from "./commands.js";
-import { persistAndLearn } from "./post-run.js";
-import { renderProgress, printBanner, printResponse, printError, printInfo, colors as c } from "./renderer.js";
+import { persistWorkflowAndLearn } from "./post-run.js";
+import { renderProgress, renderWorkflowProgress, printBanner, printResponse, printError, printInfo, colors as c } from "./renderer.js";
 
 // ── 交互式审批门：dangerous 工具弹 [y/N] ──────────────────────────────
 
@@ -121,47 +123,61 @@ async function runTask(goal: string, deps: TaskDeps): Promise<void> {
     profile: replState.forcedProfile ?? "auto",
   };
 
-  // 选 profile（强制 or 自动）
-  let profileName: string;
-  let profile;
-  if (replState.forcedProfile) {
-    profile = profileRegistry.get(replState.forcedProfile);
-    profileName = replState.forcedProfile;
-    renderProgress({ kind: "profile_selected", profile: profileName, via: "rule" });
-  } else {
-    const selected = await orchestrator.selectProfile(task, replState.skillContext.metas);
-    profile = selected.profile;
-    profileName = selected.name;
-    renderProgress({ kind: "profile_selected", profile: profileName, via: selected.method });
-  }
-
-  // 每次执行用新引擎实例（headless 可能被 /headed /headless 改过）
-  const engine = new LoopEngine({
-    model,
-    apiKey: config.apiKey,
-    maxIterations: config.maxIterations,
-    registry,
-    workspace: config.workspace,
-    approval,
-    headless: replState.headless,
-    askUser: async (q) => (await rl.question(`\n${c.yellow}? ${q}${c.reset}\n  ❯ `)).trim(),
-  });
-
-  const availableTools = toolsForProfile(registry, profileName);
+  const profileSelectingOrchestrator = replState.forcedProfile
+    ? {
+        async selectProfile() {
+          return {
+            name: replState.forcedProfile!,
+            profile: profileRegistry.get(replState.forcedProfile!),
+            method: "rule" as const,
+          };
+        },
+      }
+    : orchestrator;
 
   try {
-    const result = await engine.run(
-      task,
-      replState.skillContext,
-      profile,
-      stateCapture,
-      availableTools,
-      renderProgress,   // 流式渲染
+    const workflow = new WorkflowRunner(
+      createEngineWorkflowChildRunner({
+        orchestrator: profileSelectingOrchestrator,
+        registry,
+        skillContext: replState.skillContext,
+        stateCapture,
+        onProfileSelected: (selection) => renderProgress({ kind: "profile_selected", profile: selection.name, via: selection.method }),
+        createEngine(maxIterations) {
+          return new LoopEngine({
+            model,
+            apiKey: config.apiKey,
+            maxIterations: maxIterations ?? config.maxIterations,
+            registry,
+            workspace: config.workspace,
+            approval,
+            headless: replState.headless,
+            askUser: async (q) => (await rl.question(`\n${c.yellow}? ${q}${c.reset}\n  ❯ `)).trim(),
+          });
+        },
+      }),
     );
 
-    printResponse(result.finalResponse);
+    const result = await workflow.run(
+      createWorkflowSpec({
+        id: `repl-${Date.now()}`,
+        task,
+        budget: {
+          maxIterationsPerRun: config.maxIterations,
+          maxAggregateIterations: config.maxIterations,
+        },
+      }),
+      renderWorkflowProgress,
+    );
 
-    await persistAndLearn(result, config, learner, skillBodies);
+    if (result.exitReason === "success") {
+      printResponse(result.finalResponse);
+    } else {
+      printError(`workflow failed: ${result.exitReason}`);
+      printResponse(result.finalResponse);
+    }
+
+    await persistWorkflowAndLearn(result, config, learner, skillBodies);
   } catch (e) {
     printError(`执行出错: ${e instanceof Error ? e.message : String(e)}`);
   }

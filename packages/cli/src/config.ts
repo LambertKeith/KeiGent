@@ -119,6 +119,23 @@ function providerForProtocol(protocol: ModelApiProtocol): string {
   return protocol === "anthropic" ? "anthropic-compatible" : "openai-compatible";
 }
 
+function normalizeBaseUrlForProtocol(baseUrl: string, protocol: ModelApiProtocol): string {
+  if (protocol !== "openai") return baseUrl;
+
+  try {
+    const url = new URL(baseUrl);
+    const pathname = url.pathname.replace(/\/+$/, "");
+    if (!pathname) {
+      url.pathname = "/v1";
+      return url.toString().replace(/\/$/, "");
+    }
+  } catch {
+    // Keep invalid URLs unchanged; config doctor reports URL validity separately.
+  }
+
+  return baseUrl.replace(/\/$/, "");
+}
+
 /** 构建 pi-ai Model 对象 */
 export function buildModel(config: KeigentConfig): Model<Api> {
   return {
@@ -126,7 +143,7 @@ export function buildModel(config: KeigentConfig): Model<Api> {
     name: `${config.modelId} (${config.apiProtocol}-compatible)` ,
     api: modelApiForProtocol(config.apiProtocol),
     provider: providerForProtocol(config.apiProtocol),
-    baseUrl: config.baseUrl,
+    baseUrl: normalizeBaseUrlForProtocol(config.baseUrl, config.apiProtocol),
     reasoning: false,
     input: ["text", "image"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },

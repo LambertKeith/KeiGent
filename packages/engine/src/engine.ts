@@ -17,6 +17,7 @@ import { ToolRegistry, CHECKPOINT_TOOL_NAME, type ToolContext, type ApprovalGate
 import { AllowAllGate } from "./tools/types.js";
 
 const CHECKPOINT_TOOL = CHECKPOINT_TOOL_NAME;
+const DEFAULT_LLM_TIMEOUT_MS = 60_000;
 
 export interface EngineOptions {
   model: Model<Api>;
@@ -27,6 +28,19 @@ export interface EngineOptions {
   approval?: ApprovalGate;      // dangerous 工具审批门
   headless?: boolean;           // 浏览器可见性
   askUser?: (question: string) => Promise<string>;  // 交互提问回调（CLI 注入，单次模式不传）
+  llmTimeoutMs?: number;        // 单次 LLM 请求上限，防止真实供应商流式响应卡死
+}
+
+export interface LoopEngineRunOptions {
+  signal?: AbortSignal;
+}
+
+function isAborted(signal?: AbortSignal): boolean {
+  return signal?.aborted === true;
+}
+
+function abortMessage(): string {
+  return "[错误] aborted";
 }
 
 export class LoopEngine {
@@ -38,6 +52,7 @@ export class LoopEngine {
   private readonly approval: ApprovalGate;
   private readonly headless: boolean;
   private readonly askUser?: (question: string) => Promise<string>;
+  private readonly llmTimeoutMs: number;
   private _emit: ProgressCallback = () => {};
 
   constructor(opts: EngineOptions) {
@@ -49,6 +64,7 @@ export class LoopEngine {
     this.approval = opts.approval ?? new AllowAllGate();
     this.headless = opts.headless ?? false;
     this.askUser = opts.askUser;
+    this.llmTimeoutMs = opts.llmTimeoutMs ?? DEFAULT_LLM_TIMEOUT_MS;
   }
 
   async run(
@@ -58,7 +74,9 @@ export class LoopEngine {
     stateCapture: StateCapture,
     availableTools: Tool[],
     onProgress?: ProgressCallback,
+    options: LoopEngineRunOptions = {},
   ): Promise<LoopResult> {
+    const signal = options.signal;
     const emit = onProgress ?? (() => {});
     this._emit = emit;     // result() 用它发 done 事件
     vlog(`\n[engine] ▶ profile=${profile.name} goal="${task.goal}"`);
@@ -78,6 +96,7 @@ export class LoopEngine {
       task,
       headless: this.headless,
       askUser: this.askUser,
+      signal,
     };
 
     // AttentionStrategy 决定匹配哪些 skill
@@ -100,6 +119,10 @@ export class LoopEngine {
       failed: false,
     };
 
+    if (isAborted(signal)) {
+      return this.result(state, "error", abortMessage(), collector, matchedSkills);
+    }
+
     // 首条用户消息（skill body 前置注入）
     const userContent = skillInjection
       ? `${skillInjection}\n\n${task.goal}`
@@ -112,6 +135,10 @@ export class LoopEngine {
     });
 
     while (!profile.terminate.shouldStop(state)) {
+      if (isAborted(signal)) {
+        return this.result(state, "error", abortMessage(), collector, matchedSkills);
+      }
+
       if (state.iteration >= this.maxIterations) {
         vlog(`[engine] 达到最大迭代次数 ${this.maxIterations}`);
         return this.result(state, "max_iterations", undefined, collector, matchedSkills);
@@ -127,9 +154,15 @@ export class LoopEngine {
         skillContext,
         availableTools,
       );
+      if (isAborted(signal)) {
+        return this.result(state, "error", abortMessage(), collector, matchedSkills);
+      }
 
       // LLM 调用
-      const response = await this.callLLM(context);
+      const response = await this.callLLM(context, signal);
+      if (isAborted(signal)) {
+        return this.result(state, "error", abortMessage(), collector, matchedSkills);
+      }
 
       if (response.stopReason === "error") {
         console.error(`[engine] LLM 错误: ${response.errorMessage}`);
@@ -226,16 +259,28 @@ export class LoopEngine {
           emit({ kind: "checkpoint", iteration: state.iteration, desc });
 
           // 验证观察：引擎强制采集客观快照
+          if (isAborted(signal)) {
+            return this.result(state, "error", abortMessage(), collector, matchedSkills);
+          }
           const snapshot = await stateCapture.capture();
+          if (isAborted(signal)) {
+            return this.result(state, "error", abortMessage(), collector, matchedSkills);
+          }
           state.snapshots.push(snapshot);
           vlog(`[engine] StateCapture → url=${snapshot.url ?? "n/a"}`);
 
           // 裁判验证
+          if (isAborted(signal)) {
+            return this.result(state, "error", abortMessage(), collector, matchedSkills);
+          }
           const verdict = await profile.verify.check(
             snapshot,
             task.successDef,
             skillContext,
           );
+          if (isAborted(signal)) {
+            return this.result(state, "error", abortMessage(), collector, matchedSkills);
+          }
           vlog(`[engine] 裁判 → ${verdict.passed ? "✓ 通过" : "✗ 失败"}: ${verdict.evidence}`);
           emit({ kind: "verdict", iteration: state.iteration, passed: verdict.passed, evidence: verdict.evidence });
 
@@ -249,7 +294,13 @@ export class LoopEngine {
           });
 
           if (!verdict.passed) {
+            if (isAborted(signal)) {
+              return this.result(state, "error", abortMessage(), collector, matchedSkills);
+            }
             const decision = await profile.recover.handle(state, verdict);
+            if (isAborted(signal)) {
+              return this.result(state, "error", abortMessage(), collector, matchedSkills);
+            }
             if (decision.kind === "escalate") {
               vlog(`[engine] 升级人类: ${decision.reason}`);
               emit({ kind: "escalate", reason: decision.reason });
@@ -268,11 +319,17 @@ export class LoopEngine {
         }
 
         // ── 普通工具执行（通过 registry，B0 解耦）──────────────────────
+        if (isAborted(signal)) {
+          return this.result(state, "error", abortMessage(), collector, matchedSkills);
+        }
         const toolRes = await this.registry.execute(
           toolCall.name,
           toolCall.arguments as Record<string, unknown>,
           toolCtx,
         );
+        if (isAborted(signal)) {
+          return this.result(state, "error", abortMessage(), collector, matchedSkills);
+        }
         const result = toolRes.content;
         vlog(`[engine] 结果: ${result.slice(0, 100)}`);
         emit({ kind: "tool_result", iteration: state.iteration, toolName: toolCall.name, result, succeeded: !toolRes.isError });
@@ -300,23 +357,68 @@ export class LoopEngine {
       }
 
       // 记忆策略
+      if (isAborted(signal)) {
+        return this.result(state, "error", abortMessage(), collector, matchedSkills);
+      }
       await profile.memory.maybePersist(state);
+      if (isAborted(signal)) {
+        return this.result(state, "error", abortMessage(), collector, matchedSkills);
+      }
     }
 
     return this.result(state, "success", undefined, collector, matchedSkills);
   }
 
-  private async callLLM(context: import("@earendil-works/pi-ai").Context): Promise<AssistantMessage> {
-    return complete(this.model, context, {
-      apiKey: this.apiKey,
-      onPayload: (payload) => {
-        // parallel_tool_calls: false 减少并发调用（gpt-5.5 并发时 pi-ai 流式解析有 bug）
-        if (payload && typeof payload === "object") {
-          (payload as Record<string, unknown>)["parallel_tool_calls"] = false;
-        }
-        return payload;
-      },
-    });
+  private assistantError(message: string): AssistantMessage {
+    return {
+      stopReason: "error",
+      errorMessage: message,
+      content: [],
+      api: this.model.api,
+      provider: this.model.provider,
+      model: this.model.id,
+      usage: {},
+      timestamp: Date.now(),
+    } as unknown as AssistantMessage;
+  }
+
+  private async callLLM(context: import("@earendil-works/pi-ai").Context, signal?: AbortSignal): Promise<AssistantMessage> {
+    if (isAborted(signal)) return this.assistantError("aborted");
+
+    const controller = new AbortController();
+    const relayAbort = () => controller.abort();
+    signal?.addEventListener("abort", relayAbort, { once: true });
+
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const completion = complete(this.model, context, {
+        apiKey: this.apiKey,
+        signal: controller.signal,
+        onPayload: (payload) => {
+          // parallel_tool_calls: false 减少并发调用（gpt-5.5 并发时 pi-ai 流式解析有 bug）
+          if (payload && typeof payload === "object") {
+            (payload as Record<string, unknown>)["parallel_tool_calls"] = false;
+          }
+          return payload;
+        },
+      });
+
+      const bounded = new Promise<AssistantMessage>((resolve) => {
+        timeoutHandle = setTimeout(() => {
+          controller.abort();
+          resolve(this.assistantError(`LLM request timed out after ${this.llmTimeoutMs}ms`));
+        }, this.llmTimeoutMs);
+        signal?.addEventListener("abort", () => resolve(this.assistantError("aborted")), { once: true });
+      });
+
+      return await Promise.race([completion, bounded]);
+    } catch (e) {
+      if (isAborted(signal)) return this.assistantError("aborted");
+      return this.assistantError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      signal?.removeEventListener("abort", relayAbort);
+    }
   }
 
   private pushToolResult(

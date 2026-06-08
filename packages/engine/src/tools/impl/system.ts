@@ -29,9 +29,17 @@ export const shellTool: ToolDef = {
   async execute(args, ctx: ToolContext) {
     const command = String(args["command"] ?? "");
     if (!command) return err("shell 需要 command 参数");
+    if (ctx.signal?.aborted) return err("shell aborted");
 
     return new Promise((resolve) => {
-      exec(
+      let settled = false;
+      const settle = (result: ReturnType<typeof ok> | ReturnType<typeof err>) => {
+        if (settled) return;
+        settled = true;
+        ctx.signal?.removeEventListener("abort", onAbort);
+        resolve(result);
+      };
+      const child = exec(
         command,
         {
           cwd: ctx.workspace,
@@ -43,17 +51,22 @@ export const shellTool: ToolDef = {
           const out = (stdout || "").slice(0, MAX_OUTPUT);
           const errOut = (stderr || "").slice(0, 4000);
           if (error && error.killed) {
-            resolve(err(`命令超时（${SHELL_TIMEOUT_MS}ms）`));
+            settle(err(ctx.signal?.aborted ? "shell aborted" : `命令超时（${SHELL_TIMEOUT_MS}ms）`));
             return;
           }
           if (error) {
-            resolve(err(`退出码 ${error.code}\n${errOut || out}`));
+            settle(err(`退出码 ${error.code}\n${errOut || out}`));
             return;
           }
           const combined = [out, errOut && `[stderr] ${errOut}`].filter(Boolean).join("\n");
-          resolve(ok(combined || "（无输出，命令成功）"));
+          settle(ok(combined || "（无输出，命令成功）"));
         },
       );
+      const onAbort = () => {
+        child.kill();
+        settle(err("shell aborted"));
+      };
+      ctx.signal?.addEventListener("abort", onAbort, { once: true });
     });
   },
 };
