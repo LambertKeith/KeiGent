@@ -25,6 +25,14 @@ describe("parseEvalCliArgs", () => {
     });
   });
 
+  it("accepts --json without changing pretty output", () => {
+    expect(parseEvalCliArgs(["--json"])).toEqual({ mode: "smoke", trajectories: {}, pretty: true });
+  });
+
+  it("treats --compact as compact JSON output", () => {
+    expect(parseEvalCliArgs(["--json", "--compact"])).toEqual({ mode: "smoke", trajectories: {}, pretty: false });
+  });
+
   it("rejects malformed trajectory mapping", () => {
     expect(() => parseEvalCliArgs(["--mode", "replay", "--trajectory", "bad-value"])).toThrow(
       "--trajectory must use case-id=/path/to/trajectory.json",

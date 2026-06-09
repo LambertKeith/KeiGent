@@ -9,6 +9,7 @@ import {
   runOrchestratorEvalCases,
   type Trajectory,
 } from "@keigent/engine";
+import { formatJson } from "./json-output.js";
 
 export interface EvalCommandOptions {
   stdout?: (line: string) => void;
@@ -19,8 +20,28 @@ function print(options: EvalCommandOptions, line: string): void {
   (options.stdout ?? console.log)(line);
 }
 
-function pretty(args: string[]): number {
-  return args.includes("--compact") ? 0 : 2;
+interface ReplayCommandArgs {
+  path: string;
+  outputArgs: string[];
+}
+
+function parseReplayCommandArgs(args: string[]): ReplayCommandArgs {
+  const outputArgs: string[] = [];
+  let path: string | undefined;
+
+  for (const arg of args) {
+    if (arg === "--json" || arg === "--compact" || arg === "--pretty") {
+      outputArgs.push(arg);
+      continue;
+    }
+    if (arg === "--") continue;
+    if (arg.startsWith("--")) throw new Error(`unknown replay option ${arg}`);
+    if (path) throw new Error(`unexpected replay argument ${arg}`);
+    path = arg;
+  }
+
+  if (!path) throw new Error("Usage: keigent replay <trajectory.json>");
+  return { path, outputArgs };
 }
 
 export async function runEvalCommand(
@@ -31,7 +52,7 @@ export async function runEvalCommand(
 
   if (subcommand === "orchestrator") {
     const report = runOrchestratorEvalCases(DEFAULT_ORCHESTRATOR_EVAL_CASES);
-    print(options, JSON.stringify(report, null, pretty(rest)));
+    print(options, formatJson(report, rest));
     if (report.failed > 0) process.exitCode = 1;
     return;
   }
@@ -66,8 +87,7 @@ export async function runReplayCommand(
   args: string[] = [],
   options: EvalCommandOptions = {},
 ): Promise<void> {
-  const path = args[0];
-  if (!path) throw new Error("Usage: keigent replay <trajectory.json>");
+  const { path, outputArgs } = parseReplayCommandArgs(args);
 
   const trajectory = JSON.parse(await readFile(path, "utf8")) as Trajectory;
   const summary = {
@@ -82,5 +102,5 @@ export async function runReplayCommand(
     skillsUsed: trajectory.skillsUsed ?? [],
     finalResponse: trajectory.finalResponse,
   };
-  print(options, JSON.stringify(summary, null, args.includes("--compact") ? 0 : 2));
+  print(options, formatJson(summary, outputArgs));
 }

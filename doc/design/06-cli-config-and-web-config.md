@@ -4,7 +4,7 @@
 
 ## 1. Configuration goals
 
-1. No hidden credentials: no hardcoded API key, no demo key fallback, no raw secret in logs/UI/doctor.
+1. No hidden credentials: no hardcoded API key, no sample key fallback, no raw secret in logs/UI/doctor.
 2. Provider-neutral by default: KeiGent must not expose a product-specific entrance for a third-party relay platform.
 3. Protocol-first model setup: users choose an API protocol shape, not a vendor-specific integration path.
 4. Clear precedence: users can see where every active value came from.

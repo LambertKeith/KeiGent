@@ -1,7 +1,7 @@
-# KeiGent Eval Harness 开发文档与验收标准
+# KeiGent Eval Harness 实现说明与验收标准
 
-> 状态：v0.1，下一阶段开发基线  
-> 目标：把 KeiGent 从“架构闭环 demo”推进到“可度量、可回归、可解释的 agent loop 框架”。
+> 状态：当前实现说明
+> 目标：说明 KeiGent Eval Harness 如何支撑可度量、可回归、可解释的 agent loop 验收。
 
 ---
 
@@ -44,7 +44,7 @@ Eval Harness 不新增 agent 行为，不绕开 Orchestrator，也不改变 Loop
 
 ### 2.2 首先支持无 LLM 的确定性 smoke eval
 
-真实 LLM/browser eval 成本高、慢、偶发不稳定。因此第一版必须支持注入 executor，先验证 runner/report 本身：
+真实 LLM/browser eval 成本高、慢、偶发不稳定。因此当前确定性基线必须支持注入 executor，先验证 runner/report 本身：
 
 - 不调 LLM；
 - 不打开真实浏览器；
@@ -79,7 +79,7 @@ interface EvalReport {
 
 ---
 
-## 3. 第一版范围
+## 3. 当前实现范围
 
 ### 3.1 文件位置
 
@@ -188,7 +188,7 @@ corepack pnpm --filter @keigent/engine eval:smoke
 
 ### P1：真实执行入口预留
 
-第一版可以不在 CI 中跑真实 LLM，但类型和接口要为真实 executor 留好位置：
+当前质量门不要求在 CI 中跑真实 LLM，但类型和接口要为真实 executor 留好位置：
 
 ```ts
 createEngineEvalExecutor(...): EvalExecutor
@@ -282,7 +282,7 @@ corepack pnpm --filter @keigent/engine eval:smoke
 
 ## 6. 非目标
 
-第一版不做：
+当前基线不做：
 
 - GUI dashboard；
 - 大规模 benchmark；

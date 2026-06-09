@@ -1,145 +1,186 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+本文件是 KeiGent 仓库的 AI 协作者入口。每个任务开始时必须读取本文件，并按这里的项目事实与工作规则执行。
 
 ---
 
-## 项目定位
+## 1. 协作者硬规则
 
-KeiGent 是一个**可切换 Loop 的 Agent 框架**（TypeScript，pnpm monorepo）。
-
-核心设计思想：同一个 Loop 引擎，通过外部传入的 `LoopProfile`（五个策略旋钮的组合）表现出截然不同的行为——调研场景走发散 profile，执行场景走收敛 profile，难量化任务走带独立裁判验证的 profile。详细设计见 `doc/design/01-architecture.md`。
-
----
-
-## 命令
-
-从仓库根目录运行：
-
-```bash
-pnpm install          # 安装所有依赖
-pnpm check            # TypeScript 类型检查（所有包）
-pnpm dev              # 运行 @keigent/engine demo（tsx src/index.ts）
-
-# CLI（@keigent/cli）—— agent 的实际入口
-pnpm --filter @keigent/cli start                       # 进入对话式 REPL
-pnpm --filter @keigent/cli start "任务描述"             # 单次执行模式
-
-# 验收脚本（不调 LLM 的快速验证）
-pnpm --filter @keigent/engine verify:attention         # S1: attention 注入篇数
-pnpm --filter @keigent/engine verify:browser           # B1: 浏览器 snapshot+ref
-pnpm --filter @keigent/engine exec tsx src/verify-tools.ts  # B3/B4: 文件/shell/memory
-```
-
-配置在 `~/.keigent/config.json`（model/apiKey/headless 等）；skill 库在 `~/.keigent/skills/`；文件沙箱在 `~/.keigent/workspace/`。
-
-在 `packages/engine/` 内单独运行：
-
-```bash
-pnpm check            # tsc --noEmit
-pnpm dev              # tsx src/index.ts（需 KEIGENT_API_KEY 环境变量）
-pnpm build            # tsc（输出到 dist/）
-```
-
-环境变量：复制 `.env.example` 为 `.env.local` 并填入 `KEIGENT_API_KEY`；可选设置 `KEIGENT_API_PROTOCOL=openai|anthropic` 和自定义 `KEIGENT_BASE_URL`。
+- **语言**：所有面向用户的回复使用简体中文。
+- **模型声明**：每个任务开始时先说明当前模型名称，并确认已读取本文件。
+- **先查再改**：涉及接口、命令、架构事实时，优先查询本地源码和文档，不凭记忆猜。
+- **主动验证**：代码或命令行为变更必须补/跑对应测试；文档入口变更必须跑 grep 或链接检查等可复现验证。
+- **保护用户改动**：可能存在用户未提交改动。不得回退、覆盖或删除非本任务改动。
+- **数据库安全**：禁止删除数据库、表或数据。数据库 schema 变更必须走显式迁移；迁移文件绝对禁止修改。
+- **文件规模**：新增或重写代码文件尽量控制在 700 行以内，按职责拆分。
 
 ---
 
-## 架构
+## 2. 项目定位
 
-### 目录结构
+KeiGent 是一个 **skill-driven、profile-switchable、evidence-first 的 Agent Runtime / Operations Workbench**，TypeScript + pnpm monorepo。
 
-```
-packages/engine/src/
-├── types.ts            # 所有接口（旋钮、Profile、Task、Trajectory、SkillPatch 等）
-├── engine.ts           # LoopEngine 参数化主循环（唯一的引擎，行为由 LoopProfile 决定）
-├── orchestrator.ts     # 自动调度：规则分类（档位2）+ LLM 分类降级（档位3）
-├── skills.ts           # SKILL.md 两层渐进式披露加载
-├── browser.ts          # 真实 Playwright StateCapture + fetch_url 工具实现
-├── trajectory.ts       # 执行轨迹收集、持久化、渲染
-├── learner.ts          # 学习 loop：LLM 分析轨迹 → submit_skill_patches
-├── skill-patch.ts      # patch 应用器 → LEARNING.md
-├── profiles/
-│   ├── strategies.ts   # 五个旋钮的策略实现（NarrowAttention、WideAttention 等）
-│   ├── convergent-exec.ts
-│   └── divergent-research.ts
-└── index.ts            # 全量闭环演示入口
+核心命题：
 
-skills/
-├── web-summarize/
-│   ├── SKILL.md        # 标准格式 mock skill
-│   └── LEARNING.md     # 学习 loop 自动写入的执行经验（自动生成）
-└── .trajectories/      # 执行轨迹 JSON 存档（自动生成）
+> 不同任务需要不同的 agent loop 纪律。
 
-doc/design/             # 架构设计文档（01-architecture.md 是主文档）
-doc/references/         # 参考项目研读（hermes-agent、openhuman）
-```
+当前架构不复制多个 loop；系统只有一个 `LoopEngine`，行为差异由 `LoopProfile` 的五个策略旋钮控制：
 
-当前 `packages/engine/src/index.ts` 是全量闭环演示入口，跑通了 Orchestrator → LoopEngine → Trajectory → Learner → LEARNING.md 完整链路。
-
-### 三层结构
-
-```
-Orchestrator（调度层）   读任务 → 判断性质 → 选 LoopProfile
-      ↓
-LoopEngine（引擎层）     唯一的参数化循环骨架，行为由 LoopProfile 决定
-      ↓
-能力层（复用现有）        标准 SKILL.md 知识注入 + 通用工具原语（bash/文件/执行）
-```
-
-### 核心设计原则
-
-**一个引擎 + 多个 profile，绝不写多个 loop 函数。** LoopProfile 由五个策略旋钮组合而成：
-
-| 旋钮 | 接口 | 作用 |
-|---|---|---|
-| attention | `AttentionStrategy` | 控制每轮往上下文放什么（宽/窄 skill 匹配 + 记忆裁剪）|
-| terminate | `TerminateStrategy` | 终止条件（模型自判/skill 走完/结果匹配）|
-| verify | `VerifyStrategy` | 验证强度（无/自检/独立裁判）|
-| recover | `RecoverStrategy` | 失败恢复（重试/诊断修复/升级人类）|
-| memory | `MemoryStrategy` | 记忆沉淀（写入/只读）|
-
-**执行 loop 不写记忆，只读 skill。** 执行中间状态不许沉淀回知识库，防止污染。
-
-**Skill 决定怎么做，引擎决定怎么验。** 状态观察分两种：工作观察（执行者按 skill 指示发起）和验证观察（引擎强制采集，执行者碰不到）。验证由 checkpoint 信号触发——执行者调 `request_verification` 工具表示"我认为到了可验证节点"，引擎收到后才运行 StateCapture + AdversarialJudge。
-
-### pi-ai 使用注意
-
-底层依赖 `@earendil-works/pi-ai`（v0.77.0，MIT）。自定义端点直接构造 `Model<Api>` 对象，不用 `getModel()`（后者只接受 KnownProvider）。KeiGent 配置层按协议区分 `openai` / `anthropic`，再映射到 `openai-completions` / `anthropic-messages`。
-
-**已知 bug**：pi-ai 流式解析 gpt-5.5 并发工具调用时，会把一次调用拆成两个互补的 block——一个有 id/name 但 args 空，一个 args 有内容但 id/name 空。`utils.ts` 的 `deduplicateToolCalls` 统一**合并**这两个 block（取有 id 的元数据 + 有内容的 args），所有调用 LLM 的地方（engine/learner/orchestrator/adversarial-judge）都通过 `extractToolCalls` 走这个统一处理，不要各自手写过滤。
-
----
-
-## 当前进度
-
-- **第 0 步**：✅ pi-ai 类型签名核实，协议兼容端点的工具调用链路跑通，checkpoint 机制验证。
-- **第 1 步**：✅ 五旋钮引擎（`engine.ts`）+ 两个基线 profile + mock skill（`skills/web-summarize/`）。
-- **第 2/3 步**：✅ 真实 Playwright（系统 Chrome）接入，两个 profile 行为差异验证，`allowEarlyTextExit` 语义设计成立。
-- **第 4 步**：✅ 执行轨迹（`trajectory.ts`）→ 学习 loop LLM 分析（`learner.ts`）→ LEARNING.md 自动写入（`skill-patch.ts`）全量闭环。
-- **第 5 步**：✅ Orchestrator 自动调度（`orchestrator.ts`）——规则分类（档位 2）+ LLM 分类降级（档位 3），`profile: "auto"` 不再需要手动指定。
-- **验收修复**：✅ 三个 profile 与 spec §7.1 对齐；skill body 注入移入 attention 旋钮；profile 实例 `reset()` 防复用污染；skill 匹配支持中英跨语言 + tags。
-- **第 6 步**：✅ 对话兜底 + 分类健壮性（设计见 `doc/design/02-conversational-fallback.md`）：
-  - 新增 `conversational` profile（`profiles/conversational.ts` + `ConversationalAttention`）——闲聊/问候/能力询问走轻量对话，有文本即退，可调 `ask_user` 反问，动态能力清单。修复闲聊「你好」被误判成 convergent-exec 死循环升级。
-  - 闲聊识别两层：规则快路径 `isObviousChitchat`（零 LLM）+ LLM 意图兜底（分类器加 `conversational` 选项）。
-  - 修规则 4：从「库里有执行 skill」改为复用 `scoreSkill` 按任务真实相关度判断（阈值 2）。
-  - `guardProfileChoice` 错配守卫：选中 convergent-exec 但无匹配 skill/successDef 时确定性改走 divergent-research——修复通用任务（如查天气）被硬塞执行流程导致的啰嗦/吐空崩溃。
-  - `WideAttention.matchSkills` 收紧为 `rankSkills`（只匹配相关 skill）——防通用任务误触发学习 loop 污染知识库。
-  - `ask_user` 注入链路接通（`EngineOptions.askUser` → `toolCtx`）+ `toolsForProfile` 按 profile 过滤工具（对话只给 ask_user + 只读）。
-  - 引入 vitest 单元测试（`__tests__/`，零 LLM），覆盖分类、守卫、attention 行为。
-
-### 工具集 + CLI（让 KeiGent 成为可用 agent）
-
-- **B0 ToolRegistry**：✅ 工具与引擎解耦（`tools/registry.ts`）——引擎不再 `switch(toolName)`，改为 `registry.execute`。含权限模型（readonly/write/execute/dangerous）、审批门、超时、输出截断。
-- **B1 浏览器工具**：✅ snapshot+ref 范式（`tools/impl/browser.ts` + `browser.ts` 的 `BrowserSession`）——`browser_snapshot` 给可交互元素打 ref 编号，`browser_click({target:"e3"})` 用编号点击，不猜坐标。9 个工具，headed/headless 可配置。
-- **B2 CLI**：✅ `@keigent/cli` 包——对话式 REPL + 单次模式（`keigent "任务"`），流式渲染（引擎 `onProgress` 回调发 `ProgressEvent`），斜杠命令，配置加载。引擎内部日志默认静音（`logger.ts` 的 `setVerbose`），只发事件。
-- **B3 文件/网络/shell**：✅ `file_read/write/list/grep`（workspace 沙箱，拒绝路径逃逸）、`shell`（env 过滤+超时+输出上限）、`http_request`。
-- **B4 电脑操作/memory**：✅ `mouse/keyboard/screenshot`（nut.js，`dangerous` 权限走审批门，懒加载防无权限崩溃，默认不注册需 `includeComputer`）、`memory_recall`、`ask_user`（CLI 注入交互）。
-
-### 验收脚本（不调 LLM 的快速验证）
-
-| 脚本 | 验证 |
+| 旋钮 | 作用 |
 |---|---|
-| `verify:attention` | attention 旋钮真正控制 skill body 注入篇数（核心假设物理基础）|
-| `verify:browser` | snapshot+ref+click 真实多步浏览器流程 |
-| `src/verify-tools.ts` | 文件沙箱、shell、http、memory、ask_user、computer 注册 |
+| attention | 注入哪些 skill、memory、历史和工具 |
+| terminate | 何时停止 |
+| verify | 如何验证 checkpoint/assertion |
+| recover | 失败后 retry/repair/escalate |
+| memory | 是否沉淀经验 |
+
+主事实源：
+
+- 系统总览：[`doc/design/00-system-overview.md`](doc/design/00-system-overview.md)
+- 当前架构事实源：[`doc/design/01-architecture.md`](doc/design/01-architecture.md)
+- 产品蓝图：[`doc/product/01-product-blueprint.md`](doc/product/01-product-blueprint.md)
+- 架构边界：[`doc/strategy/01-architecture-boundaries-and-non-goals.md`](doc/strategy/01-architecture-boundaries-and-non-goals.md)
+
+---
+
+## 3. 常用命令
+
+从仓库根目录运行。推荐显式使用 `corepack pnpm ...`，避免目标环境中裸 `pnpm` 不在 PATH。
+
+```bash
+# 依赖
+corepack pnpm install
+
+# 根级质量门
+corepack pnpm -r check
+corepack pnpm -r test
+corepack pnpm -r --if-present build
+
+# 本地开发入口
+corepack pnpm --filter @keigent/engine dev
+corepack pnpm --filter @keigent/cli start
+corepack pnpm --filter @keigent/cli start "任务描述"
+
+# 配置与诊断
+corepack pnpm --filter @keigent/cli start doctor
+corepack pnpm --filter @keigent/cli start doctor --json
+corepack pnpm --filter @keigent/cli start doctor --compact
+corepack pnpm --filter @keigent/cli start config show
+corepack pnpm --filter @keigent/cli start config show --json
+corepack pnpm --filter @keigent/cli start config show --compact
+
+# Eval / replay
+corepack pnpm --filter @keigent/engine eval:smoke
+corepack pnpm --filter @keigent/engine eval:orchestrator
+corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/eval-replay.test.ts
+corepack pnpm --filter @keigent/cli start eval smoke --compact
+corepack pnpm --filter @keigent/cli start eval orchestrator --compact
+corepack pnpm --filter @keigent/cli start replay /path/to/trajectory.json --compact
+
+# 单项验收
+corepack pnpm --filter @keigent/engine verify:attention
+corepack pnpm --filter @keigent/engine verify:browser
+corepack pnpm --filter @keigent/engine exec tsx src/verify-tools.ts
+```
+
+真实 replay 必须传 trajectory 映射：
+
+```bash
+corepack pnpm --filter @keigent/engine eval:replay -- --trajectory smoke-conversational-hello=/path/to/trajectory.json
+corepack pnpm --filter @keigent/cli start eval replay --trajectory smoke-conversational-hello=/path/to/trajectory.json
+```
+
+配置位置：
+
+| 数据 | 默认位置 |
+|---|---|
+| Config | `~/.keigent/config.json` |
+| Skills | `~/.keigent/skills/` |
+| Workspace | `~/.keigent/workspace/` |
+| Memory | `~/.keigent/memory/` |
+
+环境变量：复制 `.env.example` 为 `.env.local`，设置 `KEIGENT_API_KEY`；可选设置 `KEIGENT_API_PROTOCOL=openai|anthropic`、`KEIGENT_BASE_URL`、`KEIGENT_MODEL_ID`。
+
+---
+
+## 4. 当前架构地图
+
+```text
+packages/
+├── engine/              # runtime 核心：LoopEngine、profiles、tools、workflow、evals
+├── cli/                 # REPL、单次执行、config、doctor、eval/replay 包装
+└── web/                 # Workbench view model 与静态 shell
+
+packages/engine/src/
+├── types.ts             # Task、SuccessDef、LoopProfile、Trajectory、ProgressEvent
+├── engine.ts            # 单一参数化 LoopEngine
+├── orchestrator.ts      # 规则分类 + LLM fallback + guard
+├── tool-filter.ts       # 按 profile/policy 过滤工具
+├── skills.ts            # SKILL.md 渐进式披露加载
+├── trajectory.ts        # runtime trajectory
+├── learner.ts           # trajectory -> skill patch 建议
+├── skill-patch.ts       # learning note 写入
+├── profiles/            # conversational / divergent / convergent / verified
+├── tools/               # ToolRegistry 与浏览器/文件/shell/http/memory/computer 工具
+├── workflow/            # WorkflowRunner、policy、budget、workflow trajectory
+└── evals/               # smoke/replay/orchestrator eval harness
+
+skills/                  # 本地 SKILL.md 示例与学习笔记
+doc/design/              # 架构事实源与设计说明
+doc/product/             # 产品蓝图与体验规划
+doc/evals/               # eval/benchmark 与验收报告
+doc/strategy/            # 架构边界与非目标
+doc/references/          # 外部参考项目研读
+```
+
+---
+
+## 5. 当前实现基线
+
+- Profile：`conversational`、`divergent-research`、`convergent-exec`、`convergent-verified`。
+- Orchestrator：规则分类、LLM fallback、超时降级、guard 修正。
+- Runtime：`LoopEngine` 支持 abort、LLM timeout、progress events、trajectory、recovery。
+- Tooling：`ToolRegistry` 统一执行工具，包含 permission/risk/sideEffect/reversible/timeout/output limit。
+- Governance：R3-R5 与 dangerous 工具需要审批；审批结果进入 trajectory。
+- Evidence：SuccessDef、Assertion、EvidenceBundle、checkpoint、verdict、failure code。
+- Workflow：`single-loop`、`verified-loop`、`reviewed-loop` envelope，包含 budget、policy、child evidence、workflow trajectory。
+- CLI：REPL、单次执行、config、doctor、eval/replay、web print；机器可读命令支持 `--json` 和 `--compact`。
+- Web：当前是 Workbench view model 与静态 shell 阶段，不宣称完整交互式产品已完成。
+- Eval：smoke、orchestrator、replay fixture 作为确定性主干回归门。
+
+---
+
+## 6. 核心边界
+
+- **一个引擎 + 多个 profile**：不要新增第二套 agent loop。
+- **Skill 负责怎么做，引擎负责怎么验**：不要把成功判断塞进 skill 文本。
+- **Final text 不是成功证据**：需要 assertion/evidence/verdict/trajectory 支撑。
+- **Workflow 是 parent envelope**：child run 仍通过 `LoopEngine.run()`。
+- **执行 loop 默认不写知识库**：学习结果走 learner 和 skill governance。
+- **危险副作用默认受控**：不要绕过 ToolRegistry、approval gate 或 workflow policy。
+- **Web 当前不是完整产品**：文档和 UI 只能描述已实现 view model 能力。
+
+---
+
+## 7. pi-ai 使用注意
+
+底层依赖 `@earendil-works/pi-ai`。自定义端点直接构造 `Model<Api>` 对象，不使用只接受 KnownProvider 的 `getModel()`。
+
+KeiGent 配置层按协议区分：
+
+- `openai` -> `openai-completions`
+- `anthropic` -> `anthropic-messages`
+
+已知兼容问题：pi-ai 在部分流式并发工具调用场景会把一次调用拆成两个互补 block。所有 LLM 调用点必须通过 `utils.ts` 的 `extractToolCalls` / `deduplicateToolCalls` 统一处理，不要在各模块手写过滤。
+
+---
+
+## 8. 文档使用规则
+
+- 任务涉及架构事实时，先读 `doc/design/01-architecture.md`。
+- 任务涉及产品范围或成熟度时，先读 `doc/product/01-product-blueprint.md`。
+- 任务涉及权限、风险、审批时，先读 `doc/design/09-permission-risk-governance.md`。
+- 任务涉及成功证据时，先读 `doc/design/08-success-evidence-model.md`。
+- 任务涉及 workflow 时，先读 `doc/design/07-workflow-run-envelope.md` 和 `doc/design/10-workflow-modes-product-semantics.md`。
+- 任务涉及 skill 治理时，先读 `doc/design/11-skill-lifecycle-and-governance.md`。
+- 任务涉及 eval/replay 时，先读 `doc/design/03-eval-harness.md` 和 `doc/evals/README.md`。

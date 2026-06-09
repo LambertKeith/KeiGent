@@ -40,6 +40,8 @@ export function parseEvalCliArgs(args: string[]): EvalCliOptions {
       case "--pretty":
         options.pretty = true;
         break;
+      case "--json":
+        break;
       case "--compact":
         options.pretty = false;
         break;

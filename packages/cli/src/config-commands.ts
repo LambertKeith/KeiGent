@@ -11,6 +11,7 @@ import {
   type KeigentConfigInput,
 } from "./config.js";
 import { doctorConfig, redactSecret, type ConfigSource } from "./config-doctor.js";
+import { formatJson, parseJsonOutputFormat } from "./json-output.js";
 
 export interface ConfigCommandOptions {
   configPath?: string;
@@ -185,13 +186,13 @@ export async function runDoctor(
   args: string[] = [],
   options: ConfigCommandOptions = {},
 ): Promise<void> {
-  const json = args.includes("--json");
+  const outputFormat = parseJsonOutputFormat(args);
   try {
     const config = await loadCommandConfig(options);
     const result = await doctorConfig(config);
     const payload = { ...result, config: redactConfig(config) };
-    if (json) {
-      print(options, JSON.stringify(payload, null, 2));
+    if (outputFormat.json) {
+      print(options, formatJson(payload, args));
     } else {
       print(options, `KeiGent doctor: ${result.status}`);
       for (const issue of result.issues) {
@@ -206,7 +207,7 @@ export async function runDoctor(
       checkedAt: new Date().toISOString(),
       issues: [{ code: "config.load_failed", severity: "error", message }],
     };
-    if (json) print(options, JSON.stringify(payload, null, 2));
+    if (outputFormat.json) print(options, formatJson(payload, args));
     else (options.stderr ?? console.error)(`KeiGent doctor: error\n- [error] config.load_failed: ${message}`);
     process.exitCode = 1;
   }
@@ -235,11 +236,11 @@ export async function runConfigCommand(
       return;
     }
     case "show": {
-      const json = rest.includes("--json");
+      const outputFormat = parseJsonOutputFormat(rest);
       const fileConfig = await readConfigFile(configPath);
       const fields = buildSourceAwareConfig(fileConfig, env, configPath);
-      if (json) {
-        print(options, JSON.stringify({ configPath, fields }, null, 2));
+      if (outputFormat.json) {
+        print(options, formatJson({ configPath, fields }, rest));
         return;
       }
 

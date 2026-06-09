@@ -1,7 +1,7 @@
 # KeiGent Product Blueprint v1
 
 > 状态：产品与系统成熟度基线  
-> 目的：把 KeiGent 从“可运行的 agent runtime 原型”约束为一个需求导向、可验证、可审计、可治理的产品系统。
+> 目的：把 KeiGent 约束为一个需求导向、可验证、可审计、可治理的产品系统。
 
 ## 1. 产品定位
 

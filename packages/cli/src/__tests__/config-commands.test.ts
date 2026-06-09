@@ -85,6 +85,17 @@ describe("config commands", () => {
     expect(shown.fields.apiProtocol).toMatchObject({ value: "openai", source: "file" });
   });
 
+  it("prints compact JSON for config show when requested", async () => {
+    const configPath = await tempConfigPath();
+    await run(["init"], configPath);
+
+    const [json] = await run(["show", "--compact"], configPath);
+    const shown = JSON.parse(json!);
+
+    expect(shown.configPath).toBe(configPath);
+    expect(json).not.toContain("\n");
+  });
+
   it("runs offline doctor as local validation without network calls", async () => {
     const configPath = await tempConfigPath();
     const output = captureOutput();
@@ -103,6 +114,23 @@ describe("config commands", () => {
     expect(JSON.stringify(payload)).not.toContain("file-secret");
     expect(payload.config.apiKey).toBe("[REDACTED]");
     fetchSpy.mockRestore();
+  });
+
+  it("prints compact JSON for doctor when requested", async () => {
+    const configPath = await tempConfigPath();
+    const output = captureOutput();
+    await run(["init"], configPath);
+    await run(["set", "apiKey", "file-secret"], configPath);
+
+    await runDoctor(["--offline", "--compact"], {
+      configPath,
+      stdout: output.stdout,
+      env: {},
+    });
+    const payload = JSON.parse(output.lines[0]!);
+
+    expect(payload.config.apiKey).toBe("[REDACTED]");
+    expect(output.lines[0]).not.toContain("\n");
   });
 });
 

@@ -122,10 +122,10 @@ flowchart TB
 ```bash
 # 安装 / 构建 / 类型检查 / 测试
 corepack pnpm install
-corepack pnpm build
-corepack pnpm check
-corepack pnpm test
-corepack pnpm dev
+corepack pnpm -r --if-present build
+corepack pnpm -r check
+corepack pnpm -r test
+corepack pnpm --filter @keigent/engine dev
 
 # CLI
 corepack pnpm --filter @keigent/cli start
@@ -147,8 +147,8 @@ corepack pnpm --filter @keigent/engine verify:browser
 
 # Eval Harness
 corepack pnpm --filter @keigent/engine eval:smoke
-corepack pnpm --filter @keigent/engine eval:replay
 corepack pnpm --filter @keigent/engine eval:orchestrator
+corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/eval-replay.test.ts
 ```
 
 REPL 内斜杠命令：`/help` `/profile <name>` `/skills` `/headed` `/headless` `/quit`。
@@ -167,10 +167,17 @@ Eval Harness 是 KeiGent 的工程化验收层，不新增 agent 行为，只负
 | 命令 | 说明 |
 |---|---|
 | `eval:smoke` | 不调 LLM，用 smoke executor 验证 runner/report 本身 |
-| `eval:replay` | 从已保存 trajectory 派生结果，离线重评历史轨迹 |
+| `eval:replay -- --trajectory case-id=/path/to/trajectory.json` | 从已保存 trajectory 派生结果，离线重评历史轨迹 |
 | `eval:orchestrator` | 纯规则跑 fixture，验证 Orchestrator profile 选择零退化 |
 
 当前确定性 smoke suite 覆盖 57 个产品用例，其中 browser 类 10 个；orchestrator suite 覆盖 32 个路由 fixture。CLI 也提供 `keigent eval smoke/orchestrator/replay` 和 `keigent replay <trajectory>` 包装入口。
+
+真实 replay 需要显式指定 case 与 trajectory 文件：
+
+```bash
+corepack pnpm --filter @keigent/engine eval:replay -- --trajectory smoke-conversational-hello=/path/to/trajectory.json
+corepack pnpm --filter @keigent/cli start eval replay --trajectory smoke-conversational-hello=/path/to/trajectory.json
+```
 
 重要边界：Eval pass 不等于产品完全可信；profile accuracy 不等于任务成功；tool attempted 不等于 tool succeeded；replay pass 不等于 fresh execution pass。
 
@@ -184,7 +191,7 @@ packages/
 ├── cli/                 # @keigent/cli —— REPL、单次模式、配置诊断
 └── web/                 # @keigent/web —— Web Workbench 视图模型阶段
 
-skills/                  # 标准 SKILL.md mock skill 库
+skills/                  # 标准 SKILL.md 示例与学习笔记
 doc/design/              # 架构与特性设计文档
 doc/product/             # 产品蓝图与用户体验文档
 doc/evals/               # Eval/benchmark 设计文档
@@ -220,36 +227,38 @@ git diff --check
 
 ### 入口与总览
 
-- [`doc/design/00-system-overview.md`](doc/design/00-system-overview.md) —— 系统总览与架构图
-- [`doc/product/01-product-blueprint.md`](doc/product/01-product-blueprint.md) —— 产品定位、用户、成熟度、模块地图
-- [`doc/strategy/01-architecture-boundaries-and-non-goals.md`](doc/strategy/01-architecture-boundaries-and-non-goals.md) —— 架构边界与非目标
+- [事实源] [`doc/design/00-system-overview.md`](doc/design/00-system-overview.md) —— 系统总览与架构图
+- [文档索引] [`doc/design/README.md`](doc/design/README.md) —— 设计文档状态地图
+- [产品蓝图] [`doc/product/01-product-blueprint.md`](doc/product/01-product-blueprint.md) —— 产品定位、用户、成熟度、模块地图
+- [策略边界] [`doc/strategy/01-architecture-boundaries-and-non-goals.md`](doc/strategy/01-architecture-boundaries-and-non-goals.md) —— 架构边界与非目标
 
 ### 主架构与已实现能力
 
-- [`doc/design/01-architecture.md`](doc/design/01-architecture.md) —— 主架构设计：五旋钮、三层结构、LoopEngine 推导
-- [`doc/design/02-conversational-fallback.md`](doc/design/02-conversational-fallback.md) —— 对话兜底分支 + 分类误判修复
-- [`doc/design/03-eval-harness.md`](doc/design/03-eval-harness.md) —— Eval Harness 设计与验收标准
-- [`doc/design/04-web-conversation-panel.md`](doc/design/04-web-conversation-panel.md) —— Web 对话面板设计
-- [`doc/design/05-web-dashboard.md`](doc/design/05-web-dashboard.md) —— Web Eval Dashboard 设计
-- [`doc/design/06-cli-config-and-web-config.md`](doc/design/06-cli-config-and-web-config.md) —— CLI 与 Web 配置系统设计
-- [`doc/design/07-workflow-run-envelope.md`](doc/design/07-workflow-run-envelope.md) —— Workflow Run Envelope 与 child execution evidence
+- [事实源] [`doc/design/01-architecture.md`](doc/design/01-architecture.md) —— 当前架构事实源
+- [实现说明] [`doc/design/02-conversational-fallback.md`](doc/design/02-conversational-fallback.md) —— 对话兜底分支 + 分类误判修复
+- [实现说明] [`doc/design/03-eval-harness.md`](doc/design/03-eval-harness.md) —— Eval Harness 与验收标准
+- [设计蓝图] [`doc/design/04-web-conversation-panel.md`](doc/design/04-web-conversation-panel.md) —— Web 对话面板设计
+- [设计蓝图] [`doc/design/05-web-dashboard.md`](doc/design/05-web-dashboard.md) —— Web Eval Dashboard 设计
+- [实现说明] [`doc/design/06-cli-config-and-web-config.md`](doc/design/06-cli-config-and-web-config.md) —— CLI 与 Web 配置系统
+- [实现说明] [`doc/design/07-workflow-run-envelope.md`](doc/design/07-workflow-run-envelope.md) —— Workflow Run Envelope 与 child execution evidence
 
 ### 治理、证据、调试与失败语义
 
-- [`doc/design/08-success-evidence-model.md`](doc/design/08-success-evidence-model.md) —— SuccessDef / Assertion / Evidence 成功证据模型
-- [`doc/design/09-permission-risk-governance.md`](doc/design/09-permission-risk-governance.md) —— 权限、风险与人类审批治理
-- [`doc/design/10-workflow-modes-product-semantics.md`](doc/design/10-workflow-modes-product-semantics.md) —— Workflow modes 产品语义与边界
-- [`doc/design/11-skill-lifecycle-and-governance.md`](doc/design/11-skill-lifecycle-and-governance.md) —— Skill 生命周期与知识治理
-- [`doc/design/12-agent-debuggability.md`](doc/design/12-agent-debuggability.md) —— Agent 可调试性与解释事实源
-- [`doc/design/13-failure-recovery-semantics.md`](doc/design/13-failure-recovery-semantics.md) —— 失败语义与恢复策略
+- [事实源] [`doc/design/08-success-evidence-model.md`](doc/design/08-success-evidence-model.md) —— SuccessDef / Assertion / Evidence 成功证据模型
+- [事实源] [`doc/design/09-permission-risk-governance.md`](doc/design/09-permission-risk-governance.md) —— 权限、风险与人类审批治理
+- [产品语义] [`doc/design/10-workflow-modes-product-semantics.md`](doc/design/10-workflow-modes-product-semantics.md) —— Workflow modes 产品语义与边界
+- [事实源] [`doc/design/11-skill-lifecycle-and-governance.md`](doc/design/11-skill-lifecycle-and-governance.md) —— Skill 生命周期与知识治理
+- [事实源] [`doc/design/12-agent-debuggability.md`](doc/design/12-agent-debuggability.md) —— Agent 可调试性与解释事实源
+- [事实源] [`doc/design/13-failure-recovery-semantics.md`](doc/design/13-failure-recovery-semantics.md) —— 失败语义与恢复策略
 
 ### 产品、Eval 与协作者指引
 
-- [`doc/product/02-task-taxonomy-and-routing.md`](doc/product/02-task-taxonomy-and-routing.md) —— 任务分类、profile/mode/risk 路由矩阵
-- [`doc/product/03-web-workbench-blueprint.md`](doc/product/03-web-workbench-blueprint.md) —— Agent Operations Workbench 信息架构
-- [`doc/product/04-local-runtime-experience.md`](doc/product/04-local-runtime-experience.md) —— 本地安装、首次运行、失败体验
-- [`doc/evals/01-real-world-eval-suite.md`](doc/evals/01-real-world-eval-suite.md) —— 真实世界 Eval Suite 蓝图
-- [`CLAUDE.md`](CLAUDE.md) —— 给 AI 协作者的项目指引
+- [产品蓝图] [`doc/product/02-task-taxonomy-and-routing.md`](doc/product/02-task-taxonomy-and-routing.md) —— 任务分类、profile/mode/risk 路由矩阵
+- [产品蓝图] [`doc/product/03-web-workbench-blueprint.md`](doc/product/03-web-workbench-blueprint.md) —— Agent Operations Workbench 信息架构
+- [产品蓝图] [`doc/product/04-local-runtime-experience.md`](doc/product/04-local-runtime-experience.md) —— 本地安装、首次运行、失败体验
+- [设计蓝图] [`doc/evals/01-real-world-eval-suite.md`](doc/evals/01-real-world-eval-suite.md) —— 真实世界 Eval Suite 蓝图
+- [验收报告] [`doc/evals/02-main-acceptance-report.md`](doc/evals/02-main-acceptance-report.md) —— main 分支产品/架构验收意见
+- [协作者入口] [`AGENTS.md`](AGENTS.md) —— 给 AI 协作者的当前项目契约
 
 ---
 
