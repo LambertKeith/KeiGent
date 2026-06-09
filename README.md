@@ -2,7 +2,7 @@
 
 > **可切换 Loop 的 Agent Runtime / Operations Workbench**
 >
-> 同一个参数化引擎，通过 `LoopProfile` 切换成轻量对话、发散调研、精确执行、强验证执行与 workflow envelope。
+> 同一个参数化引擎，通过 `LoopProfile` 切换轻量对话、发散调研、精确执行与强验证执行，并通过 workflow envelope 承载父级治理。
 
 TypeScript · pnpm monorepo · 基于 [`@earendil-works/pi-ai`](https://www.npmjs.com/package/@earendil-works/pi-ai)
 
@@ -256,8 +256,12 @@ git diff --check
 - [产品蓝图] [`doc/product/02-task-taxonomy-and-routing.md`](doc/product/02-task-taxonomy-and-routing.md) —— 任务分类、profile/mode/risk 路由矩阵
 - [产品蓝图] [`doc/product/03-web-workbench-blueprint.md`](doc/product/03-web-workbench-blueprint.md) —— Agent Operations Workbench 信息架构
 - [产品蓝图] [`doc/product/04-local-runtime-experience.md`](doc/product/04-local-runtime-experience.md) —— 本地安装、首次运行、失败体验
+- [产品规格] [`doc/product/05-run-record-and-run-lifecycle.md`](doc/product/05-run-record-and-run-lifecycle.md) —— 下一阶段 P0：RunRecord、生命周期、证据归档与复盘边界
+- [产品规格] [`doc/product/06-skill-governance-product-spec.md`](doc/product/06-skill-governance-product-spec.md) —— 下一阶段 P0：skill 生命周期、晋升门槛、eval guard 与回滚边界
+- [产品旅程] [`doc/product/07-local-operator-user-journeys.md`](doc/product/07-local-operator-user-journeys.md) —— operator 安装、执行、审批、复盘、skill 晋升与 eval 旅程
 - [设计蓝图] [`doc/evals/01-real-world-eval-suite.md`](doc/evals/01-real-world-eval-suite.md) —— 真实世界 Eval Suite 蓝图
 - [验收报告] [`doc/evals/02-main-acceptance-report.md`](doc/evals/02-main-acceptance-report.md) —— main 分支产品/架构验收意见
+- [Eval 路线图] [`doc/evals/03-real-world-eval-roadmap.md`](doc/evals/03-real-world-eval-roadmap.md) —— L1/L2/L3 分层 eval 与 false confidence 防线
 - [协作者入口] [`AGENTS.md`](AGENTS.md) —— 给 AI 协作者的当前项目契约
 
 ---

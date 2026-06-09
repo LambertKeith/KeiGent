@@ -80,3 +80,31 @@ Workflow 不是“更高级的 loop”，而是 parent envelope。每个 child �
 - verified-loop 至少要求一个 passed checkpoint/verdict。
 - reviewed-loop 的 reviewer 默认 readonly。
 - fanout/tournament 进入实现前必须先有 eval fixture 与 rubric。
+
+## 8. 产品化顺序
+
+下一阶段不要优先实现 fanout、tournament 或 dynamic planner。推荐顺序：
+
+1. **single-loop 产品化**：默认路径，必须产生 `RunRecord`，能在 Workbench 复盘。
+2. **reviewed-loop 产品化**：worker 后接 readonly reviewer，适合计划、文档、代码评审等需要人类/裁判语义的任务。
+3. **verified-loop 产品化**：强调独立证据门，必须明确区分 `convergent-verified` profile 和 workflow-level `verified-loop`。
+4. **fanout/tournament 延后**：进入实现前必须先有 rubric、eval fixture、Workbench 展示方案和成本/预算策略。
+
+每个 mode 进入产品可用前必须补齐：
+
+| 项 | 要求 |
+|---|---|
+| 适用任务 | 明确什么时候用 |
+| 不适用任务 | 明确什么时候不能用 |
+| child run 数量 | 固定还是动态 |
+| verifier / reviewer | 是否存在、是否 readonly |
+| human gate | 是否需要人类审批 |
+| success evidence | 如何判定成功 |
+| failure mapping | 如何映射失败 |
+| budget policy | 如何限制成本 |
+
+## 9. 相关产品规格
+
+- [`../product/05-run-record-and-run-lifecycle.md`](../product/05-run-record-and-run-lifecycle.md)：workflow result 必须映射到 `RunRecord`。
+- [`../product/07-local-operator-user-journeys.md`](../product/07-local-operator-user-journeys.md)：审批、失败复盘和 eval 旅程定义了 workflow 的用户侧验收。
+- [`../evals/03-real-world-eval-roadmap.md`](../evals/03-real-world-eval-roadmap.md)：fanout/tournament 进入实现前必须先进入 eval 路线图。

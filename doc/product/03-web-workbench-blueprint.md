@@ -12,7 +12,33 @@
 | Config Center | 当前配置为什么生效？安全吗？ | source-aware config、doctor、redaction |
 | Skill Library | 哪些 skill 会影响执行？ | active/draft/learning/eval coverage |
 
-## 2. Run Console
+## 2. V1 产品闭环
+
+Workbench V1 的验收目标不是“完整工作台”，而是：
+
+```text
+reviewer 不看 CLI 日志，只看 Web，也能判断一次 run 是否可信。
+```
+
+因此 V1 信息架构应围绕真实 `RunRecord` 展开：
+
+| 页面 | V1 必须回答的问题 | 依赖事实源 |
+|---|---|---|
+| Run List | 最近有哪些 run？状态、风险、profile 是什么？ | `RunRecord.status`、route、risk |
+| Run Detail | 这次 run 为什么这样执行？ | route、timeline、skill matches |
+| Evidence Panel | 凭什么说成功/失败？ | assertions、evidence、verdict |
+| Risk Panel | 是否发生危险动作？谁批准？ | permission、risk、approval trail |
+| Replay Panel | 是否能复盘？这是 replay 还是 fresh execution？ | trajectory、replay capability |
+
+V1 明确不做：
+
+- 在线启动复杂 workflow；
+- 完整配置编辑器；
+- 多用户协作；
+- SaaS dashboard；
+- 没有 case detail 的总健康分。
+
+## 3. Run Console
 
 必须展示：
 
@@ -27,7 +53,7 @@
 
 不能把它做成只有气泡的聊天 UI。
 
-## 3. Trajectory Replay
+## 4. Trajectory Replay
 
 Replay 必须：
 
@@ -36,7 +62,7 @@ Replay 必须：
 - 支持 re-score，但不声称 fresh execution。
 - 对 missing trajectory / invalid schema / unknown event 给出降级状态。
 
-## 4. Eval Dashboard
+## 5. Eval Dashboard
 
 必须避免混淆：
 
@@ -46,7 +72,7 @@ Replay 必须：
 - checkpoint passed ≠ final text says success。
 - failure code count 可大于 failed case count。
 
-## 5. Config Center
+## 6. Config Center
 
 要求：
 
@@ -56,7 +82,7 @@ Replay 必须：
 - doctor offline 默认无网络。
 - online doctor 需要显式动作。
 
-## 6. Skill Library
+## 7. Skill Library
 
 展示：
 
@@ -67,7 +93,7 @@ Replay 必须：
 - eval coverage。
 - deprecated/quarantined reason。
 
-## 7. 视觉原则
+## 8. 视觉原则
 
 - 温暖、明亮、低饱和。
 - cream/ivory base，apricot/mint/soft sky accent。
@@ -75,7 +101,7 @@ Replay 必须：
 - 失败、升级、未验证不能视觉上像成功。
 - 所有状态颜色必须有文字标签。
 
-## 8. 验收标准
+## 9. 验收标准
 
 - 用户能从一个 run 看出：选了什么 profile、用了什么 skill、做了什么 tool、证据是什么、为什么结束。
 - Replay 与 live execution 明确区分。

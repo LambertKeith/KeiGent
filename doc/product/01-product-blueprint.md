@@ -80,7 +80,32 @@ KeiGent 是一个 **skill-driven、profile-switchable、evidence-first 的 Agent
 - Skill：skill metadata/status、匹配解释、`learned-note-only` 学习输出和 promotion eval guard 已实现。
 - Web：当前是 Workbench 视图模型 shell，覆盖 run console、replay、dashboard、config、skill library 的 normalized model；完整交互式 UI 仍属后续工作。
 
-## 8. 产品质量门
+## 8. 下一阶段产品主线
+
+当前 runtime core baseline 已成立，下一阶段产品开发不应优先堆叠更多 profile、planner 或多 agent 花样，而应把现有能力推进为可持续使用的 Agent Operations System。
+
+推荐主线：
+
+```text
+可运行 Runtime
+    -> 可解释 Run
+    -> 可复盘 Replay
+    -> 可治理 Skill / Tool / Workflow
+    -> 可运营 Workbench
+    -> 真实世界 Eval 基线
+```
+
+下一阶段 P0 文档：
+
+- [`05-run-record-and-run-lifecycle.md`](05-run-record-and-run-lifecycle.md)：定义 `RunRecord`、run lifecycle、CLI summary、Workbench 事实源。
+- [`06-skill-governance-product-spec.md`](06-skill-governance-product-spec.md)：定义 skill 生命周期、晋升门槛、eval guard、blocked/deprecated 语义。
+- [`../evals/03-real-world-eval-roadmap.md`](../evals/03-real-world-eval-roadmap.md)：定义 L1/L2/L3 eval、false confidence 防线和准入条件。
+
+下一阶段 P1 文档：
+
+- [`07-local-operator-user-journeys.md`](07-local-operator-user-journeys.md)：定义安装、执行、审批、复盘、skill 晋升与真实世界 eval 的 operator 旅程。
+
+## 9. 产品质量门
 
 任何新能力进入主线前必须回答：
 
@@ -93,7 +118,7 @@ KeiGent 是一个 **skill-driven、profile-switchable、evidence-first 的 Agent
 7. 是否进入 eval/replay 覆盖？
 8. 是否会破坏“一引擎多 profile”的边界？
 
-## 9. P2 / 非当前基线
+## 10. P2 / 非当前基线
 
 以下能力不得在当前基线中被文档或 UI 说成已经可用：
 
@@ -104,7 +129,7 @@ KeiGent 是一个 **skill-driven、profile-switchable、evidence-first 的 Agent
 - 完整 Web 配置编辑器与在线 doctor 自动探测。
 - SaaS 多租户、远程队列、云端权限系统。
 
-## 10. 总体验收
+## 11. 总体验收
 
 本蓝图通过验收当且仅当：
 
