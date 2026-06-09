@@ -229,6 +229,15 @@ doc/references/                  # 参考项目研读（hermes-agent、openhuman
 - [`doc/design/04-web-conversation-panel.md`](doc/design/04-web-conversation-panel.md) —— Web 对话面板设计
 - [`doc/design/05-web-dashboard.md`](doc/design/05-web-dashboard.md) —— Web Eval Dashboard 设计
 - [`doc/design/06-cli-config-and-web-config.md`](doc/design/06-cli-config-and-web-config.md) —— CLI 与 Web 配置系统设计
+- [`doc/design/08-success-evidence-model.md`](doc/design/08-success-evidence-model.md) —— SuccessDef / Assertion / Evidence 成功证据模型
+- [`doc/design/09-permission-risk-governance.md`](doc/design/09-permission-risk-governance.md) —— 权限、风险与人类审批治理
+- [`doc/design/10-workflow-modes-product-semantics.md`](doc/design/10-workflow-modes-product-semantics.md) —— Workflow modes 产品语义与边界
+- [`doc/design/11-skill-lifecycle-and-governance.md`](doc/design/11-skill-lifecycle-and-governance.md) —— Skill 生命周期与知识治理
+- [`doc/design/12-agent-debuggability.md`](doc/design/12-agent-debuggability.md) —— Agent 可调试性与解释事实源
+- [`doc/design/13-failure-recovery-semantics.md`](doc/design/13-failure-recovery-semantics.md) —— 失败语义与恢复策略
+- [`doc/product/`](doc/product/) —— 产品总蓝图、任务路由、Web Workbench、本地运行体验
+- [`doc/evals/`](doc/evals/) —— 真实世界 Eval Suite 蓝图
+- [`doc/strategy/`](doc/strategy/) —— 架构边界与非目标
 - [`CLAUDE.md`](CLAUDE.md) —— 给 AI 协作者的项目指引（含 pi-ai 使用注意、已知 bug）
 
 ---
