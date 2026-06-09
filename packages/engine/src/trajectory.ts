@@ -2,8 +2,11 @@ import { vlog, vwarn } from "./logger.js";
 import { randomUUID } from "crypto";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
+import type { ApprovalDecision } from "./tools/types.js";
+import type { FailureSummary } from "./failures.js";
 import type {
   ExitReason,
+  SkillMatchExplanation,
   StateSnapshot,
   Task,
   Trajectory,
@@ -16,6 +19,10 @@ export class TrajectoryCollector {
   private steps: TrajectoryStep[] = [];
   private startMs = Date.now();
   readonly id = randomUUID();
+
+  addSkillMatches(skillMatches: SkillMatchExplanation[]): void {
+    this.steps.push({ iteration: 0, kind: "skill_match", skillMatches });
+  }
 
   addToolCall(opts: {
     iteration: number;
@@ -55,6 +62,14 @@ export class TrajectoryCollector {
     });
   }
 
+  addApproval(iteration: number, approval: ApprovalDecision): void {
+    this.steps.push({ iteration, kind: "approval", approval });
+  }
+
+  addRecovery(iteration: number, recovery: TrajectoryStep["recovery"]): void {
+    this.steps.push({ iteration, kind: "recovery", recovery });
+  }
+
   addError(iteration: number, message: string): void {
     this.steps.push({ iteration, kind: "error", errorMessage: message });
   }
@@ -65,6 +80,7 @@ export class TrajectoryCollector {
     exitReason: ExitReason;
     finalResponse: string;
     skillsUsed: string[];
+    failure?: FailureSummary;
   }): Trajectory {
     return {
       ...opts,
@@ -108,6 +124,14 @@ export function renderTrajectoryForLLM(t: Trajectory): string {
 
   for (const step of t.steps) {
     switch (step.kind) {
+      case "skill_match":
+        lines.push(
+          `[迭代 ${step.iteration}] Skill 匹配:`,
+          ...((step.skillMatches ?? []).map((skill) =>
+            `  - ${skill.name}: score=${skill.score}, injected=${skill.injected}, signals=${skill.signals.join("|") || "none"}${skill.exclusionReason ? `, excluded=${skill.exclusionReason}` : ""}`,
+          )),
+        );
+        break;
       case "tool_call":
         lines.push(
           `[迭代 ${step.iteration}] 工具调用: ${step.toolName}`,
@@ -127,6 +151,21 @@ export function renderTrajectoryForLLM(t: Trajectory): string {
           `[迭代 ${step.iteration}] Checkpoint: "${step.checkpointDesc}"`,
           `  验证: ${step.verdictPassed ? "✓ 通过" : "✗ 失败"} — ${step.verdictEvidence}`,
           `  状态快照: url=${step.snapshot?.url ?? "n/a"}`,
+        );
+        break;
+      case "approval":
+        lines.push(
+          `[迭代 ${step.iteration}] 审批: ${step.approval?.approved ? "允许" : "拒绝"}`,
+          `  工具: ${step.approval?.request.toolName ?? "unknown"}`,
+          `  风险: ${step.approval?.request.riskLevel ?? "unknown"} / ${step.approval?.request.permission ?? "unknown"}`,
+          `  目标: ${step.approval?.request.targetResource ?? "unknown"}`,
+        );
+        break;
+      case "recovery":
+        lines.push(
+          `[迭代 ${step.iteration}] 恢复策略: ${step.recovery?.decision ?? "unknown"}`,
+          step.recovery?.hint ? `  修复提示: ${step.recovery.hint}` : "",
+          step.recovery?.reason ? `  原因: ${step.recovery.reason}` : "",
         );
         break;
       case "error":

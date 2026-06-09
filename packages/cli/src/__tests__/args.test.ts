@@ -18,4 +18,10 @@ describe("parseCliArgs", () => {
     expect(parseCliArgs(["doctor", "--json"])).toEqual({ kind: "doctor", args: ["--json"] });
     expect(parseCliArgs(["config", "show"])).toEqual({ kind: "config", args: ["show"] });
   });
+
+  it("routes eval, replay, and web commands before task handling", () => {
+    expect(parseCliArgs(["eval", "smoke"])).toEqual({ kind: "eval", args: ["smoke"] });
+    expect(parseCliArgs(["replay", "trajectory.json"])).toEqual({ kind: "replay", args: ["trajectory.json"] });
+    expect(parseCliArgs(["web", "--print"])).toEqual({ kind: "web", args: ["--print"] });
+  });
 });

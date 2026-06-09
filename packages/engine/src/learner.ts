@@ -102,6 +102,15 @@ export class Learner {
     const trajectoryId = randomUUID();
     vlog(`\n[learner] ▶ 分析轨迹 id=${trajectoryId} profile=${trajectory.profile} exit=${trajectory.exitReason}`);
 
+    if (trajectory.exitReason !== "success") {
+      return {
+        trajectoryId,
+        patches: [],
+        summary: `diagnostic only: failed trajectory (${trajectory.exitReason}) is not promoted to active skill learning`,
+        writtenTo: [],
+      };
+    }
+
     const renderedTrajectory = renderTrajectoryForLLM(trajectory);
 
     // 为每个使用到的 skill 分别分析
@@ -173,6 +182,7 @@ export class Learner {
             action: (p.action as SkillPatch["action"]) ?? "append",
             content: p.content ?? "",
             rationale: p.rationale ?? "",
+            learningStatus: "learned-note-only",
           });
         }
       }
@@ -191,6 +201,7 @@ export class Learner {
             action: "append",
             content: `### 执行观察（自动提取）\n\n${text.slice(0, 500)}`,
             rationale: "模型未使用结构化工具，降级为文本记录",
+            learningStatus: "learned-note-only",
           });
           combinedSummary += `[${skillName}] ${text.slice(0, 100)}\n`;
         }

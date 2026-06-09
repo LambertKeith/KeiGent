@@ -16,6 +16,7 @@ export interface EvalCaseResultView {
   failures: string[];
   failureCodes: string[];
   finalResponse: string;
+  guardApplied?: boolean;
 }
 
 export interface EvalReportView {
@@ -36,11 +37,24 @@ export interface ReportValidationIssue {
 
 export interface DashboardSummary {
   passRate: number | null;
+  taskSuccessRate: number | null;
+  profileMatchRate: number | null;
   profileAccuracy: number | null;
+  toolAttemptedCases: number;
+  toolSucceededCases: number;
+  checkpointPassedCases: number;
   failureCodeCount: number;
+  authoritative: boolean;
   invalid: boolean;
   issues: ReportValidationIssue[];
 }
+
+export type DashboardCaseFilter =
+  | "guardApplied"
+  | "profileMismatch"
+  | "toolFailure"
+  | "verificationFailure"
+  | "permissionDenied";
 
 export function validateEvalReport(report: EvalReportView): ReportValidationIssue[] {
   const issues: ReportValidationIssue[] = [];
@@ -58,10 +72,22 @@ export function validateEvalReport(report: EvalReportView): ReportValidationIssu
 export function summarizeEvalReport(report: EvalReportView): DashboardSummary {
   const issues = validateEvalReport(report);
   const failureCodeCount = Object.values(report.failuresByCode).reduce((sum, count) => sum + count, 0);
+  const authoritative = issues.length === 0 && report.total > 0;
+  const profileChecked = report.cases.filter((testCase) => testCase.profileMatched !== null);
   return {
     passRate: report.total === 0 ? null : report.passed / report.total,
+    taskSuccessRate: report.total === 0
+      ? null
+      : report.cases.filter((testCase) => testCase.exitReason === "success").length / report.total,
+    profileMatchRate: profileChecked.length === 0
+      ? null
+      : profileChecked.filter((testCase) => testCase.profileMatched === true).length / profileChecked.length,
     profileAccuracy: report.profileAccuracy,
+    toolAttemptedCases: report.cases.filter((testCase) => testCase.totalToolCalls > 0).length,
+    toolSucceededCases: report.cases.filter((testCase) => testCase.successfulToolsUsed.length > 0).length,
+    checkpointPassedCases: report.cases.filter((testCase) => testCase.checkpointsPassed > 0).length,
     failureCodeCount,
+    authoritative,
     invalid: issues.length > 0,
     issues,
   };
@@ -73,4 +99,24 @@ export function filterFailedCases(report: EvalReportView): EvalCaseResultView[] 
 
 export function casesWithFailureCode(report: EvalReportView, code: string): EvalCaseResultView[] {
   return report.cases.filter((testCase) => testCase.failureCodes.includes(code));
+}
+
+export function filterDashboardCases(report: EvalReportView, filter: DashboardCaseFilter): EvalCaseResultView[] {
+  switch (filter) {
+    case "guardApplied":
+      return report.cases.filter((testCase) => testCase.guardApplied === true);
+    case "profileMismatch":
+      return report.cases.filter((testCase) => testCase.profileMatched === false);
+    case "toolFailure":
+      return report.cases.filter((testCase) => {
+        const successfulCount = testCase.successfulToolsUsed.length;
+        return testCase.totalToolCalls > successfulCount || testCase.failureCodes.some((code) => code.startsWith("tool_"));
+      });
+    case "verificationFailure":
+      return report.cases.filter((testCase) => {
+        return testCase.failureCodes.includes("verified_failure") || testCase.failureCodes.includes("checkpoint_missing");
+      });
+    case "permissionDenied":
+      return casesWithFailureCode(report, "permission_denied");
+  }
 }

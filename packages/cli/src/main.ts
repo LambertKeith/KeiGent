@@ -4,6 +4,8 @@ import { runOnce } from "./run-once.js";
 import { printError } from "./renderer.js";
 import { runConfigCommand, runDoctor } from "./config-commands.js";
 import { parseCliArgs } from "./args.js";
+import { runEvalCommand, runReplayCommand } from "./eval-commands.js";
+import { runWebCommand } from "./web-command.js";
 
 async function main() {
   const invocation = parseCliArgs(process.argv.slice(2));
@@ -14,6 +16,15 @@ async function main() {
       return;
     case "config":
       await runConfigCommand(invocation.args);
+      return;
+    case "eval":
+      await runEvalCommand(invocation.args);
+      return;
+    case "replay":
+      await runReplayCommand(invocation.args);
+      return;
+    case "web":
+      await runWebCommand(invocation.args);
       return;
     case "run":
       await runOnce(invocation.task);

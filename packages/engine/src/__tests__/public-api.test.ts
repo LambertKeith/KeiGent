@@ -1,5 +1,31 @@
 import { describe, expect, it } from "vitest";
 import * as api from "../lib.js";
+import type {
+  CheckpointEvidence,
+  EvidenceBundle,
+  EvalReport,
+  FailureSummary,
+  ToolCallEvidence,
+  WorkflowPolicy,
+} from "../lib.js";
+
+const _typedPublicApiSmoke: {
+  bundle: EvidenceBundle | null;
+  tool: ToolCallEvidence | null;
+  checkpoint: CheckpointEvidence | null;
+  evalReport: EvalReport | null;
+  failure: FailureSummary | null;
+  policy: WorkflowPolicy | null;
+} = {
+  bundle: null,
+  tool: null,
+  checkpoint: null,
+  evalReport: null,
+  failure: null,
+  policy: null,
+};
+
+void _typedPublicApiSmoke;
 
 describe("@keigent/engine public API", () => {
   it("exports all built-in profile factories for external callers", () => {
@@ -21,6 +47,7 @@ describe("@keigent/engine public API", () => {
     expect(api).toHaveProperty("parseEvalCliArgs");
     expect(api).toHaveProperty("runOrchestratorEvalCases");
     expect(api).toHaveProperty("DEFAULT_ORCHESTRATOR_EVAL_CASES");
+    expect(api).toHaveProperty("BROWSER_EVAL_CASES");
     expect(api).toHaveProperty("classifyByRulesDetailed");
   });
 
@@ -33,5 +60,20 @@ describe("@keigent/engine public API", () => {
     expect(api).toHaveProperty("saveWorkflowTrajectory");
     expect(api).toHaveProperty("loadWorkflowTrajectory");
     expect(api).toHaveProperty("replayWorkflowTrajectory");
+    expect(api).toHaveProperty("isToolAllowedByWorkflowPolicy");
+    expect(api).toHaveProperty("approvalScopeMatches");
+  });
+
+  it("exports evidence, assertion, and failure helpers for consumers", () => {
+    expect(api).toHaveProperty("buildEvidenceBundle");
+    expect(api).toHaveProperty("countSuccessfulToolCalls");
+    expect(api).toHaveProperty("countPassedCheckpoints");
+    expect(api).toHaveProperty("hasApprovedScope");
+    expect(api).toHaveProperty("describeAssertion");
+    expect(api).toHaveProperty("evaluateAssertion");
+    expect(api).toHaveProperty("evaluateAssertions");
+    expect(api).toHaveProperty("failureSummaryForLoopExit");
+    expect(api).toHaveProperty("failureSummaryForWorkflowExit");
+    expect(api).toHaveProperty("recommendedNextActionFor");
   });
 });

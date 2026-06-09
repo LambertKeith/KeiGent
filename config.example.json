@@ -1,0 +1,15 @@
+{
+  "_comment": "复制此文件到 ~/.keigent/config.json 并按需修改。建议通过 KEIGENT_API_KEY 环境变量注入密钥；如需写入本机 config.json，请只在私有机器上填写 apiKey。",
+
+  "apiKey": "",
+
+  "apiProtocol": "openai",
+
+  "baseUrl": "https://api.openai.com/v1",
+
+  "modelId": "gpt-4o-mini",
+
+  "headless": false,
+
+  "maxIterations": 12
+}

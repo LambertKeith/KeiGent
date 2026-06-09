@@ -1,0 +1,256 @@
+{
+  "fixtures": [
+    {
+      "caseId": "file-write-success",
+      "profile": "convergent-exec",
+      "finalResponse": "done file_write created",
+      "steps": [
+        { "iteration": 1, "kind": "tool_call", "toolName": "file_write", "toolArgs": { "path": "hello.txt" }, "toolResult": "created file_write", "toolSucceeded": true },
+        { "iteration": 2, "kind": "checkpoint", "checkpointDesc": "file exists", "verdictPassed": true, "verdictEvidence": "checkpoint created file_write" }
+      ],
+      "proves": "replay proves a historical file_write success trajectory remains evaluable"
+    },
+    {
+      "caseId": "file-read-success",
+      "profile": "convergent-exec",
+      "finalResponse": "hello file_read",
+      "steps": [
+        { "iteration": 1, "kind": "tool_call", "toolName": "file_read", "toolArgs": { "path": "hello.txt" }, "toolResult": "hello file_read", "toolSucceeded": true }
+      ]
+    },
+    {
+      "caseId": "file-hash-evidence",
+      "profile": "convergent-exec",
+      "finalResponse": "sha256:abc file_read",
+      "steps": [
+        { "iteration": 1, "kind": "tool_call", "toolName": "file_read", "toolArgs": { "path": "hello.txt" }, "toolResult": "sha256:abc", "toolSucceeded": true }
+      ]
+    },
+    {
+      "caseId": "file-path-escape-deny",
+      "profile": "convergent-exec",
+      "exitReason": "error",
+      "finalResponse": "[错误] path_escape: refused ../secret.txt",
+      "steps": [
+        { "iteration": 1, "kind": "tool_call", "toolName": "file_read", "toolArgs": { "path": "../secret.txt" }, "toolResult": "path_escape refused", "toolSucceeded": false }
+      ]
+    },
+    {
+      "caseId": "file-write-failure",
+      "profile": "convergent-exec",
+      "exitReason": "error",
+      "finalResponse": "[错误] write_failed: permission denied",
+      "steps": [
+        { "iteration": 1, "kind": "tool_call", "toolName": "file_write", "toolArgs": { "path": "readonly.txt" }, "toolResult": "write_failed permission denied", "toolSucceeded": false }
+      ]
+    },
+    {
+      "caseId": "shell-permission-deny",
+      "profile": "convergent-exec",
+      "exitReason": "error",
+      "finalResponse": "[错误] 工具 shell 未获授权，已拒绝执行（risk=R5, permission=dangerous）",
+      "steps": [
+        {
+          "iteration": 1,
+          "kind": "approval",
+          "approval": {
+            "approved": false,
+            "decidedAt": "2026-06-09T00:00:00.000Z",
+            "request": {
+              "toolName": "shell",
+              "args": { "command": "rm -rf dist" },
+              "permission": "dangerous",
+              "riskLevel": "R5",
+              "sideEffect": "local",
+              "reversible": false,
+              "action": "执行工具 shell",
+              "targetResource": "workspace:/tmp/workspace",
+              "evidenceRequired": ["command", "result"],
+              "exposesSecrets": false
+            }
+          }
+        },
+        { "iteration": 1, "kind": "tool_call", "toolName": "shell", "toolArgs": { "command": "rm -rf dist" }, "toolResult": "未获授权 R5", "toolSucceeded": false }
+      ]
+    },
+    {
+      "caseId": "permission-r3-approve",
+      "profile": "convergent-exec",
+      "finalResponse": "approved R3 shell action",
+      "steps": [
+        {
+          "iteration": 1,
+          "kind": "approval",
+          "approval": {
+            "approved": true,
+            "decidedAt": "2026-06-09T00:00:00.000Z",
+            "request": {
+              "toolName": "shell",
+              "args": { "command": "pnpm check" },
+              "permission": "execute",
+              "riskLevel": "R3",
+              "sideEffect": "local",
+              "reversible": true,
+              "action": "执行工具 shell",
+              "targetResource": "workspace:/tmp/workspace",
+              "evidenceRequired": ["command", "result"],
+              "exposesSecrets": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "permission-r5-deny",
+      "profile": "convergent-exec",
+      "exitReason": "error",
+      "finalResponse": "denied R5 destructive operation",
+      "steps": [
+        {
+          "iteration": 1,
+          "kind": "approval",
+          "approval": {
+            "approved": false,
+            "decidedAt": "2026-06-09T00:00:00.000Z",
+            "request": {
+              "toolName": "shell",
+              "args": { "command": "delete production data" },
+              "permission": "dangerous",
+              "riskLevel": "R5",
+              "sideEffect": "external",
+              "reversible": false,
+              "action": "执行工具 shell",
+              "targetResource": "production",
+              "evidenceRequired": ["approval"],
+              "exposesSecrets": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "permission-denied-side-effect",
+      "profile": "convergent-exec",
+      "exitReason": "error",
+      "finalResponse": "side_effect_denied",
+      "steps": [
+        {
+          "iteration": 1,
+          "kind": "approval",
+          "approval": {
+            "approved": false,
+            "decidedAt": "2026-06-09T00:00:00.000Z",
+            "request": {
+              "toolName": "http_request",
+              "args": { "url": "https://example.com/send" },
+              "permission": "dangerous",
+              "riskLevel": "R5",
+              "sideEffect": "external",
+              "reversible": false,
+              "action": "执行工具 http_request",
+              "targetResource": "https://example.com/send",
+              "evidenceRequired": ["approval"],
+              "exposesSecrets": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "workflow-verified-success",
+      "profile": "convergent-verified",
+      "finalResponse": "verified success checkpoint",
+      "steps": [
+        { "iteration": 1, "kind": "checkpoint", "checkpointDesc": "successDef satisfied", "verdictPassed": true, "verdictEvidence": "checkpoint verified success" }
+      ]
+    },
+    {
+      "caseId": "workflow-verified-failure",
+      "profile": "convergent-verified",
+      "exitReason": "error",
+      "finalResponse": "[错误] verified_failure",
+      "steps": [
+        { "iteration": 1, "kind": "checkpoint", "checkpointDesc": "assertion failed", "verdictPassed": false, "verdictEvidence": "verified_failure" }
+      ]
+    },
+    {
+      "caseId": "workflow-child-error",
+      "profile": "convergent-exec",
+      "exitReason": "error",
+      "finalResponse": "[错误] child_error",
+      "steps": [
+        { "iteration": 1, "kind": "text_output", "text": "child_error" }
+      ]
+    },
+    {
+      "caseId": "workflow-timeout",
+      "profile": "convergent-exec",
+      "exitReason": "error",
+      "finalResponse": "[错误] timeout",
+      "steps": [
+        { "iteration": 1, "kind": "text_output", "text": "timeout" }
+      ]
+    },
+    {
+      "caseId": "workflow-child-success-no-evidence",
+      "profile": "convergent-verified",
+      "exitReason": "error",
+      "finalResponse": "[错误] missing evidence",
+      "steps": [
+        { "iteration": 1, "kind": "tool_call", "toolName": "file_write", "toolArgs": { "path": "x" }, "toolResult": "ok without proof", "toolSucceeded": true }
+      ]
+    },
+    {
+      "caseId": "browser-snapshot-ref",
+      "profile": "convergent-exec",
+      "finalResponse": "snapshot browser_snapshot ref",
+      "steps": [
+        { "iteration": 1, "kind": "tool_call", "toolName": "browser_snapshot", "toolArgs": {}, "toolResult": "ref e3 visible", "toolSucceeded": true },
+        { "iteration": 2, "kind": "checkpoint", "checkpointDesc": "snapshot captured", "verdictPassed": true, "verdictEvidence": "browser_snapshot ref" }
+      ]
+    },
+    {
+      "caseId": "browser-click-ref",
+      "profile": "convergent-exec",
+      "finalResponse": "clicked e3",
+      "steps": [
+        { "iteration": 1, "kind": "tool_call", "toolName": "browser_snapshot", "toolArgs": {}, "toolResult": "ref e3 visible", "toolSucceeded": true },
+        { "iteration": 2, "kind": "tool_call", "toolName": "browser_click", "toolArgs": { "target": "e3" }, "toolResult": "clicked e3", "toolSucceeded": true },
+        { "iteration": 3, "kind": "checkpoint", "checkpointDesc": "click applied", "verdictPassed": true, "verdictEvidence": "e3 clicked" }
+      ]
+    },
+    {
+      "caseId": "dashboard-empty-report",
+      "profile": "convergent-exec",
+      "finalResponse": "empty report",
+      "steps": [
+        { "iteration": 1, "kind": "text_output", "text": "empty report" }
+      ]
+    },
+    {
+      "caseId": "dashboard-invalid-report",
+      "profile": "convergent-exec",
+      "exitReason": "error",
+      "finalResponse": "[错误] invalid report",
+      "steps": [
+        { "iteration": 1, "kind": "text_output", "text": "invalid report" }
+      ]
+    },
+    {
+      "caseId": "dashboard-unknown-failure-code",
+      "profile": "convergent-exec",
+      "finalResponse": "unknown failure code",
+      "steps": [
+        { "iteration": 1, "kind": "text_output", "text": "unknown failure code" }
+      ]
+    },
+    {
+      "caseId": "dashboard-profile-accuracy",
+      "profile": "convergent-exec",
+      "finalResponse": "profile accuracy",
+      "steps": [
+        { "iteration": 1, "kind": "text_output", "text": "profile accuracy" }
+      ]
+    }
+  ]
+}

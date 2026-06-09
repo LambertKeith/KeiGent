@@ -19,6 +19,9 @@ function tool(execute: ToolDef["execute"], timeoutMs = 1_000): ToolDef {
     description: "slow",
     parameters: {},
     permission: "readonly",
+    riskLevel: "R0",
+    sideEffect: "none",
+    reversible: true,
     timeoutMs,
     execute,
   };

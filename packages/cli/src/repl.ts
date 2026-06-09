@@ -12,23 +12,30 @@ import {
   createWorkflowSpec,
   WorkflowRunner,
   createEngineWorkflowChildRunner,
+  type ApprovalRequest,
   type ApprovalGate,
   type Task,
 } from "@keigent/engine";
 import { loadConfig, buildModel, type KeigentConfig } from "./config.js";
 import { handleCommand, type ReplState } from "./commands.js";
 import { persistWorkflowAndLearn } from "./post-run.js";
-import { renderProgress, renderWorkflowProgress, printBanner, printResponse, printError, printInfo, colors as c } from "./renderer.js";
+import { renderWorkflowProgress, printBanner, printResponse, printError, printInfo, colors as c } from "./renderer.js";
 
 // ── 交互式审批门：dangerous 工具弹 [y/N] ──────────────────────────────
 
 class InteractiveApprovalGate implements ApprovalGate {
   constructor(private readonly rl: readline.Interface) {}
 
-  async request(toolName: string, args: Record<string, unknown>): Promise<boolean> {
-    const argStr = JSON.stringify(args).slice(0, 80);
+  async request(request: ApprovalRequest): Promise<boolean> {
+    const argStr = JSON.stringify(request.args).slice(0, 120);
     const answer = await this.rl.question(
-      `${c.yellow}⚠ 工具 ${toolName} 需要授权 ${c.dim}${argStr}${c.reset}\n  允许执行? [y/N] `,
+      `${c.yellow}⚠ ${request.action}${c.reset}\n` +
+      `  target: ${request.targetResource}\n` +
+      `  risk: ${request.riskLevel} permission=${request.permission} sideEffect=${request.sideEffect} reversible=${request.reversible}\n` +
+      `  evidence: ${request.evidenceRequired.join(", ") || "none"}\n` +
+      `  exposesSecrets: ${request.exposesSecrets}\n` +
+      `  args: ${c.dim}${argStr}${c.reset}\n` +
+      `  允许执行? [y/N] `,
     );
     return answer.trim().toLowerCase() === "y";
   }
@@ -142,7 +149,6 @@ async function runTask(goal: string, deps: TaskDeps): Promise<void> {
         registry,
         skillContext: replState.skillContext,
         stateCapture,
-        onProfileSelected: (selection) => renderProgress({ kind: "profile_selected", profile: selection.name, via: selection.method }),
         createEngine(maxIterations) {
           return new LoopEngine({
             model,

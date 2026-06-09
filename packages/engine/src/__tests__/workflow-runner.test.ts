@@ -76,6 +76,69 @@ describe("WorkflowRunner", () => {
     });
   });
 
+  it("runs reviewed-loop as worker followed by readonly verifier with reviewer evidence", async () => {
+    const reviewedTask = task({
+      successDef: {
+        goal: "Review rubric",
+        assertions: [{ description: "reviewer accepts result", signal: "text" }],
+      },
+    });
+    const workerTrajectory = trajectory({
+      steps: [{ iteration: 1, kind: "tool_call", toolName: "file_write", toolResult: "ok", toolSucceeded: true }],
+      finalResponse: "worker done",
+    });
+    const verifierTrajectory = trajectory({
+      steps: [
+        {
+          iteration: 1,
+          kind: "checkpoint",
+          checkpointDesc: "reviewer accepts result",
+          verdictPassed: true,
+          verdictEvidence: "reviewer accepted worker result",
+          snapshot: { raw: {}, visibleText: "accepted" },
+        },
+      ],
+      finalResponse: "review passed",
+    });
+    const seenChildren: Array<{ id: string; role: string; policy?: unknown }> = [];
+    const runner = new WorkflowRunner({
+      async runChild(child) {
+        seenChildren.push({ id: child.id, role: child.role, policy: child.policy });
+        return child.role === "worker"
+          ? loopResult({ finalResponse: "worker done", trajectory: workerTrajectory })
+          : loopResult({ finalResponse: "review passed", checkpointsPassed: 1, trajectory: verifierTrajectory });
+      },
+    });
+    const events: Array<{ kind: string; childRunId?: string; role?: string }> = [];
+
+    const result = await runner.run(
+      createWorkflowSpec({ id: "wf-reviewed", task: reviewedTask, mode: "reviewed-loop" }),
+      (event) => events.push(event),
+    );
+
+    expect(result.exitReason).toBe("success");
+    expect(result.childRuns.map((child) => child.role)).toEqual(["worker", "verifier"]);
+    expect(seenChildren[1]).toMatchObject({
+      id: "wf-reviewed:verifier-1",
+      role: "verifier",
+      policy: { verifierReadonly: true, allowExternalSideEffects: false },
+    });
+    expect(events.filter((event) => event.kind === "child_start").map((event) => [event.childRunId, event.role])).toEqual([
+      ["wf-reviewed:worker-1", "worker"],
+      ["wf-reviewed:verifier-1", "verifier"],
+    ]);
+    expect(result.evidence).toContainEqual(
+      expect.objectContaining({
+        kind: "checkpoint",
+        passed: true,
+        message: "reviewer accepted worker result",
+        sourceChildRunId: "wf-reviewed:verifier-1",
+      }),
+    );
+    expect(result.finalResponse).toContain("worker done");
+    expect(result.finalResponse).toContain("review passed");
+  });
+
   it("maps child error, max_iterations, escalated, and thrown errors to deterministic workflow exits", async () => {
     const cases = [
       { child: loopResult({ exitReason: "error" }), expected: "child_error" },
@@ -224,6 +287,47 @@ describe("WorkflowRunner", () => {
         }),
       ),
     ).resolves.toMatchObject({ exitReason: "verified_failure" });
+  });
+
+  it("returns verified_failure when structured assertions fail even if checkpoint passes", async () => {
+    const assertionTask = task({
+      successDef: {
+        goal: "File written",
+        assertions: [{ kind: "toolSucceeded", toolName: "file_write" }],
+      },
+    });
+    const childTrajectory = trajectory({
+      steps: [
+        {
+          iteration: 1,
+          kind: "tool_call",
+          toolName: "file_write",
+          toolArgs: { path: "hello.txt" },
+          toolResult: "[错误] denied",
+          toolSucceeded: false,
+        },
+        {
+          iteration: 2,
+          kind: "checkpoint",
+          checkpointDesc: "file write done",
+          verdictPassed: true,
+          verdictEvidence: "model claimed file exists",
+          snapshot: { raw: {} },
+        },
+      ],
+    });
+    const runner = new WorkflowRunner(fakeChildRunner(loopResult({ trajectory: childTrajectory, checkpointsPassed: 1 })));
+
+    const result = await runner.run(createWorkflowSpec({ id: "wf-structured-assertion-fail", task: assertionTask }));
+
+    expect(result.exitReason).toBe("verified_failure");
+    expect(result.evidence).toContainEqual(
+      expect.objectContaining({
+        kind: "assertion",
+        passed: false,
+        assertion: "tool file_write succeeded 1 time(s)",
+      }),
+    );
   });
 
   it("does not mark workflow verdict passed when a verified child fails after a passed checkpoint", async () => {

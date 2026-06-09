@@ -12,9 +12,13 @@ import type {
   Trajectory,
 } from "./types.js";
 import { TrajectoryCollector } from "./trajectory.js";
+import { failureSummaryForLoopExit } from "./failures.js";
 import { deduplicateToolCalls, extractToolCalls, stripThinkBlocks } from "./utils.js";
 import { ToolRegistry, CHECKPOINT_TOOL_NAME, type ToolContext, type ApprovalGate } from "./tools/index.js";
+import type { ApprovalRequest } from "./tools/types.js";
 import { AllowAllGate } from "./tools/types.js";
+import { approvalScopeMatches } from "./workflow/policy.js";
+import { explainSkillMatches } from "./profiles/strategies.js";
 
 const CHECKPOINT_TOOL = CHECKPOINT_TOOL_NAME;
 const DEFAULT_LLM_TIMEOUT_MS = 60_000;
@@ -33,6 +37,7 @@ export interface EngineOptions {
 
 export interface LoopEngineRunOptions {
   signal?: AbortSignal;
+  inheritedApprovalScopes?: string[];
 }
 
 function isAborted(signal?: AbortSignal): boolean {
@@ -92,18 +97,30 @@ export class LoopEngine {
     const toolCtx: ToolContext = {
       workspace: this.workspace,
       browser: null,        // B1 懒启动浏览器会话后填充
-      approval: this.approval,
+      approval: approvalWithInheritedScopes(this.approval, options.inheritedApprovalScopes),
       task,
       headless: this.headless,
       askUser: this.askUser,
       signal,
+      onApprovalDecision: (decision) => {
+        collector.addApproval(state.iteration, decision);
+        emit({
+          kind: "approval",
+          iteration: state.iteration,
+          request: decision.request,
+          approved: decision.approved,
+          decidedAt: decision.decidedAt,
+        });
+      },
     };
 
     // AttentionStrategy 决定匹配哪些 skill
     const matchedSkills = profile.attention.matchSkills(task, skillContext.metas);
+    const skillExplanations = explainSkillMatches(task, skillContext.metas, matchedSkills);
+    collector.addSkillMatches(skillExplanations);
     skillContext = { ...skillContext, matched: matchedSkills };
     vlog(`[engine] matched skills: [${matchedSkills.join(", ") || "none"}]`);
-    emit({ kind: "skills_matched", skills: matchedSkills });
+    emit({ kind: "skills_matched", skills: matchedSkills, explanations: skillExplanations });
 
     // skill body 注入由 attention 旋钮负责（S1 修复）：
     // 收敛只注入 1 篇，发散注入全部——这是收敛/发散行为差异的核心载体
@@ -301,6 +318,9 @@ export class LoopEngine {
             if (isAborted(signal)) {
               return this.result(state, "error", abortMessage(), collector, matchedSkills);
             }
+            const recovery = recoveryPayload(decision);
+            collector.addRecovery(state.iteration, recovery);
+            emit({ kind: "recovery", iteration: state.iteration, decision: recovery.decision, ...(recovery.hint ? { hint: recovery.hint } : {}), ...(recovery.reason ? { reason: recovery.reason } : {}) });
             if (decision.kind === "escalate") {
               vlog(`[engine] 升级人类: ${decision.reason}`);
               emit({ kind: "escalate", reason: decision.reason });
@@ -343,6 +363,9 @@ export class LoopEngine {
           toolResult: result,
           succeeded: !toolRes.isError,
         });
+        if (toolRes.isError && (result.includes("未获授权") || result.includes("non_interactive_input_required"))) {
+          return this.result(state, "error", result, collector, matchedSkills);
+        }
 
         // 收敛：步骤推进（NarrowAttention）
         if ("advanceStep" in profile.attention && "getStep" in profile.attention) {
@@ -445,6 +468,7 @@ export class LoopEngine {
     skillsUsed?: string[],
   ): LoopResult {
     const finalResponse = override ?? state.finalResponse ?? "(无输出)";
+    const failure = failureSummaryForLoopExit(exitReason, finalResponse);
     vlog(`\n[engine] ■ 退出 reason=${exitReason} iterations=${state.iteration} checkpoints=${state.checkpointCount}`);
 
     const trajectory: Trajectory = collector
@@ -454,6 +478,7 @@ export class LoopEngine {
           exitReason,
           finalResponse,
           skillsUsed: skillsUsed ?? [],
+          ...(failure ? { failure } : {}),
         })
       : {
           task: state.task,
@@ -463,9 +488,10 @@ export class LoopEngine {
           finalResponse,
           durationMs: 0,
           skillsUsed: [],
+          ...(failure ? { failure } : {}),
         };
 
-    this._emit({ kind: "done", exitReason, finalResponse });
+    this._emit({ kind: "done", exitReason, finalResponse, ...(failure ? { failure } : {}) });
 
     return {
       exitReason,
@@ -474,6 +500,23 @@ export class LoopEngine {
       checkpointsPassed: state.checkpointCount,
       totalToolCalls: state.toolCallCount,
       trajectory,
+      ...(failure ? { failure } : {}),
     };
   }
+}
+
+function approvalWithInheritedScopes(base: ApprovalGate, scopes: string[] | undefined): ApprovalGate {
+  if (!scopes || scopes.length === 0) return base;
+  return {
+    async request(request: ApprovalRequest): Promise<boolean> {
+      if (approvalScopeMatches(request.targetResource, scopes)) return true;
+      return base.request(request);
+    },
+  };
+}
+
+function recoveryPayload(decision: import("./types.js").RecoverDecision): { decision: import("./types.js").RecoverDecision["kind"]; hint?: string; reason?: string } {
+  if (decision.kind === "repair") return { decision: "repair", hint: decision.hint };
+  if (decision.kind === "escalate") return { decision: "escalate", reason: decision.reason };
+  return { decision: "retry" };
 }

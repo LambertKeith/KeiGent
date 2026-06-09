@@ -74,8 +74,8 @@ describe("orchestrator eval", () => {
       selectedProfile: "divergent-research",
       unguardedProfile: "convergent-exec",
       guardApplied: true,
-      failures: ["expected profile convergent-exec, got divergent-research"],
     });
+    expect(report.cases[0].failures).toContain("expected profile convergent-exec, got divergent-research");
   });
 
   it("reports null profile accuracy for empty matrices instead of fake 100%", () => {
@@ -85,9 +85,46 @@ describe("orchestrator eval", () => {
   });
 
   it("ships with enough default fixtures to catch obvious profile regressions", () => {
-    expect(DEFAULT_ORCHESTRATOR_EVAL_CASES.length).toBeGreaterThanOrEqual(12);
+    expect(DEFAULT_ORCHESTRATOR_EVAL_CASES.length).toBeGreaterThanOrEqual(30);
+    for (const evalCase of DEFAULT_ORCHESTRATOR_EVAL_CASES) {
+      expect(evalCase.expectedWorkflowMode, `${evalCase.id} must declare expectedWorkflowMode`).toBeTruthy();
+      expect(evalCase.riskLevel, `${evalCase.id} must declare riskLevel`).toBeTruthy();
+      expect(typeof evalCase.requiresClarification, `${evalCase.id} must declare requiresClarification`).toBe("boolean");
+      expect(typeof evalCase.requiresApproval, `${evalCase.id} must declare requiresApproval`).toBe("boolean");
+      expect(evalCase.rationaleMustInclude?.length, `${evalCase.id} must declare rationaleMustInclude`).toBeGreaterThan(0);
+    }
+
     const report = runOrchestratorEvalCases(DEFAULT_ORCHESTRATOR_EVAL_CASES);
     expect(report.failed).toBe(0);
     expect(report.profileAccuracy).toBe(1);
+    expect(report.cases.every((evalCase) => evalCase.workflowMode !== undefined)).toBe(true);
+    expect(report.cases.every((evalCase) => evalCase.riskLevel !== undefined)).toBe(true);
+  });
+
+  it("checks workflow, risk, clarification, approval, and rationale expectations", () => {
+    const report = runOrchestratorEvalCases([
+      {
+        id: "rationale-gap",
+        task: { goal: "你好", profile: "auto" },
+        expectedProfile: "conversational",
+        expectedMethod: "rule",
+        expectedRuleId: "obvious_chitchat",
+        expectedWorkflowMode: "single-loop",
+        riskLevel: "R0",
+        requiresClarification: false,
+        requiresApproval: false,
+        rationaleMustInclude: ["not-present"],
+        metas: [],
+      },
+    ]);
+
+    expect(report.passed).toBe(0);
+    expect(report.cases[0]).toMatchObject({
+      workflowMode: "single-loop",
+      riskLevel: "R0",
+      requiresClarification: false,
+      requiresApproval: false,
+      failures: ["rationale missing expected text: not-present"],
+    });
   });
 });

@@ -26,6 +26,9 @@ export const mouseTool: ToolDef = {
   name: "mouse",
   description: "控制鼠标：move（移动）、click（点击）、double_click、drag（拖拽）。坐标为屏幕绝对像素",
   permission: "dangerous",
+  riskLevel: "R5",
+  sideEffect: "external",
+  reversible: false,
   parameters: Type.Object({
     action: Type.Union([
       Type.Literal("move"),
@@ -84,6 +87,9 @@ export const keyboardTool: ToolDef = {
   name: "keyboard",
   description: "控制键盘：type（输入文本）、press（单键）、hotkey（组合键如 cmd+c）",
   permission: "dangerous",
+  riskLevel: "R5",
+  sideEffect: "external",
+  reversible: false,
   parameters: Type.Object({
     action: Type.Union([Type.Literal("type"), Type.Literal("press"), Type.Literal("hotkey")]),
     text: Type.Optional(Type.String({ description: "type 动作输入的文本" })),
@@ -135,6 +141,9 @@ export const screenshotTool: ToolDef = {
   name: "screenshot",
   description: "对整个屏幕截图（系统级，非浏览器），返回图像",
   permission: "readonly",
+  riskLevel: "R0",
+  sideEffect: "none",
+  reversible: true,
   parameters: Type.Object({}),
   async execute() {
     const nut = await loadNut();

@@ -28,6 +28,13 @@ export function renderProgress(ev: ProgressEvent): void {
   switch (ev.kind) {
     case "profile_selected":
       console.log(`${c.magenta}◆ profile${c.reset} ${c.bold}${ev.profile}${c.reset} ${c.dim}(${ev.via})${c.reset}`);
+      if (ev.ruleId || ev.guardApplied || ev.rationale) {
+        const rule = ev.ruleId ? `rule=${ev.ruleId}` : undefined;
+        const guard = ev.guardApplied ? `guard:${ev.unguardedProfile ?? "unknown"}→${ev.profile}` : undefined;
+        const meta = [rule, guard].filter(Boolean).join(" ");
+        if (meta) console.log(`${c.dim}  route: ${meta}${c.reset}`);
+        if (ev.rationale) console.log(`${c.dim}  why: ${trunc(ev.rationale, 100)}${c.reset}`);
+      }
       break;
     case "skills_matched":
       if (ev.skills.length > 0) {
@@ -46,6 +53,15 @@ export function renderProgress(ev: ProgressEvent): void {
       const color = ev.succeeded ? c.green : c.red;
       const mark = ev.succeeded ? "✓" : "✗";
       console.log(`${color}  │   ${mark}${c.reset} ${c.dim}${trunc(ev.result, 80)}${c.reset}`);
+      break;
+    }
+    case "approval": {
+      const color = ev.approved ? c.green : c.red;
+      const decision = ev.approved ? "approved" : "denied";
+      console.log(
+        `${color}  │ approval ${decision}${c.reset} ${ev.request.toolName} ` +
+        `${c.dim}risk=${ev.request.riskLevel} permission=${ev.request.permission} target=${trunc(ev.request.targetResource, 50)}${c.reset}`,
+      );
       break;
     }
     case "text":
@@ -67,6 +83,10 @@ export function renderProgress(ev: ProgressEvent): void {
       const color = ev.exitReason === "success" ? c.green : c.yellow;
       console.log(`${c.gray}  └────────────────${c.reset}`);
       console.log(`${color}◆ 完成 (${ev.exitReason})${c.reset}`);
+      if (ev.failure) {
+        console.log(`${c.red}  failure: ${ev.failure.code}${c.reset} ${c.dim}${ev.failure.message}${c.reset}`);
+        console.log(`${c.dim}  下一步: ${ev.failure.nextAction}${c.reset}`);
+      }
       break;
     }
   }

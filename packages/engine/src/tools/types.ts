@@ -9,6 +9,29 @@ export type PermissionLevel =
   | "execute"     // 执行命令、浏览器操作
   | "dangerous";  // 不可逆/系统级（mouse, keyboard, rm -rf）
 
+export type RiskLevel = "R0" | "R1" | "R2" | "R3" | "R4" | "R5";
+
+export type SideEffect = "none" | "local" | "external";
+
+export interface ApprovalRequest {
+  toolName: string;
+  args: Record<string, unknown>;
+  permission: PermissionLevel;
+  riskLevel: RiskLevel;
+  sideEffect: SideEffect;
+  reversible: boolean;
+  action: string;
+  targetResource: string;
+  evidenceRequired: string[];
+  exposesSecrets: boolean;
+}
+
+export interface ApprovalDecision {
+  request: ApprovalRequest;
+  approved: boolean;
+  decidedAt: string;
+}
+
 // ── 审批门：dangerous 工具执行前需要过 ─────────────────────────────────
 
 export interface ApprovalGate {
@@ -16,13 +39,19 @@ export interface ApprovalGate {
    * 请求执行某工具的授权。返回 true 放行，false 拒绝。
    * REPL 模式弹 [y/N]；自动模式可配置 allow/deny 策略。
    */
-  request(toolName: string, args: Record<string, unknown>): Promise<boolean>;
+  request(request: ApprovalRequest): Promise<boolean>;
 }
 
 /** 默认审批门：全部放行（非交互场景）。CLI 会替换成交互式实现。 */
 export class AllowAllGate implements ApprovalGate {
   async request(): Promise<boolean> {
     return true;
+  }
+}
+
+export class DenyByDefaultGate implements ApprovalGate {
+  async request(): Promise<boolean> {
+    return false;
   }
 }
 
@@ -45,6 +74,7 @@ export interface ToolContext {
   memoryDir?: string;                 // 记忆存储目录（memory_recall 用）
   askUser?: (question: string) => Promise<string>;  // 向用户提问（CLI 注入）
   signal?: AbortSignal;               // workflow 父级取消信号
+  onApprovalDecision?: (decision: ApprovalDecision) => void;
 }
 
 // ── 工具结果 ──────────────────────────────────────────────────────────
@@ -70,6 +100,9 @@ export interface ToolDef {
   description: string;
   parameters: TSchema;                // TypeBox schema（与 pi-ai 一致）
   permission: PermissionLevel;
+  riskLevel: RiskLevel;
+  sideEffect: SideEffect;
+  reversible: boolean;
   concurrencySafe?: boolean;
   /** 单工具超时（ms），默认 60s。 */
   timeoutMs?: number;

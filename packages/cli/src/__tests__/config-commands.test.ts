@@ -1,0 +1,112 @@
+import { mkdir, readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { mkdtemp } from "node:fs/promises";
+import { describe, expect, it, vi } from "vitest";
+import { runConfigCommand, runDoctor } from "../config-commands.js";
+
+async function tempConfigPath(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "keigent-config-command-"));
+  await mkdir(join(dir, ".keigent"), { recursive: true });
+  return join(dir, ".keigent", "config.json");
+}
+
+async function run(args: string[], configPath: string, env: NodeJS.ProcessEnv = {}): Promise<string[]> {
+  const lines: string[] = [];
+  await runConfigCommand(args, {
+    configPath,
+    env,
+    stdout: (line) => lines.push(line),
+  });
+  return lines;
+}
+
+describe("config commands", () => {
+  it("prints the active config path without creating a file", async () => {
+    const configPath = await tempConfigPath();
+
+    const lines = await run(["path"], configPath);
+
+    expect(lines).toEqual([configPath]);
+    await expect(readFile(configPath, "utf8")).rejects.toThrow();
+  });
+
+  it("initializes a secure config file without overwriting unless forced", async () => {
+    const configPath = await tempConfigPath();
+
+    await run(["init"], configPath);
+    const initial = await readFile(configPath, "utf8");
+    const mode = (await stat(configPath)).mode & 0o777;
+
+    expect(JSON.parse(initial)).toMatchObject({
+      apiKey: "",
+      apiProtocol: "openai",
+      baseUrl: "https://api.openai.com/v1",
+      modelId: "gpt-4o-mini",
+      headless: false,
+      maxIterations: 12,
+    });
+    expect(mode & 0o077).toBe(0);
+    await expect(run(["init"], configPath)).rejects.toThrow("already exists");
+
+    await run(["init", "--force"], configPath);
+    expect(await readFile(configPath, "utf8")).toContain('"apiKey": ""');
+  });
+
+  it("sets and unsets config fields atomically", async () => {
+    const configPath = await tempConfigPath();
+    await run(["init"], configPath);
+
+    await run(["set", "modelId", "gpt-test"], configPath);
+    await run(["set", "headless", "true"], configPath);
+    await run(["unset", "modelId"], configPath);
+
+    const saved = JSON.parse(await readFile(configPath, "utf8"));
+    expect(saved.modelId).toBeUndefined();
+    expect(saved.headless).toBe(true);
+  });
+
+  it("shows effective source-aware config without raw secrets", async () => {
+    const configPath = await tempConfigPath();
+    await run(["init"], configPath);
+    await run(["set", "apiKey", "file-secret"], configPath);
+
+    const [json] = await run(["show", "--json"], configPath, {
+      KEIGENT_API_KEY: "env-secret",
+      KEIGENT_MODEL_ID: "env-model",
+    });
+    const shown = JSON.parse(json!);
+
+    expect(JSON.stringify(shown)).not.toContain("file-secret");
+    expect(JSON.stringify(shown)).not.toContain("env-secret");
+    expect(shown.fields.apiKey.source).toBe("env");
+    expect(shown.fields.apiKey.value).toMatch(/^\[REDACTED/);
+    expect(shown.fields.modelId).toMatchObject({ value: "env-model", source: "env" });
+    expect(shown.fields.apiProtocol).toMatchObject({ value: "openai", source: "file" });
+  });
+
+  it("runs offline doctor as local validation without network calls", async () => {
+    const configPath = await tempConfigPath();
+    const output = captureOutput();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await run(["init"], configPath);
+    await run(["set", "apiKey", "file-secret"], configPath);
+
+    await runDoctor(["--offline", "--json"], {
+      configPath,
+      stdout: output.stdout,
+      env: {},
+    });
+    const payload = JSON.parse(output.lines[0]!);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(JSON.stringify(payload)).not.toContain("file-secret");
+    expect(payload.config.apiKey).toBe("[REDACTED]");
+    fetchSpy.mockRestore();
+  });
+});
+
+function captureOutput(): { lines: string[]; stdout: (line: string) => void } {
+  const lines: string[] = [];
+  return { lines, stdout: (line) => lines.push(line) };
+}

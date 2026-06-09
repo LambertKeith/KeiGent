@@ -5,3 +5,4 @@ export * from "./engine-executor.js";
 export * from "./replay.js";
 export * from "./cli-options.js";
 export * from "./orchestrator-eval.js";
+export * from "./browser-cases.js";

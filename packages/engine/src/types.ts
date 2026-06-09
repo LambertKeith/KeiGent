@@ -1,16 +1,34 @@
 import type { Context, Message, Tool } from "@earendil-works/pi-ai";
+import type { FailureSummary } from "./failures.js";
+import type { ApprovalDecision, ApprovalRequest } from "./tools/types.js";
 
 // ── Task ─────────────────────────────────────────────────────────────
 
-export interface Assertion {
-  description: string;
-  signal: "url" | "dom" | "text" | "network" | "visual";
-}
+export type LegacyAssertionSignal = "url" | "dom" | "text" | "network" | "visual";
+
+export type Assertion =
+  | { kind?: "legacySignal"; description: string; signal: LegacyAssertionSignal }
+  | { kind: "urlContains"; value: string }
+  | { kind: "textIncludes"; value: string; source?: "dom" | "stdout" | "file" | "final" }
+  | { kind: "fileExists"; path: string }
+  | { kind: "fileHashEquals"; path: string; sha256: string }
+  | { kind: "commandExitCode"; commandId: string; code: number }
+  | { kind: "toolSucceeded"; toolName: string; minCount?: number }
+  | { kind: "checkpointPassed"; checkpointId?: string; minCount?: number }
+  | { kind: "humanApproved"; scope: string }
+  | { kind: "jsonPathEquals"; path: string; value: unknown }
+  | { kind: "screenshotJudge"; rubric: string };
+
+export type AssertionFailureCode =
+  | "evidence_missing"
+  | "assertion_failed"
+  | "assertion_unsupported";
 
 export interface AssertionResult {
   assertion: Assertion;
   passed: boolean;
   evidence: string;
+  failureCode?: AssertionFailureCode;
 }
 
 export interface SuccessDef {
@@ -75,31 +93,45 @@ export interface LoopResult {
   checkpointsPassed: number;
   totalToolCalls: number;
   trajectory: Trajectory;     // 完整执行轨迹，供学习 loop 消费
+  failure?: FailureSummary;
 }
 
 // ── 流式进度事件（供 CLI/UI 实时渲染）────────────────────────────────
 
 export type ProgressEvent =
-  | { kind: "profile_selected"; profile: string; via: "rule" | "llm" }
-  | { kind: "skills_matched"; skills: string[] }
+  | {
+      kind: "profile_selected";
+      profile: string;
+      via: "rule" | "llm";
+      ruleId?: string;
+      rationale?: string;
+      signals?: string[];
+      guardApplied?: boolean;
+      unguardedProfile?: string;
+    }
+  | { kind: "skills_matched"; skills: string[]; explanations?: SkillMatchExplanation[] }
   | { kind: "iteration_start"; iteration: number }
   | { kind: "tool_call"; iteration: number; toolName: string; args: Record<string, unknown> }
   | { kind: "tool_result"; iteration: number; toolName: string; result: string; succeeded: boolean }
+  | { kind: "approval"; iteration: number; request: ApprovalRequest; approved: boolean; decidedAt: string }
   | { kind: "text"; iteration: number; text: string }
   | { kind: "checkpoint"; iteration: number; desc: string }
   | { kind: "verdict"; iteration: number; passed: boolean; evidence: string }
+  | { kind: "recovery"; iteration: number; decision: RecoverDecision["kind"]; hint?: string; reason?: string }
   | { kind: "escalate"; reason: string }
-  | { kind: "done"; exitReason: ExitReason; finalResponse: string };
+  | { kind: "done"; exitReason: ExitReason; finalResponse: string; failure?: FailureSummary };
 
 export type ProgressCallback = (event: ProgressEvent) => void;
 
 // ── Trajectory（执行轨迹）────────────────────────────────────────────
 
-export type TrajectoryStepKind = "tool_call" | "text_output" | "checkpoint" | "error";
+export type TrajectoryStepKind = "skill_match" | "tool_call" | "text_output" | "checkpoint" | "approval" | "recovery" | "error";
 
 export interface TrajectoryStep {
   iteration: number;
   kind: TrajectoryStepKind;
+  // skill_match
+  skillMatches?: SkillMatchExplanation[];
   // tool_call
   toolName?: string;
   toolArgs?: Record<string, unknown>;
@@ -112,6 +144,10 @@ export interface TrajectoryStep {
   verdictPassed?: boolean;
   verdictEvidence?: string;
   checkpointDesc?: string;
+  // approval
+  approval?: ApprovalDecision;
+  // recovery
+  recovery?: { decision: RecoverDecision["kind"]; hint?: string; reason?: string };
   // error
   errorMessage?: string;
 }
@@ -124,6 +160,7 @@ export interface Trajectory {
   finalResponse: string;
   durationMs: number;
   skillsUsed: string[];       // 本次注入的 skill 名列表
+  failure?: FailureSummary;
 }
 
 // ── SkillPatch（学习 loop 对 skill 的修改建议）────────────────────────
@@ -142,6 +179,9 @@ export interface SkillPatch {
   action: PatchAction;
   content: string;
   rationale: string;          // LLM 解释为什么要改
+  learningStatus?: SkillStatus;
+  promoteToActive?: boolean;
+  evalCoverage?: string[];
 }
 
 export interface LearningResult {
@@ -168,10 +208,36 @@ export type RecoverDecision =
 
 // ── SkillContext ──────────────────────────────────────────────────────
 
+export type SkillStatus =
+  | "draft"
+  | "active"
+  | "learned-note-only"
+  | "quarantined"
+  | "deprecated"
+  | "promoted";
+
 export interface SkillMeta {
   name: string;
   description: string;
   tags: string[];
+  status?: SkillStatus;
+  requiredTools?: string[];
+  allowedTools?: string[];
+  nonGoals?: string[];
+  dangerousActions?: string[];
+  examples?: string[];
+  evalCoverage?: string[];
+}
+
+export interface SkillMatchExplanation {
+  name: string;
+  status?: SkillStatus;
+  score: number;
+  signals: string[];
+  matched: boolean;
+  injected: boolean;
+  exclusionReason?: "score_below_threshold" | "lower_ranked" | "status_not_executable" | "body_not_injected";
+  evalCoverage?: string[];
 }
 
 export interface SkillContext {

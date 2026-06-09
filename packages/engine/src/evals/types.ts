@@ -1,13 +1,31 @@
 import type { ProfileName } from "../orchestrator.js";
 import type { ExitReason, LoopResult, Task } from "../types.js";
 
-export type EvalCategory = "conversational" | "research" | "verified-exec" | "tool-smoke";
+export type EvalExecutionMode = "smoke" | "replay" | "live";
+
+export type EvalCategory =
+  | "conversational"
+  | "research"
+  | "verified-exec"
+  | "tool-smoke"
+  | "file"
+  | "shell"
+  | "browser"
+  | "config"
+  | "permission"
+  | "workflow"
+  | "skill"
+  | "dashboard";
 
 export type EvalFailureCode =
   | "profile_mismatch"
   | "exit_reason"
   | "tool_missing"
   | "tool_forbidden"
+  | "evidence_missing"
+  | "forbidden_claim"
+  | "approval_missing"
+  | "permission_denied"
   | "checkpoint_missing"
   | "output_missing"
   | "executor_error"
@@ -24,6 +42,10 @@ export interface EvalAcceptance {
   forbiddenTools?: string[];
   /** Substrings that must be present in finalResponse. */
   finalResponseIncludes?: string[];
+  /** Approval decisions that must appear in the trajectory. */
+  requiredApprovals?: Array<{ toolName: string; approved?: boolean; riskLevel?: string }>;
+  /** Set true for cases whose expected behavior is a safe refusal. */
+  allowDeniedApprovals?: boolean;
 }
 
 export interface EvalCase {
@@ -33,15 +55,21 @@ export interface EvalCase {
   task: Task;
   expectedProfile?: ProfileName;
   acceptance: EvalAcceptance;
+  proves?: string;
+  doesNotProve?: string;
+  requiredEvidence?: string[];
+  forbiddenClaims?: string[];
   timeoutMs?: number;
 }
 
 export interface EvalExecution {
   selectedProfile?: ProfileName | string;
+  executionMode?: EvalExecutionMode;
   result: LoopResult;
 }
 
 export interface EvalExecutor {
+  executionMode?: EvalExecutionMode;
   run(evalCase: EvalCase): Promise<EvalExecution>;
 }
 
@@ -60,9 +88,14 @@ export interface EvalCaseResult {
   toolsUsed: string[];
   successfulToolsUsed: string[];
   durationMs: number;
+  executionMode?: EvalExecutionMode;
   failures: string[];
   failureCodes: EvalFailureCode[];
   finalResponse: string;
+  proves?: string;
+  doesNotProve?: string;
+  requiredEvidence: string[];
+  forbiddenClaims: string[];
 }
 
 export interface EvalReport {
@@ -72,6 +105,7 @@ export interface EvalReport {
   passed: number;
   failed: number;
   profileAccuracy: number | null;
+  executionModes: Partial<Record<EvalExecutionMode, number>>;
   failuresByCode: Partial<Record<EvalFailureCode, number>>;
   cases: EvalCaseResult[];
 }

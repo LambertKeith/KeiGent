@@ -1,9 +1,10 @@
 import type { Tool } from "@earendil-works/pi-ai";
-import type { EngineProfileSelection, EngineEvalOrchestrator } from "../evals/engine-executor.js";
+import { profileSelectionToProgressEvent, type EngineProfileSelection, type EngineEvalOrchestrator } from "../evals/engine-executor.js";
 import type { LoopEngine } from "../engine.js";
 import type { LoopProfile, LoopResult, ProgressCallback, SkillContext, StateCapture, Task } from "../types.js";
 import type { ToolRegistry } from "../tools/index.js";
 import { toolsForProfile } from "../tool-filter.js";
+import { isToolAllowedByWorkflowPolicy } from "./policy.js";
 import type { WorkflowChildRunner } from "./runner.js";
 
 export interface EngineWorkflowRunner {
@@ -14,7 +15,7 @@ export interface EngineWorkflowRunner {
     stateCapture: StateCapture,
     availableTools: Tool[],
     onProgress?: ProgressCallback,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; inheritedApprovalScopes?: string[] },
   ): Promise<LoopResult>;
 }
 
@@ -40,9 +41,13 @@ export function createEngineWorkflowChildRunner(opts: EngineWorkflowChildRunnerO
     async runChild(child, options) {
       const selected = await opts.orchestrator.selectProfile(child.task, opts.skillContext.metas);
       opts.onProfileSelected?.(selected);
+      options?.onProgress?.(profileSelectionToProgressEvent(selected));
 
       const taskForRun: Task = { ...child.task, profile: selected.name };
-      const availableTools = toolsForProfile(opts.registry, selected.name);
+      const profileToolNames = new Set(toolsForProfile(opts.registry, selected.name).map((tool) => tool.name));
+      const availableTools = opts.registry.toPiAiTools(
+        (tool) => profileToolNames.has(tool.name) && isToolAllowedByWorkflowPolicy(tool, child.policy, child.role),
+      );
       const engine = opts.createEngine(options?.maxIterations);
 
       return engine.run(
@@ -52,7 +57,7 @@ export function createEngineWorkflowChildRunner(opts: EngineWorkflowChildRunnerO
         opts.stateCapture,
         availableTools,
         options?.onProgress,
-        { signal: options?.signal },
+        { signal: options?.signal, inheritedApprovalScopes: child.policy?.approvalScopes },
       );
     },
   };

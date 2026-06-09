@@ -18,18 +18,37 @@ export { saveTrajectory } from "./trajectory.js";
 export { formatLearningResult } from "./skill-patch.js";
 export { buildDefaultRegistry } from "./tools/index.js";
 export { ToolRegistry, type ToolDef, type ApprovalGate } from "./tools/index.js";
-export { AllowAllGate } from "./tools/types.js";
+export { AllowAllGate, DenyByDefaultGate } from "./tools/types.js";
+export type { ApprovalRequest, RiskLevel, SideEffect } from "./tools/types.js";
 export { WriteThroughMemory } from "./memory.js";
 export { setVerbose, isVerbose } from "./logger.js";
+export {
+  buildEvidenceBundle,
+  countPassedCheckpoints,
+  countSuccessfulToolCalls,
+  hasApprovedScope,
+} from "./evidence.js";
+export type {
+  CheckpointEvidence,
+  EvidenceBundle,
+  ToolCallEvidence,
+} from "./evidence.js";
+export { describeAssertion, evaluateAssertion, evaluateAssertions } from "./assertions.js";
+export { failureSummaryForLoopExit, failureSummaryForWorkflowExit, recommendedNextActionFor } from "./failures.js";
+export type { FailureCode, FailureLayer, FailureSummary } from "./failures.js";
 
 export type {
   Task,
   SuccessDef,
   Assertion,
+  AssertionFailureCode,
+  AssertionResult,
   LoopResult,
   LoopProfile,
   ProgressEvent,
   ProgressCallback,
+  Trajectory,
+  TrajectoryStep,
   SkillContext,
   ExitReason,
 } from "./types.js";
@@ -41,10 +60,12 @@ export { makeDivergentResearchProfile } from "./profiles/divergent-research.js";
 export { toolsForProfile } from "./tool-filter.js";
 export { runEvalCases, buildEvalReport, toolsUsedFromResult, successfulToolsUsedFromResult } from "./evals/runner.js";
 export { DEFAULT_EVAL_CASES, createSmokeEvalExecutor } from "./evals/cases.js";
+export { BROWSER_EVAL_CASES } from "./evals/browser-cases.js";
 export { createEngineEvalExecutor } from "./evals/engine-executor.js";
 export {
   createTrajectoryReplayExecutor,
   createTrajectoryReplayExecutorFromFiles,
+  loadReplayFixtureSet,
   loopResultFromTrajectory,
 } from "./evals/replay.js";
 export { parseEvalCliArgs } from "./evals/cli-options.js";
@@ -58,6 +79,8 @@ export {
   loadWorkflowTrajectory,
   replayWorkflowTrajectory,
   saveWorkflowTrajectory,
+  approvalScopeMatches,
+  isToolAllowedByWorkflowPolicy,
 } from "./workflow/index.js";
 export type {
   ChildRunResult,

@@ -22,6 +22,9 @@ export const shellTool: ToolDef = {
   name: "shell",
   description: "执行 shell 命令（在 workspace 目录下，60s 超时，输出上限 30k 字符）。危险操作需用户授权",
   permission: "dangerous",
+  riskLevel: "R5",
+  sideEffect: "local",
+  reversible: false,
   timeoutMs: SHELL_TIMEOUT_MS + 5000,
   parameters: Type.Object({
     command: Type.String({ description: "要执行的 shell 命令" }),

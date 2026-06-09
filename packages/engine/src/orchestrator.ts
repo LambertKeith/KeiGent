@@ -28,6 +28,7 @@ export interface ProfileRegistry {
 export type ProfileSelectionRuleId =
   | "explicit_profile"
   | "obvious_chitchat"
+  | "conversation_or_clarification"
   | "success_def_assertions"
   | "research_keyword"
   | "url_execution_keyword"
@@ -94,6 +95,17 @@ function isObviousChitchat(task: Task): boolean {
   ].some((p) => p.test(goal));
 }
 
+function isConversationalOrNeedsClarification(task: Task): boolean {
+  if (task.successDef) return false;
+  const goal = task.goal.trim();
+  if (/https?:\/\//.test(goal)) return false;
+  return [
+    /你能做什么|你可以做什么|what can you do|capabilit/i,
+    /^(帮我)?(处理|弄|搞|看)(一下)?(这个|一下)?[\s!！。.]*$/i,
+    /^(帮我处理一下这个|帮我弄一下|处理这个|看一下这个)$/i,
+  ].some((p) => p.test(goal));
+}
+
 /**
  * 基于任务硬信号选择 profile，无需 LLM 调用。
  * 返回 null 表示规则无法确定，需要升级到分类 agent。
@@ -121,6 +133,16 @@ export function classifyByRulesDetailed(task: Task, metas: SkillMeta[]): Profile
       ruleId: "obvious_chitchat",
       rationale: "任务是短问候/感谢等高置信度闲聊，无需工具或研究循环",
       signals: ["short_chitchat"],
+    };
+  }
+
+  if (isConversationalOrNeedsClarification(task)) {
+    return {
+      profile: "conversational",
+      method: "rule",
+      ruleId: "conversation_or_clarification",
+      rationale: "任务是能力询问或信息不足，需要对话澄清，不能伪装成执行成功",
+      signals: ["conversation_or_clarification"],
     };
   }
 

@@ -90,6 +90,58 @@ describe("runEvalCases", () => {
     expect(report.cases[0].failureCodes).toContain("tool_missing");
   });
 
+  it("checks required approval decisions and reports permission_denied when approval is denied", async () => {
+    const denied = loopResult({
+      exitReason: "error",
+      finalResponse: "[错误] 工具 shell 未获授权",
+      trajectory: {
+        ...loopResult().trajectory,
+        exitReason: "error",
+        steps: [
+          {
+            iteration: 1,
+            kind: "approval",
+            approval: {
+              approved: false,
+              decidedAt: "2026-06-09T10:00:00.000Z",
+              request: {
+                toolName: "shell",
+                args: { command: "rm -rf dist" },
+                permission: "dangerous",
+                riskLevel: "R5",
+                sideEffect: "local",
+                reversible: false,
+                action: "执行工具 shell",
+                targetResource: "workspace:/tmp/workspace",
+                evidenceRequired: ["command"],
+                exposesSecrets: false,
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const report = await runEvalCases(
+      [
+        baseCase({
+          id: "permission-deny",
+          acceptance: {
+            exitReasons: ["error"],
+            requiredApprovals: [{ toolName: "shell", approved: false, riskLevel: "R5" }],
+          },
+        }),
+      ],
+      executorReturning(denied),
+    );
+
+    expect(report.cases[0]).toMatchObject({
+      passed: false,
+      failureCodes: ["permission_denied"],
+      failures: ["approval denied for shell (risk=R5)"],
+    });
+  });
+
   it("times out a single case without blocking later cases", async () => {
     const cases = [baseCase({ id: "slow", timeoutMs: 10 }), baseCase({ id: "fast" })];
     const executor: EvalExecutor = {
@@ -168,6 +220,51 @@ describe("runEvalCases", () => {
     expect(report.cases[0]).toMatchObject({ passed: false, failures: ["executor error: boom"], failureCodes: ["executor_error"] });
     expect(report.cases[1]).toMatchObject({ passed: true, failures: [] });
   });
+
+  it("reports product eval proof metadata and checks required evidence plus forbidden claims", async () => {
+    const report = await runEvalCases(
+      [
+        baseCase({
+          id: "product-case",
+          proves: "trajectory records a successful file_write call",
+          doesNotProve: "the model can solve arbitrary file editing tasks",
+          requiredEvidence: ["file_write", "ok"],
+          forbiddenClaims: ["uploaded to production"],
+        }),
+      ],
+      executorReturning(loopResult()),
+    );
+
+    expect(report.cases[0]).toMatchObject({
+      id: "product-case",
+      passed: true,
+      proves: "trajectory records a successful file_write call",
+      doesNotProve: "the model can solve arbitrary file editing tasks",
+      requiredEvidence: ["file_write", "ok"],
+      forbiddenClaims: ["uploaded to production"],
+      failures: [],
+    });
+  });
+
+  it("fails product eval cases with missing required evidence or forbidden claims", async () => {
+    const report = await runEvalCases(
+      [
+        baseCase({
+          id: "overclaim",
+          requiredEvidence: ["sha256:"],
+          forbiddenClaims: ["done"],
+        }),
+      ],
+      executorReturning(loopResult()),
+    );
+
+    expect(report.passed).toBe(0);
+    expect(report.cases[0].failures).toEqual([
+      "required evidence not found: sha256:",
+      "forbidden claim appeared in output/evidence: done",
+    ]);
+    expect(report.cases[0].failureCodes).toEqual(["evidence_missing", "forbidden_claim"]);
+  });
 });
 
 describe("buildEvalReport", () => {
@@ -189,6 +286,8 @@ describe("buildEvalReport", () => {
         failures: [],
         failureCodes: [],
         finalResponse: "ok",
+        requiredEvidence: [],
+        forbiddenClaims: [],
       },
     ], 100, "2026-01-01T00:00:00.000Z");
 

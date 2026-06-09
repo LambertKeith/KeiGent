@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { buildModel, redactConfig, resolveConfig } from "../config.js";
 
 describe("CLI config", () => {
@@ -9,6 +11,16 @@ describe("CLI config", () => {
   it("uses generic env API key with highest precedence", () => {
     const config = resolveConfig({ apiKey: "file-key" }, { KEIGENT_API_KEY: "env-key" }, "/tmp/keigent-home");
     expect(config.apiKey).toBe("env-key");
+  });
+
+  it("uses documented defaults when only a secret is provided", () => {
+    const config = resolveConfig({ apiKey: "file-key" }, {}, "/tmp/keigent-home");
+
+    expect(config.apiProtocol).toBe("openai");
+    expect(config.baseUrl).toBe("https://api.openai.com/v1");
+    expect(config.modelId).toBe("gpt-4o-mini");
+    expect(config.headless).toBe(false);
+    expect(config.maxIterations).toBe(12);
   });
 
   it("does not let an empty KEIGENT_API_KEY shadow a file API key", () => {
@@ -79,5 +91,20 @@ describe("CLI config", () => {
     const config = resolveConfig({ apiKey: "***" }, {}, "/tmp/keigent-home");
     expect(redactConfig(config)).toMatchObject({ apiKey: "[REDACTED]" });
     expect(JSON.stringify(redactConfig(config))).not.toContain("***");
+  });
+
+  it("keeps distributable config examples secret-safe and source-aware", async () => {
+    const repoRoot = resolve(process.cwd(), "../..");
+    const configExample = await readFile(resolve(repoRoot, "config.example.json"), "utf8");
+    const envExample = await readFile(resolve(repoRoot, ".env.example"), "utf8");
+
+    expect(configExample).not.toContain("sk-xxx");
+    expect(configExample).toContain('"apiKey": ""');
+    expect(configExample).toContain('"apiProtocol": "openai"');
+    expect(configExample).toContain('"baseUrl": "https://api.openai.com/v1"');
+    expect(envExample).not.toContain("sk-");
+    expect(envExample).toContain("KEIGENT_API_KEY=");
+    expect(envExample).toContain("KEIGENT_API_PROTOCOL=");
+    expect(envExample).toContain("KEIGENT_MODEL_ID=");
   });
 });

@@ -1,3 +1,5 @@
+import { redactValue } from "../shared/redaction.js";
+
 export type ConfigStatus = "ready" | "needs_attention" | "invalid";
 export type ModelApiProtocol = "openai" | "anthropic";
 
@@ -13,6 +15,34 @@ export interface ConfigPageView {
   status: ConfigStatus;
   fields: ConfigFieldView[];
   doctorIssues: { code: string; severity: "info" | "warning" | "error"; message: string }[];
+  offlineDoctor?: DoctorPanelView;
+  onlineDoctor?: OnlineDoctorView;
+}
+
+export interface ConfigFieldInput {
+  label: string;
+  effectiveValue: unknown;
+  source: ConfigFieldView["source"];
+  secret?: boolean;
+  issues?: string[];
+}
+
+export interface DoctorPanelView {
+  mode: "offline";
+  status: ConfigStatus;
+  issues: ConfigPageView["doctorIssues"];
+}
+
+export interface OnlineDoctorView {
+  enabled: boolean;
+  requiresExplicitAction: boolean;
+  label: string;
+}
+
+export interface NormalizeConfigPageOptions {
+  fields: ConfigFieldInput[];
+  doctorIssues: ConfigPageView["doctorIssues"];
+  onlineDoctorRequested?: boolean;
 }
 
 export function deriveConfigStatus(view: Pick<ConfigPageView, "fields" | "doctorIssues">): ConfigStatus {
@@ -23,6 +53,34 @@ export function deriveConfigStatus(view: Pick<ConfigPageView, "fields" | "doctor
 
 export function protocolLabel(protocol: ModelApiProtocol): string {
   return protocol === "anthropic" ? "Anthropic Messages compatible" : "OpenAI Chat Completions compatible";
+}
+
+export function normalizeConfigPageView(options: NormalizeConfigPageOptions): ConfigPageView {
+  const fields = options.fields.map((field): ConfigFieldView => ({
+    label: field.label,
+    effectiveValue: String(field.secret ? redactValue(field.label, field.effectiveValue) : redactValue(field.label, field.effectiveValue)),
+    source: field.source,
+    ...(field.secret !== undefined ? { secret: field.secret } : {}),
+    issues: field.issues ?? [],
+  }));
+  const status = deriveConfigStatus({ fields, doctorIssues: options.doctorIssues });
+  const onlineEnabled = options.onlineDoctorRequested === true;
+
+  return {
+    status,
+    fields,
+    doctorIssues: options.doctorIssues,
+    offlineDoctor: {
+      mode: "offline",
+      status,
+      issues: options.doctorIssues,
+    },
+    onlineDoctor: {
+      enabled: onlineEnabled,
+      requiresExplicitAction: !onlineEnabled,
+      label: onlineEnabled ? "Online doctor requested" : "Online doctor requires explicit action",
+    },
+  };
 }
 
 export const SAMPLE_CONFIG_VIEW: ConfigPageView = {

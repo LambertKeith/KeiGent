@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createEngineWorkflowChildRunner, type EngineWorkflowRunner } from "../workflow/engine-child-runner.js";
 import type { LoopProfile, LoopResult, SkillContext, StateCapture, Task } from "../types.js";
 import type { ToolRegistry } from "../tools/index.js";
+import type { ToolDef } from "../tools/types.js";
 
 function task(overrides: Partial<Task> = {}): Task {
   return { goal: "Do the thing", profile: "auto", ...overrides };
@@ -38,6 +39,67 @@ function skillContext(): SkillContext {
   };
 }
 
+function registryWithPolicyTools(): ToolRegistry {
+  const defs: ToolDef[] = [
+    {
+      name: "file_read",
+      description: "read",
+      parameters: {},
+      permission: "readonly",
+      riskLevel: "R0",
+      sideEffect: "none",
+      reversible: true,
+      async execute() {
+        return { content: "read", isError: false };
+      },
+    } as ToolDef,
+    {
+      name: "file_write",
+      description: "write",
+      parameters: {},
+      permission: "write",
+      riskLevel: "R2",
+      sideEffect: "local",
+      reversible: true,
+      async execute() {
+        return { content: "write", isError: false };
+      },
+    } as ToolDef,
+    {
+      name: "shell",
+      description: "shell",
+      parameters: {},
+      permission: "execute",
+      riskLevel: "R3",
+      sideEffect: "local",
+      reversible: true,
+      async execute() {
+        return { content: "shell", isError: false };
+      },
+    } as ToolDef,
+    {
+      name: "http_request",
+      description: "http",
+      parameters: {},
+      permission: "readonly",
+      riskLevel: "R1",
+      sideEffect: "external",
+      reversible: true,
+      async execute() {
+        return { content: "http", isError: false };
+      },
+    } as ToolDef,
+  ];
+
+  return {
+    toPiAiTools(filter?: (tool: ToolDef) => boolean) {
+      return defs
+        .filter((toolDef) => (filter ? filter(toolDef) : true))
+        .map((toolDef) => ({ name: toolDef.name, description: toolDef.description, parameters: toolDef.parameters }));
+    },
+  } as unknown as ToolRegistry;
+}
+
 const profile = {
   name: "convergent-exec",
   attention: { reset: () => {}, matchSkills: () => [], renderInjection: async () => "", buildContext: async () => ({ messages: [] }) },
@@ -52,7 +114,7 @@ describe("createEngineWorkflowChildRunner", () => {
     const selectedProfiles: string[] = [];
     const engineMaxIterations: Array<number | undefined> = [];
     const engineTasks: Task[] = [];
-    const progressKinds: string[] = [];
+    const progressEvents: unknown[] = [];
     const registry = {
       toPiAiTools() {
         return [
@@ -65,7 +127,17 @@ describe("createEngineWorkflowChildRunner", () => {
       orchestrator: {
         async selectProfile(runTask) {
           selectedProfiles.push(runTask.profile);
-          return { name: "convergent-exec", profile, method: "rule" as const };
+          const selection = {
+            name: "convergent-exec" as const,
+            profile,
+            method: "rule" as const,
+            ruleId: "skill_match" as const,
+            rationale: "matched file workflow",
+            signals: ["skill:file-write", "score:12"],
+            guardApplied: false,
+            unguardedName: "convergent-exec" as const,
+          };
+          return selection;
         },
       },
       createEngine(maxIterations) {
@@ -81,14 +153,14 @@ describe("createEngineWorkflowChildRunner", () => {
       registry,
       skillContext: skillContext(),
       stateCapture: {} as StateCapture,
-      onProfileSelected: (selection) => progressKinds.push(`profile:${selection.name}:${selection.method}`),
+      onProfileSelected: (selection) => progressEvents.push({ callback: selection.name }),
     });
 
     const childResult = await runner.runChild(
       { id: "wf-1:worker-1", role: "worker", task: task(), policy: undefined },
       {
         maxIterations: 3,
-        onProgress: (event) => progressKinds.push(event.kind),
+        onProgress: (event) => progressEvents.push(event),
       },
     );
 
@@ -97,7 +169,20 @@ describe("createEngineWorkflowChildRunner", () => {
     expect(engineMaxIterations).toEqual([3]);
     expect(engineTasks).toHaveLength(1);
     expect(engineTasks[0]).toMatchObject({ goal: "Do the thing", profile: "convergent-exec" });
-    expect(progressKinds).toEqual(["profile:convergent-exec:rule", "text"]);
+    expect(progressEvents).toEqual([
+      { callback: "convergent-exec" },
+      {
+        kind: "profile_selected",
+        profile: "convergent-exec",
+        via: "rule",
+        ruleId: "skill_match",
+        rationale: "matched file workflow",
+        signals: ["skill:file-write", "score:12"],
+        guardApplied: false,
+        unguardedProfile: "convergent-exec",
+      },
+      { kind: "text", iteration: 1, text: "tools:file_read,shell" },
+    ]);
   });
 
   it("passes the workflow AbortSignal to the engine run", async () => {
@@ -133,5 +218,59 @@ describe("createEngineWorkflowChildRunner", () => {
     );
 
     expect(seenSignals).toEqual([controller.signal]);
+  });
+
+  it("filters child tools by workflow policy and forwards inherited approval scopes", async () => {
+    const toolNamesByRun: string[][] = [];
+    const inheritedScopes: Array<string[] | undefined> = [];
+    const runner = createEngineWorkflowChildRunner({
+      orchestrator: {
+        async selectProfile() {
+          return { name: "convergent-exec", profile, method: "rule" as const };
+        },
+      },
+      createEngine() {
+        return {
+          async run(_task, _skills, _profile, _stateCapture, availableTools, _onProgress, options?: { inheritedApprovalScopes?: string[] }) {
+            toolNamesByRun.push(availableTools.map((tool) => tool.name));
+            inheritedScopes.push(options?.inheritedApprovalScopes);
+            return loopResult();
+          },
+        } satisfies EngineWorkflowRunner;
+      },
+      registry: registryWithPolicyTools(),
+      skillContext: skillContext(),
+      stateCapture: {} as StateCapture,
+    });
+
+    await runner.runChild({
+      id: "wf-1:worker-1",
+      role: "worker",
+      task: task(),
+      policy: {
+        maxPermission: "write",
+        maxRiskLevel: "R2",
+        allowExternalSideEffects: false,
+        approvalScopes: ["workspace:/tmp/keigent"],
+      },
+    });
+
+    await runner.runChild({
+      id: "wf-1:verifier-1",
+      role: "verifier",
+      task: task(),
+      policy: {
+        maxPermission: "dangerous",
+        maxRiskLevel: "R5",
+        allowExternalSideEffects: true,
+        verifierReadonly: true,
+      },
+    });
+
+    expect(toolNamesByRun).toEqual([
+      ["file_read", "file_write"],
+      ["file_read"],
+    ]);
+    expect(inheritedScopes).toEqual([["workspace:/tmp/keigent"], undefined]);
   });
 });

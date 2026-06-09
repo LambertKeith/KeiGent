@@ -15,6 +15,9 @@ export const checkpointTool: ToolDef = {
   name: CHECKPOINT_TOOL_NAME,
   description: "声明当前步骤已完成，请求引擎进行独立验证（checkpoint 信号）",
   permission: "readonly",
+  riskLevel: "R0",
+  sideEffect: "none",
+  reversible: true,
   parameters: Type.Object({
     checkpoint_desc: Type.String({ description: "当前完成的节点描述" }),
   }),

@@ -25,6 +25,9 @@ export const fileReadTool: ToolDef = {
   name: "file_read",
   description: "读取 workspace 内的文件内容（相对路径，10MB 上限）",
   permission: "readonly",
+  riskLevel: "R0",
+  sideEffect: "none",
+  reversible: true,
   concurrencySafe: true,
   parameters: Type.Object({
     path: Type.String({ description: "相对 workspace 的文件路径" }),
@@ -48,6 +51,9 @@ export const fileWriteTool: ToolDef = {
   name: "file_write",
   description: "写入文件到 workspace（创建或覆盖，自动建父目录）",
   permission: "write",
+  riskLevel: "R1",
+  sideEffect: "local",
+  reversible: true,
   parameters: Type.Object({
     path: Type.String({ description: "相对 workspace 的文件路径" }),
     content: Type.String({ description: "文件内容" }),
@@ -71,6 +77,9 @@ export const fileListTool: ToolDef = {
   name: "file_list",
   description: "列出 workspace 内目录的文件",
   permission: "readonly",
+  riskLevel: "R0",
+  sideEffect: "none",
+  reversible: true,
   concurrencySafe: true,
   parameters: Type.Object({
     path: Type.Optional(Type.String({ description: "相对 workspace 的目录路径（默认根）" })),
@@ -93,6 +102,9 @@ export const grepTool: ToolDef = {
   name: "grep",
   description: "在 workspace 内按正则搜索文件内容，返回 path:line:text",
   permission: "readonly",
+  riskLevel: "R0",
+  sideEffect: "none",
+  reversible: true,
   concurrencySafe: true,
   parameters: Type.Object({
     pattern: Type.String({ description: "正则表达式" }),

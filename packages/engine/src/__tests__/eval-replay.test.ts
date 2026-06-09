@@ -3,11 +3,16 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_EVAL_CASES } from "../evals/cases.js";
-import { createTrajectoryReplayExecutor, createTrajectoryReplayExecutorFromFiles, loopResultFromTrajectory } from "../evals/replay.js";
+import {
+  createTrajectoryReplayExecutor,
+  createTrajectoryReplayExecutorFromFiles,
+  loadReplayFixtureSet,
+  loopResultFromTrajectory,
+} from "../evals/replay.js";
 import { runEvalCases } from "../evals/runner.js";
 import type { Trajectory } from "../types.js";
 
-const replayCase = DEFAULT_EVAL_CASES.find((c) => c.id === "smoke-tool-file-write")!;
+const replayCase = DEFAULT_EVAL_CASES.find((c) => c.id === "file-write-success")!;
 
 const trajectory = (overrides: Partial<Trajectory> = {}): Trajectory => ({
   task: replayCase.task,
@@ -76,5 +81,35 @@ describe("trajectory replay eval executor", () => {
 
     expect(report.passed).toBe(1);
     expect(report.cases[0].selectedProfile).toBe("convergent-exec");
+  });
+
+  it("loads the checked-in replay fixture set and marks report cases as replay mode", async () => {
+    const fixtureSet = await loadReplayFixtureSet();
+    const report = await runEvalCases(fixtureSet.cases, fixtureSet.executor);
+
+    expect(fixtureSet.cases.length).toBeGreaterThanOrEqual(20);
+    expect(report.total).toBeGreaterThanOrEqual(20);
+    expect(report.passed).toBe(report.total);
+    expect(report.executionModes).toEqual({ replay: report.total });
+    expect(report.cases.every((evalCase) => evalCase.executionMode === "replay")).toBe(true);
+
+    for (const evalCase of fixtureSet.cases) {
+      expect(evalCase.proves, `${evalCase.id} must state replay proves`).toBeTruthy();
+      expect(evalCase.doesNotProve, `${evalCase.id} must state replay doesNotProve`).toContain("live");
+    }
+  });
+
+  it("invalid replay JSON becomes an executor failure instead of aborting fixture loading", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "keigent-replay-invalid-"));
+    const path = join(dir, "trajectory.json");
+    await writeFile(path, "{not-json", "utf8");
+
+    const executor = await createTrajectoryReplayExecutorFromFiles({ pathsByCaseId: { [replayCase.id]: path } });
+    const report = await runEvalCases([replayCase], executor);
+
+    expect(report.passed).toBe(0);
+    expect(report.cases[0].executionMode).toBe("replay");
+    expect(report.cases[0].failureCodes).toEqual(["executor_error"]);
+    expect(report.cases[0].failures[0]).toContain("invalid replay trajectory");
   });
 });

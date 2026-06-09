@@ -7,7 +7,7 @@ import {
   loadSkillContext,
   makeRegistry,
   buildDefaultRegistry,
-  AllowAllGate,
+  DenyByDefaultGate,
   WorkflowRunner,
   createEngineWorkflowChildRunner,
   createWorkflowSpec,
@@ -15,11 +15,11 @@ import {
 } from "@keigent/engine";
 import { loadConfig, buildModel } from "./config.js";
 import { persistWorkflowAndLearn } from "./post-run.js";
-import { renderProgress, renderWorkflowProgress, printResponse, printError, printInfo } from "./renderer.js";
+import { renderWorkflowProgress, printResponse, printError, printInfo } from "./renderer.js";
 
 /**
  * 单次执行模式：keigent run "任务" 或 keigent "任务"。
- * 非交互场景（脚本、CI、管道）用。dangerous 工具自动放行（AllowAllGate）。
+ * 非交互场景（脚本、CI、管道）用。需要审批的高风险工具默认拒绝。
  */
 export async function runOnce(goal: string): Promise<void> {
   try {
@@ -51,7 +51,6 @@ export async function runOnce(goal: string): Promise<void> {
         registry,
         skillContext,
         stateCapture,
-        onProfileSelected: (selection) => renderProgress({ kind: "profile_selected", profile: selection.name, via: selection.method }),
         createEngine(maxIterations) {
           return new LoopEngine({
             model,
@@ -59,7 +58,7 @@ export async function runOnce(goal: string): Promise<void> {
             maxIterations: maxIterations ?? config.maxIterations,
             registry,
             workspace: config.workspace,
-            approval: new AllowAllGate(),
+            approval: new DenyByDefaultGate(),
             headless: config.headless,
           });
         },

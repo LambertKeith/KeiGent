@@ -1,6 +1,7 @@
 import type { Tool as PiAiTool } from "@earendil-works/pi-ai";
-import type { ToolContext, ToolDef, ToolResult } from "./types.js";
+import type { ApprovalRequest, ToolContext, ToolDef, ToolResult } from "./types.js";
 import { err } from "./types.js";
+import { redactObject } from "../redaction.js";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_OUTPUT = 30_000;
@@ -70,14 +71,20 @@ export class ToolRegistry {
       return err(`工具 ${name} aborted`);
     }
 
-    // dangerous 工具过审批门
-    if (tool.permission === "dangerous") {
-      const approved = await ctx.approval.request(name, args);
+    // 需要审批的工具统一过审批门；non-interactive gate 可按风险拒绝。
+    if (requiresApproval(tool)) {
+      const approval = buildApprovalRequest(tool, args, ctx);
+      const approved = await ctx.approval.request(approval);
+      ctx.onApprovalDecision?.({
+        request: redactApprovalRequest(approval),
+        approved,
+        decidedAt: new Date().toISOString(),
+      });
       if (ctx.signal?.aborted) {
         return err(`工具 ${name} aborted`);
       }
       if (!approved) {
-        return err(`工具 ${name} 未获授权，已拒绝执行`);
+        return err(`工具 ${name} 未获授权，已拒绝执行（risk=${tool.riskLevel}, permission=${tool.permission}）`);
       }
     }
 
@@ -102,6 +109,50 @@ export class ToolRegistry {
 
     return result;
   }
+}
+
+function requiresApproval(tool: ToolDef): boolean {
+  return tool.permission === "dangerous" || tool.riskLevel === "R3" || tool.riskLevel === "R4" || tool.riskLevel === "R5";
+}
+
+function buildApprovalRequest(tool: ToolDef, args: Record<string, unknown>, ctx: ToolContext): ApprovalRequest {
+  return {
+    toolName: tool.name,
+    args,
+    permission: tool.permission,
+    riskLevel: tool.riskLevel,
+    sideEffect: tool.sideEffect,
+    reversible: tool.reversible,
+    action: `执行工具 ${tool.name}`,
+    targetResource: `workspace:${ctx.workspace}`,
+    evidenceRequired: evidenceFor(tool),
+    exposesSecrets: exposesSecrets(args),
+  };
+}
+
+function redactApprovalRequest(request: ApprovalRequest): ApprovalRequest {
+  return {
+    ...request,
+    args: redactObject(request.args),
+  };
+}
+
+function evidenceFor(tool: ToolDef): string[] {
+  if (tool.riskLevel === "R0") return [];
+  if (tool.name.startsWith("file_")) return ["file path", "tool result"];
+  if (tool.name.startsWith("browser_")) return ["current URL", "DOM/text state", "tool result"];
+  if (tool.name === "shell") return ["command", "exit code", "stdout/stderr excerpt"];
+  if (tool.permission === "dangerous") return ["approval decision", "post-action observation"];
+  return ["tool result"];
+}
+
+function exposesSecrets(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    if (/key|token|secret|password|authorization/i.test(key)) return true;
+    if (exposesSecrets(nested)) return true;
+  }
+  return false;
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string, signal?: AbortSignal): Promise<T> {

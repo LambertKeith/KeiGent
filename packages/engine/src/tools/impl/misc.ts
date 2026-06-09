@@ -6,6 +6,9 @@ export const currentTimeTool: ToolDef = {
   name: "get_current_time",
   description: "获取当前时间，返回 ISO 8601 格式字符串",
   permission: "readonly",
+  riskLevel: "R0",
+  sideEffect: "none",
+  reversible: true,
   concurrencySafe: true,
   parameters: Type.Object({}),
   async execute() {

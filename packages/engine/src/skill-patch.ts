@@ -26,6 +26,12 @@ export async function applyPatches(
   skillsDir: string,
   trajectoryId: string,
 ): Promise<string[]> {
+  for (const patch of patches) {
+    if (patch.promoteToActive && (!patch.evalCoverage || patch.evalCoverage.length === 0)) {
+      throw new Error("promotion requires eval coverage");
+    }
+  }
+
   // 按 skillName 分组
   const bySkill = new Map<string, SkillPatch[]>();
   for (const p of patches) {
@@ -43,7 +49,13 @@ export async function applyPatches(
       existing = await readFile(learningPath, "utf-8");
     } catch {
       // 首次创建
-      existing = `# ${skillName} — Learning Log\n\n> 本文件由学习 loop 自动生成。记录执行经验，供 SKILL.md 改进参考。\n`;
+      existing = [
+        `# ${skillName} — Learning Log`,
+        "",
+        "> 本文件由学习 loop 自动生成。记录执行经验，供 SKILL.md 改进参考。",
+        "> status: learned-note-only",
+        "",
+      ].join("\n");
     }
 
     const timestamp = new Date().toISOString();
@@ -54,6 +66,10 @@ export async function applyPatches(
       const sectionHeader = SECTION_HEADERS[patch.section] ?? `## ${patch.section}`;
 
       additions += `\n${sectionHeader}\n\n`;
+      additions += `> status: ${patch.learningStatus ?? "learned-note-only"}\n`;
+      if (patch.evalCoverage && patch.evalCoverage.length > 0) {
+        additions += `> evalCoverage: ${patch.evalCoverage.join(", ")}\n`;
+      }
       additions += `> **理由**: ${patch.rationale}\n\n`;
       additions += patch.content;
       additions += "\n";

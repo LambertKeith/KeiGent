@@ -8,6 +8,7 @@ import type {
   RecoverDecision,
   RecoverStrategy,
   SkillContext,
+  SkillMatchExplanation,
   SkillMeta,
   StateSnapshot,
   SuccessDef,
@@ -34,6 +35,7 @@ const CN_EN_CONCEPTS: Record<string, string[]> = {
   表格: ["table"],
   网页: ["web", "webpage", "page"],
   页面: ["page", "web"],
+  打开: ["open", "navigate", "browser"],
   填写: ["fill", "form"],
   下载: ["download"],
 };
@@ -85,6 +87,56 @@ export function scoreSkill(meta: SkillMeta, goal: string): number {
   }
 
   return score;
+}
+
+export function explainSkillMatches(task: Task, metas: SkillMeta[], matchedNames: string[]): SkillMatchExplanation[] {
+  const matched = new Set(matchedNames);
+  return metas.map((meta) => {
+    const score = scoreSkill(meta, task.goal);
+    const isMatched = matched.has(meta.name);
+    const executable = meta.status === undefined || meta.status === "active" || meta.status === "promoted";
+    return {
+      name: meta.name,
+      status: meta.status,
+      score,
+      signals: skillSignals(meta, task.goal),
+      matched: isMatched,
+      injected: isMatched && executable,
+      ...(meta.evalCoverage ? { evalCoverage: meta.evalCoverage } : {}),
+      ...(!executable
+        ? { exclusionReason: "status_not_executable" as const }
+        : isMatched
+          ? {}
+          : { exclusionReason: score <= 0 ? "score_below_threshold" as const : "lower_ranked" as const }),
+    };
+  });
+}
+
+function skillSignals(meta: SkillMeta, goal: string): string[] {
+  const signals: string[] = [];
+  const lowerGoal = goal.toLowerCase();
+  if (lowerGoal.includes(meta.name.toLowerCase())) signals.push("name");
+
+  const concepts = goalConcepts(goal);
+  for (const tag of meta.tags) {
+    if (concepts.has(tag.toLowerCase())) signals.push(`tag:${tag}`);
+  }
+
+  const stop = new Set(["the", "use", "this", "when", "user", "wants", "from", "and", "any", "for", "that", "into", "out"]);
+  for (const word of new Set(meta.description.toLowerCase().match(/[a-z]{3,}/g) ?? [])) {
+    if (!stop.has(word) && concepts.has(word)) signals.push(`description:${word}`);
+  }
+
+  return signals;
+}
+
+function goalConcepts(goal: string): Set<string> {
+  const concepts = new Set<string>();
+  for (const [cn, ens] of Object.entries(CN_EN_CONCEPTS)) {
+    if (goal.includes(cn)) ens.forEach((e) => concepts.add(e));
+  }
+  for (const word of goal.toLowerCase().match(/[a-z]{3,}/g) ?? []) concepts.add(word);
+  return concepts;
 }
 
 /** 按相关度排序的 skill 名（只返回 score > 0 的）。 */

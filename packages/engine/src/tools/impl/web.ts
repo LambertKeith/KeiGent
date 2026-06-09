@@ -11,6 +11,9 @@ export const webFetchTool: ToolDef = {
   name: "web_fetch",
   description: "抓取指定 URL 的网页内容，返回标题和正文文本",
   permission: "readonly",
+  riskLevel: "R0",
+  sideEffect: "none",
+  reversible: true,
   concurrencySafe: true,
   parameters: Type.Object({
     url: Type.String({ description: "要抓取的网页 URL" }),
@@ -50,6 +53,9 @@ export const httpRequestTool: ToolDef = {
   name: "http_request",
   description: "发送 HTTP 请求（支持 method/headers/body），返回状态码和响应体",
   permission: "execute",
+  riskLevel: "R3",
+  sideEffect: "external",
+  reversible: false,
   maxOutputChars: 50_000,
   parameters: Type.Object({
     url: Type.String({ description: "请求 URL" }),

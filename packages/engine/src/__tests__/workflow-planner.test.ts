@@ -28,6 +28,27 @@ describe("workflow planner", () => {
     expect(spec.mode).toBe("verified-loop");
   });
 
+  it("requires success assertions for reviewed-loop and gives it a two-child default budget", () => {
+    expect(() => createWorkflowSpec({ id: "wf-reviewed-missing", task: task(), mode: "reviewed-loop" })).toThrow(
+      "reviewed-loop requires successDef assertions",
+    );
+
+    const spec = createWorkflowSpec({
+      id: "wf-reviewed",
+      task: task({
+        successDef: {
+          goal: "Review rubric",
+          assertions: [{ description: "reviewer accepts result", signal: "text" }],
+        },
+      }),
+      mode: "reviewed-loop",
+    });
+
+    expect(spec.mode).toBe("reviewed-loop");
+    expect(spec.budget.maxChildRuns).toBeGreaterThanOrEqual(2);
+    expect(spec.policy).toMatchObject({ verifierReadonly: true, allowExternalSideEffects: false });
+  });
+
   it("applies default budget values", () => {
     const spec = createWorkflowSpec({ id: "wf-1", task: task() });
 

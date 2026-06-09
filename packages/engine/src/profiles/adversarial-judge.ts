@@ -1,5 +1,6 @@
 import { vlog, vwarn } from "../logger.js";
 import { complete, type Api, type Model, Type } from "@earendil-works/pi-ai";
+import { describeAssertion } from "../assertions.js";
 import type {
   AssertionResult,
   SkillContext,
@@ -44,7 +45,7 @@ async function runSingleJudge(
   judgeIndex: number,
 ): Promise<{ passed: boolean; evidence: string; perAssertion: AssertionResult[] }> {
   const assertionsText = successDef?.assertions
-    .map((a, i) => `${i + 1}. [signal:${a.signal}] ${a.description}`)
+    .map((a, i) => `${i + 1}. ${describeAssertion(a)}`)
     .join("\n") ?? "（无具体断言，依据目标和快照整体判断）";
 
   const snapshotText = [
@@ -118,7 +119,7 @@ ${snapshotText || "（无快照信息）"}
   };
 
   const perAssertion: AssertionResult[] = (args.per_assertion ?? []).map((a, i) => ({
-    assertion: successDef?.assertions[i] ?? { description: a.description, signal: "text" },
+    assertion: successDef?.assertions[i] ?? { kind: "legacySignal", description: a.description, signal: "text" },
     passed: a.passed,
     evidence: a.evidence,
   }));

@@ -26,6 +26,9 @@ export const browserNavigateTool: ToolDef = {
   name: "browser_navigate",
   description: "在浏览器中打开指定 URL",
   permission: "execute",
+  riskLevel: "R2",
+  sideEffect: "local",
+  reversible: true,
   parameters: Type.Object({
     url: Type.String({ description: "要打开的网页 URL" }),
   }),
@@ -44,6 +47,9 @@ export const browserSnapshotTool: ToolDef = {
   name: "browser_snapshot",
   description: "扫描当前页面的可交互元素，返回带 ref 编号的列表。后续用 browser_click/browser_type 引用 ref 操作元素（无需猜坐标）",
   permission: "readonly",
+  riskLevel: "R0",
+  sideEffect: "none",
+  reversible: true,
   parameters: Type.Object({}),
   async execute(_args, ctx) {
     try {
@@ -59,6 +65,9 @@ export const browserClickTool: ToolDef = {
   name: "browser_click",
   description: "点击页面元素。target 可以是 browser_snapshot 返回的 ref（如 e3）或 CSS 选择器",
   permission: "execute",
+  riskLevel: "R2",
+  sideEffect: "local",
+  reversible: true,
   parameters: Type.Object({
     target: Type.String({ description: "元素的 ref（如 e3）或 CSS 选择器" }),
   }),
@@ -77,6 +86,9 @@ export const browserTypeTool: ToolDef = {
   name: "browser_type",
   description: "在输入框中填入文本。target 为 ref 或选择器",
   permission: "execute",
+  riskLevel: "R2",
+  sideEffect: "local",
+  reversible: true,
   parameters: Type.Object({
     target: Type.String({ description: "输入框的 ref 或 CSS 选择器" }),
     text: Type.String({ description: "要输入的文本" }),
@@ -97,6 +109,9 @@ export const browserPressTool: ToolDef = {
   name: "browser_press",
   description: "按下键盘按键（如 Enter、Tab、Escape、ArrowDown）",
   permission: "execute",
+  riskLevel: "R2",
+  sideEffect: "local",
+  reversible: true,
   parameters: Type.Object({
     key: Type.String({ description: "按键名（Enter/Tab/Escape/ArrowDown 等）" }),
   }),
@@ -115,6 +130,9 @@ export const browserGetTextTool: ToolDef = {
   name: "browser_get_text",
   description: "读取页面或指定元素的文本内容。不传 target 则返回整页正文",
   permission: "readonly",
+  riskLevel: "R0",
+  sideEffect: "none",
+  reversible: true,
   parameters: Type.Object({
     target: Type.Optional(Type.String({ description: "元素 ref 或选择器（可选）" })),
   }),
@@ -133,6 +151,9 @@ export const browserScreenshotTool: ToolDef = {
   name: "browser_screenshot",
   description: "对当前页面截图，返回图像（供视觉判断页面状态）",
   permission: "readonly",
+  riskLevel: "R0",
+  sideEffect: "none",
+  reversible: true,
   parameters: Type.Object({}),
   async execute(_args, ctx) {
     try {
@@ -148,6 +169,9 @@ export const browserScrollTool: ToolDef = {
   name: "browser_scroll",
   description: "滚动页面",
   permission: "execute",
+  riskLevel: "R2",
+  sideEffect: "local",
+  reversible: true,
   parameters: Type.Object({
     direction: Type.Union([Type.Literal("up"), Type.Literal("down")], { description: "滚动方向" }),
     amount: Type.Optional(Type.Number({ description: "滚动像素（默认 600）" })),
@@ -167,6 +191,9 @@ export const browserWaitTool: ToolDef = {
   name: "browser_wait",
   description: "等待某个元素出现",
   permission: "readonly",
+  riskLevel: "R0",
+  sideEffect: "none",
+  reversible: true,
   parameters: Type.Object({
     target: Type.String({ description: "等待的元素 ref 或选择器" }),
     timeout_ms: Type.Optional(Type.Number({ description: "超时毫秒（默认 8000）" })),

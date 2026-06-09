@@ -1,7 +1,8 @@
 import type { ExitReason, LoopResult, ProgressEvent, Task, Trajectory } from "../types.js";
-import type { PermissionLevel } from "../tools/types.js";
+import type { FailureSummary } from "../failures.js";
+import type { PermissionLevel, RiskLevel } from "../tools/types.js";
 
-export type ExecutionMode = "single-loop" | "verified-loop";
+export type ExecutionMode = "single-loop" | "verified-loop" | "reviewed-loop";
 
 export type WorkflowExitReason =
   | "success"
@@ -23,11 +24,19 @@ export interface WorkflowBudget {
 }
 
 export interface WorkflowPolicy {
-  /** P0 reserved: policy is attached to ChildRunSpec for downstream child runners; WorkflowRunner itself does not enforce it yet. */
+  /** Optional profile allow-list for child selection. */
   allowedProfiles?: string[];
-  /** P0 reserved: policy is attached to ChildRunSpec for downstream child runners; WorkflowRunner itself does not enforce it yet. */
+  /** Maximum tool permission exposed to child runs. */
   maxPermission?: PermissionLevel;
-  /** P0 reserved: policy is attached to ChildRunSpec for downstream child runners; WorkflowRunner itself does not enforce it yet. */
+  /** Maximum tool risk exposed to child runs. */
+  maxRiskLevel?: RiskLevel;
+  /** Whether child runs may use tools with external side effects. Defaults to true. */
+  allowExternalSideEffects?: boolean;
+  /** Parent-approved resource scopes that may be inherited by child execution. */
+  approvalScopes?: string[];
+  /** Force verifier children to readonly/no-side-effect tools. */
+  verifierReadonly?: boolean;
+  /** P0 compatibility flag retained for existing callers. */
   requireApprovalForWrite?: boolean;
   /** P0 reserved: quarantine mode is not implemented in this envelope. */
   quarantineUntrustedInput?: boolean;
@@ -79,12 +88,12 @@ export type WorkflowEvent =
   | { kind: "child_event"; workflowId: string; childRunId: string; event: ProgressEvent }
   | { kind: "child_done"; workflowId: string; childRunId: string; exitReason: ExitReason }
   | { kind: "workflow_verdict"; workflowId: string; passed: boolean; evidence: WorkflowEvidence[] }
-  | { kind: "workflow_done"; workflowId: string; exitReason: WorkflowExitReason };
+  | { kind: "workflow_done"; workflowId: string; exitReason: WorkflowExitReason; failure?: FailureSummary };
 
 export type WorkflowProgressCallback = (event: WorkflowEvent) => void;
 
 export interface WorkflowEvidence {
-  kind: "checkpoint" | "policy" | "budget" | "child_result";
+  kind: "checkpoint" | "assertion" | "policy" | "budget" | "child_result";
   passed: boolean;
   message: string;
   sourceChildRunId?: string;
@@ -104,6 +113,7 @@ export interface WorkflowTrajectory {
   budget: WorkflowBudget;
   budgetUsage: WorkflowBudgetUsage;
   evidence: WorkflowEvidence[];
+  failure?: FailureSummary;
   events: WorkflowEvent[];
   childRuns: Array<{
     id: string;
@@ -124,4 +134,5 @@ export interface WorkflowResult {
   budgetUsage: WorkflowBudgetUsage;
   durationMs: number;
   trajectory: WorkflowTrajectory;
+  failure?: FailureSummary;
 }

@@ -1,7 +1,7 @@
 import type { Tool } from "@earendil-works/pi-ai";
 import type { LoopEngine } from "../engine.js";
-import type { Orchestrator, ProfileName } from "../orchestrator.js";
-import type { LoopProfile, LoopResult, ProgressCallback, SkillContext, StateCapture, Task } from "../types.js";
+import type { Orchestrator, ProfileName, ProfileSelectionRuleId } from "../orchestrator.js";
+import type { LoopProfile, LoopResult, ProgressCallback, ProgressEvent, SkillContext, StateCapture, Task } from "../types.js";
 import type { ToolRegistry } from "../tools/index.js";
 import { toolsForProfile } from "../tool-filter.js";
 import type { EvalCase, EvalExecution, EvalExecutor } from "./types.js";
@@ -10,6 +10,11 @@ export interface EngineProfileSelection {
   profile: LoopProfile;
   name: ProfileName;
   method: "rule" | "llm";
+  ruleId?: ProfileSelectionRuleId;
+  rationale?: string;
+  signals?: string[];
+  guardApplied?: boolean;
+  unguardedName?: ProfileName;
 }
 
 export interface EngineEvalOrchestrator {
@@ -36,6 +41,19 @@ export interface EngineEvalExecutorOptions {
   onProgress?: ProgressCallback;
 }
 
+export function profileSelectionToProgressEvent(selection: EngineProfileSelection): ProgressEvent {
+  return {
+    kind: "profile_selected",
+    profile: selection.name,
+    via: selection.method,
+    ...(selection.ruleId ? { ruleId: selection.ruleId } : {}),
+    ...(selection.rationale ? { rationale: selection.rationale } : {}),
+    ...(selection.signals ? { signals: selection.signals } : {}),
+    ...(selection.guardApplied !== undefined ? { guardApplied: selection.guardApplied } : {}),
+    ...(selection.unguardedName ? { unguardedProfile: selection.unguardedName } : {}),
+  };
+}
+
 /**
  * Build an EvalExecutor that runs the real KeiGent orchestration path:
  * Orchestrator → profile-specific tool filtering → LoopEngine → LoopResult.
@@ -48,7 +66,7 @@ export function createEngineEvalExecutor(opts: EngineEvalExecutorOptions): EvalE
   return {
     async run(evalCase: EvalCase): Promise<EvalExecution> {
       const selected = await opts.orchestrator.selectProfile(evalCase.task, opts.skillContext.metas);
-      opts.onProgress?.({ kind: "profile_selected", profile: selected.name, via: selected.method });
+      opts.onProgress?.(profileSelectionToProgressEvent(selected));
 
       // Keep the original fixture immutable-ish for report reproducibility while
       // giving LoopEngine/result trajectory the concrete selected profile name.

@@ -3,6 +3,7 @@ import type { WorkflowResult } from "@keigent/engine";
 
 const mocks = vi.hoisted(() => ({
   workflowRun: vi.fn(),
+  loopEngineOptions: [] as Array<Record<string, unknown>>,
   persistWorkflowAndLearn: vi.fn(async () => undefined),
   printError: vi.fn(),
   printInfo: vi.fn(),
@@ -39,12 +40,20 @@ vi.mock("@keigent/engine", () => {
   }
 
   class LoopEngine {
-    constructor(_opts: unknown) {}
+    constructor(opts: Record<string, unknown>) {
+      mocks.loopEngineOptions.push(opts);
+    }
   }
 
   class PlaywrightStateCapture {}
 
-  class AllowAllGate {}
+  class AllowAllGate {
+    readonly kind = "allow";
+  }
+
+  class DenyByDefaultGate {
+    readonly kind = "deny";
+  }
 
   return {
     WorkflowRunner,
@@ -53,11 +62,15 @@ vi.mock("@keigent/engine", () => {
     LoopEngine,
     PlaywrightStateCapture,
     AllowAllGate,
+    DenyByDefaultGate,
     closeBrowser: mocks.closeBrowser,
     loadSkillContext: vi.fn(async () => ({ metas: [], async loadBody() { return null; } })),
     makeRegistry: vi.fn(() => ({})),
     buildDefaultRegistry: vi.fn(() => ({})),
-    createEngineWorkflowChildRunner: vi.fn(() => ({ runChild: vi.fn() })),
+    createEngineWorkflowChildRunner: vi.fn((opts) => {
+      opts.createEngine(3);
+      return { runChild: vi.fn() };
+    }),
     createWorkflowSpec: vi.fn((spec) => spec),
   };
 });
@@ -104,6 +117,7 @@ describe("runOnce workflow exit semantics", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    mocks.loopEngineOptions = [];
     mocks.loadConfig.mockResolvedValue({
       apiKey: "test-key",
       apiProtocol: "openai",
@@ -139,6 +153,15 @@ describe("runOnce workflow exit semantics", () => {
     expect(process.exitCode).toBeUndefined();
     expect(mocks.printError).not.toHaveBeenCalledWith(expect.stringContaining("workflow failed"));
     expect(mocks.printResponse).toHaveBeenCalledWith("done");
+  });
+
+  it("uses a deny-by-default approval gate in one-shot mode", async () => {
+    mocks.workflowRun.mockResolvedValueOnce(workflowResult("success"));
+    const { runOnce } = await import("../run-once.js");
+
+    await runOnce("Do the thing");
+
+    expect(mocks.loopEngineOptions[0]?.approval).toMatchObject({ kind: "deny" });
   });
 
   it("sets a non-zero exit code when an unexpected exception escapes the workflow path", async () => {

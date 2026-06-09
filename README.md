@@ -41,9 +41,14 @@ KeiGent 因此采用：
 # 安装依赖
 corepack pnpm install
 
-# 配置 API key
+# 配置运行时参数（协议、模型、路径等）
+mkdir -p ~/.keigent
+cp config.example.json ~/.keigent/config.json
+# 编辑 ~/.keigent/config.json，按需设置协议、模型、路径等非密钥配置
+
+# 开发/CI 环境建议用环境变量注入密钥（优先级高于 config.json）
 cp .env.example .env.local
-# 编辑 .env.local，填入 KEIGENT_API_KEY=sk-xxx
+# 编辑 .env.local，填入 KEIGENT_API_KEY
 # 可选：KEIGENT_API_PROTOCOL=openai|anthropic
 # 可选：KEIGENT_BASE_URL=自定义兼容端点
 # 可选：KEIGENT_MODEL_ID=模型 ID
@@ -51,6 +56,12 @@ cp .env.example .env.local
 # 配置诊断（密钥会脱敏）
 corepack pnpm --filter @keigent/cli start doctor
 corepack pnpm --filter @keigent/cli start config show
+corepack pnpm --filter @keigent/cli start config path
+corepack pnpm --filter @keigent/cli start config set modelId gpt-4o-mini
+corepack pnpm --filter @keigent/cli start config unset modelId
+
+# 本地 Workbench（默认 localhost；只打印启动命令）
+corepack pnpm --filter @keigent/cli start web --print
 
 # 对话式 REPL
 corepack pnpm --filter @keigent/cli start
@@ -121,7 +132,14 @@ corepack pnpm --filter @keigent/cli start
 corepack pnpm --filter @keigent/cli start "任务描述"
 corepack pnpm --filter @keigent/cli start doctor
 corepack pnpm --filter @keigent/cli start doctor --json
+corepack pnpm --filter @keigent/cli start config init
 corepack pnpm --filter @keigent/cli start config show
+corepack pnpm --filter @keigent/cli start config path
+corepack pnpm --filter @keigent/cli start eval smoke
+corepack pnpm --filter @keigent/cli start eval orchestrator
+corepack pnpm --filter @keigent/cli start eval replay --trajectory smoke-conversational-hello=/path/to/trajectory.json
+corepack pnpm --filter @keigent/cli start replay /path/to/trajectory.json
+corepack pnpm --filter @keigent/cli start web --print
 
 # Engine 单项验证
 corepack pnpm --filter @keigent/engine verify:attention
@@ -152,6 +170,8 @@ Eval Harness 是 KeiGent 的工程化验收层，不新增 agent 行为，只负
 | `eval:replay` | 从已保存 trajectory 派生结果，离线重评历史轨迹 |
 | `eval:orchestrator` | 纯规则跑 fixture，验证 Orchestrator profile 选择零退化 |
 
+当前确定性 smoke suite 覆盖 57 个产品用例，其中 browser 类 10 个；orchestrator suite 覆盖 32 个路由 fixture。CLI 也提供 `keigent eval smoke/orchestrator/replay` 和 `keigent replay <trajectory>` 包装入口。
+
 重要边界：Eval pass 不等于产品完全可信；profile accuracy 不等于任务成功；tool attempted 不等于 tool succeeded；replay pass 不等于 fresh execution pass。
 
 ---
@@ -176,15 +196,23 @@ doc/references/          # 参考项目研读（hermes-agent、openhuman）
 
 ## 质量门
 
-合并主线前建议至少运行：
+合并主线前建议至少运行完整质量门：
 
 ```bash
-corepack pnpm --filter @keigent/cli test
+corepack pnpm --filter @keigent/engine check
+corepack pnpm --filter @keigent/cli check
+corepack pnpm --filter @keigent/web check
 corepack pnpm --filter @keigent/engine test
-corepack pnpm -r check
+corepack pnpm --filter @keigent/cli test
+corepack pnpm --filter @keigent/web test
 corepack pnpm --filter @keigent/engine eval:smoke
 corepack pnpm --filter @keigent/engine eval:orchestrator
+corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/eval-replay.test.ts
+corepack pnpm --filter @keigent/engine verify:browser
+git diff --check
 ```
+
+`eval:replay` 的 CLI 形式需要传入 `--trajectory case-id=/path/to/trajectory.json`；仓库内置 replay fixture 的回归由 `eval-replay.test.ts` 覆盖。
 
 ---
 

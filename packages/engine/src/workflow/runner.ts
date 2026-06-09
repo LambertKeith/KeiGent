@@ -1,4 +1,7 @@
-import type { LoopResult, ProgressEvent, Task, Trajectory } from "../types.js";
+import { describeAssertion, evaluateAssertions } from "../assertions.js";
+import { buildEvidenceBundle } from "../evidence.js";
+import { failureSummaryForWorkflowExit } from "../failures.js";
+import type { Assertion, LoopResult, ProgressEvent, Task, Trajectory } from "../types.js";
 import type {
   ChildRunResult,
   ChildRunSpec,
@@ -53,6 +56,10 @@ export class WorkflowRunner {
       });
     }
 
+    if (spec.mode === "reviewed-loop") {
+      return this.runReviewedLoop({ spec, startedAt, startMs, events, emit });
+    }
+
     const child: ChildRunSpec = {
       id: `${spec.id}:worker-1`,
       role: "worker",
@@ -60,34 +67,7 @@ export class WorkflowRunner {
       policy: spec.policy,
     };
 
-    emit({ kind: "child_start", workflowId: spec.id, childRunId: child.id, role: child.role });
-
-    let childResult: LoopResult;
-    let timedOut = false;
-    const abortController = new AbortController();
-    try {
-      childResult = await withTimeout(
-        this.childRunner.runChild(child, {
-          maxIterations: spec.budget.maxIterationsPerRun,
-          signal: abortController.signal,
-          onProgress: (event) => emit({ kind: "child_event", workflowId: spec.id, childRunId: child.id, event }),
-        }),
-        spec.budget.timeoutMs,
-        abortController,
-      );
-    } catch (error) {
-      timedOut = isTimeoutError(error);
-      childResult = makeSyntheticErrorLoopResult(spec.rootTask, timedOut ? "[workflow] timeout" : errorMessage(error));
-    }
-
-    const childRun: ChildRunResult = {
-      id: child.id,
-      role: child.role,
-      result: childResult,
-      trajectory: childResult.trajectory,
-    };
-
-    emit({ kind: "child_done", workflowId: spec.id, childRunId: child.id, exitReason: childResult.exitReason });
+    const { childRun, timedOut } = await this.executeChild(spec, child, emit);
 
     const durationMs = Date.now() - startMs;
     const budgetUsage = computeBudgetUsage([childRun], durationMs);
@@ -95,7 +75,7 @@ export class WorkflowRunner {
     const verification = evaluateVerification(spec, childRun);
     const mappedExit = timedOut
       ? "timeout"
-      : budgetFailure?.exitReason ?? mapChildExit(childResult.exitReason, spec, verification.passed);
+      : budgetFailure?.exitReason ?? mapChildExit(childRun.result.exitReason, spec, verification.passed);
 
     const budgetEvidenceItem = budgetFailure ? budgetEvidence(budgetFailure.message, budgetFailure.sourceChildRunId) : undefined;
     const workflowEvidence = [...verification.evidence, ...(budgetEvidenceItem ? [budgetEvidenceItem] : [])];
@@ -114,13 +94,117 @@ export class WorkflowRunner {
       startedAt,
       durationMs,
       exitReason: mappedExit,
-      finalResponse: childResult.finalResponse,
+      finalResponse: childRun.result.finalResponse,
       childRuns: [childRun],
       evidence: workflowEvidence,
       events,
       emit,
       budgetUsage,
     });
+  }
+
+  private async runReviewedLoop(input: {
+    spec: WorkflowSpec;
+    startedAt: string;
+    startMs: number;
+    events: WorkflowEvent[];
+    emit: (event: WorkflowEvent) => void;
+  }): Promise<WorkflowResult> {
+    const worker: ChildRunSpec = {
+      id: `${input.spec.id}:worker-1`,
+      role: "worker",
+      task: input.spec.rootTask,
+      policy: input.spec.policy,
+    };
+    const workerRun = await this.executeChild(input.spec, worker, input.emit);
+
+    const verifier: ChildRunSpec = {
+      id: `${input.spec.id}:verifier-1`,
+      role: "verifier",
+      task: {
+        ...input.spec.rootTask,
+        goal: `${input.spec.goal}\n\nReview worker result:\n${workerRun.childRun.result.finalResponse}`,
+      },
+      policy: {
+        ...input.spec.policy,
+        verifierReadonly: true,
+        allowExternalSideEffects: false,
+      },
+    };
+    const verifierRun = await this.executeChild(input.spec, verifier, input.emit);
+
+    const childRuns = [workerRun.childRun, verifierRun.childRun];
+    const durationMs = Date.now() - input.startMs;
+    const budgetUsage = computeBudgetUsage(childRuns, durationMs);
+    const budgetFailure = findBudgetFailure(input.spec, budgetUsage, childRuns);
+    const review = evaluateReviewedLoop(workerRun.childRun, verifierRun.childRun);
+    const timedOut = workerRun.timedOut || verifierRun.timedOut;
+    const exitReason = timedOut
+      ? "timeout"
+      : budgetFailure?.exitReason
+        ?? (workerRun.childRun.result.exitReason !== "success"
+          ? mapChildExit(workerRun.childRun.result.exitReason, input.spec, review.passed)
+          : verifierRun.childRun.result.exitReason !== "success"
+            ? mapChildExit(verifierRun.childRun.result.exitReason, input.spec, review.passed)
+            : review.passed ? "success" : "verified_failure");
+    const budgetEvidenceItem = budgetFailure ? budgetEvidence(budgetFailure.message, budgetFailure.sourceChildRunId) : undefined;
+    const workflowEvidence = [...review.evidence, ...(budgetEvidenceItem ? [budgetEvidenceItem] : [])];
+
+    input.emit({
+      kind: "workflow_verdict",
+      workflowId: input.spec.id,
+      passed: review.passed && !budgetFailure && !timedOut,
+      evidence: workflowEvidence,
+    });
+
+    return this.finish({
+      spec: input.spec,
+      startedAt: input.startedAt,
+      durationMs,
+      exitReason,
+      finalResponse: `${workerRun.childRun.result.finalResponse}\n\n[review]\n${verifierRun.childRun.result.finalResponse}`,
+      childRuns,
+      evidence: workflowEvidence,
+      events: input.events,
+      emit: input.emit,
+      budgetUsage,
+    });
+  }
+
+  private async executeChild(
+    spec: WorkflowSpec,
+    child: ChildRunSpec,
+    emit: (event: WorkflowEvent) => void,
+  ): Promise<{ childRun: ChildRunResult; timedOut: boolean }> {
+    emit({ kind: "child_start", workflowId: spec.id, childRunId: child.id, role: child.role });
+
+    let childResult: LoopResult;
+    let timedOut = false;
+    const abortController = new AbortController();
+    try {
+      childResult = await withTimeout(
+        this.childRunner.runChild(child, {
+          maxIterations: spec.budget.maxIterationsPerRun,
+          signal: abortController.signal,
+          onProgress: (event) => emit({ kind: "child_event", workflowId: spec.id, childRunId: child.id, event }),
+        }),
+        spec.budget.timeoutMs,
+        abortController,
+      );
+    } catch (error) {
+      timedOut = isTimeoutError(error);
+      childResult = makeSyntheticErrorLoopResult(child.task, timedOut ? "[workflow] timeout" : errorMessage(error));
+    }
+
+    const childRun: ChildRunResult = {
+      id: child.id,
+      role: child.role,
+      result: childResult,
+      trajectory: childResult.trajectory,
+    };
+
+    emit({ kind: "child_done", workflowId: spec.id, childRunId: child.id, exitReason: childResult.exitReason });
+    return { childRun, timedOut };
   }
 
   private finish(input: {
@@ -135,7 +219,8 @@ export class WorkflowRunner {
     emit: (event: WorkflowEvent) => void;
     budgetUsage?: WorkflowBudgetUsage;
   }): WorkflowResult {
-    input.emit({ kind: "workflow_done", workflowId: input.spec.id, exitReason: input.exitReason });
+    const failure = failureSummaryForWorkflowExit(input.exitReason);
+    input.emit({ kind: "workflow_done", workflowId: input.spec.id, exitReason: input.exitReason, ...(failure ? { failure } : {}) });
     const budgetUsage = input.budgetUsage ?? computeBudgetUsage(input.childRuns, input.durationMs);
     const trajectory: WorkflowTrajectory = {
       schemaVersion: 1,
@@ -150,6 +235,7 @@ export class WorkflowRunner {
       budget: input.spec.budget,
       budgetUsage,
       evidence: input.evidence,
+      ...(failure ? { failure } : {}),
       events: input.events,
       childRuns: input.childRuns.map((child) => ({
         id: child.id,
@@ -170,6 +256,7 @@ export class WorkflowRunner {
       budgetUsage,
       durationMs: input.durationMs,
       trajectory,
+      ...(failure ? { failure } : {}),
     };
   }
 }
@@ -178,6 +265,7 @@ function evaluateVerification(spec: WorkflowSpec, childRun: ChildRunResult): { p
   if (spec.mode !== "verified-loop") return { passed: true, evidence: [] };
 
   const checkpointEvidence = collectCheckpointEvidence(childRun);
+  const assertionEvidence = collectAssertionEvidence(spec, childRun);
   const minPassed = Math.max(1, spec.verification?.minPassedCheckpoints ?? 1);
   const passedCount = checkpointEvidence.filter((item) => item.passed).length;
   const childSucceeded = childRun.result.exitReason === "success";
@@ -191,7 +279,8 @@ function evaluateVerification(spec: WorkflowSpec, childRun: ChildRunResult): { p
           sourceChildRunId: childRun.id,
         },
       ];
-  const passed = childSucceeded && passedCount >= minPassed;
+  const assertionsPassed = assertionEvidence.length === 0 || assertionEvidence.every((item) => item.passed);
+  const passed = childSucceeded && passedCount >= minPassed && assertionsPassed;
 
   if (checkpointEvidence.length === 0) {
     return {
@@ -203,12 +292,31 @@ function evaluateVerification(spec: WorkflowSpec, childRun: ChildRunResult): { p
           message: "no checkpoint verdict evidence produced by child run",
           sourceChildRunId: childRun.id,
         },
+        ...assertionEvidence,
         ...childResultEvidence,
       ],
     };
   }
 
-  return { passed, evidence: [...checkpointEvidence, ...childResultEvidence] };
+  return { passed, evidence: [...checkpointEvidence, ...assertionEvidence, ...childResultEvidence] };
+}
+
+function collectAssertionEvidence(spec: WorkflowSpec, childRun: ChildRunResult): WorkflowEvidence[] {
+  const assertions = deterministicAssertions(spec.rootTask.successDef?.assertions ?? []);
+  if (assertions.length === 0 || !childRun.trajectory) return [];
+
+  const bundle = buildEvidenceBundle(childRun.trajectory);
+  return evaluateAssertions(assertions, bundle).map((result) => ({
+    kind: "assertion" as const,
+    passed: result.passed,
+    message: result.evidence,
+    sourceChildRunId: childRun.id,
+    assertion: describeAssertion(result.assertion),
+  }));
+}
+
+function deterministicAssertions(assertions: Assertion[]): Assertion[] {
+  return assertions.filter((assertion) => assertion.kind !== undefined && assertion.kind !== "legacySignal");
 }
 
 function collectCheckpointEvidence(childRun: ChildRunResult): WorkflowEvidence[] {
@@ -221,6 +329,40 @@ function collectCheckpointEvidence(childRun: ChildRunResult): WorkflowEvidence[]
       sourceChildRunId: childRun.id,
       assertion: step.checkpointDesc,
     }));
+}
+
+function evaluateReviewedLoop(workerRun: ChildRunResult, verifierRun: ChildRunResult): { passed: boolean; evidence: WorkflowEvidence[] } {
+  const workerSucceeded = workerRun.result.exitReason === "success";
+  const verifierSucceeded = verifierRun.result.exitReason === "success";
+  const verifierCheckpoints = collectCheckpointEvidence(verifierRun);
+  const hasPassedReviewCheckpoint = verifierCheckpoints.some((item) => item.passed);
+  const passed = workerSucceeded && verifierSucceeded && hasPassedReviewCheckpoint;
+
+  return {
+    passed,
+    evidence: [
+      {
+        kind: "child_result",
+        passed: workerSucceeded,
+        message: `worker exited with ${workerRun.result.exitReason}`,
+        sourceChildRunId: workerRun.id,
+      },
+      {
+        kind: "child_result",
+        passed: verifierSucceeded,
+        message: verifierSucceeded ? "reviewer exited with success" : `reviewer exited with ${verifierRun.result.exitReason}`,
+        sourceChildRunId: verifierRun.id,
+      },
+      ...(verifierCheckpoints.length > 0
+        ? verifierCheckpoints
+        : [{
+            kind: "checkpoint" as const,
+            passed: false,
+            message: "reviewer produced no checkpoint verdict",
+            sourceChildRunId: verifierRun.id,
+          }]),
+    ],
+  };
 }
 
 function mapChildExit(

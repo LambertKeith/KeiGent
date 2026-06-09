@@ -1,5 +1,6 @@
-import type { EvalCase, EvalCaseResult, EvalExecutor, EvalFailureCode, EvalReport } from "./types.js";
+import type { EvalCase, EvalCaseResult, EvalExecutionMode, EvalExecutor, EvalFailureCode, EvalReport } from "./types.js";
 import type { ExitReason, LoopResult, TrajectoryStep } from "../types.js";
+import { buildEvidenceBundle } from "../evidence.js";
 
 function unique<T>(items: T[]): T[] {
   return [...new Set(items)];
@@ -8,6 +9,12 @@ function unique<T>(items: T[]): T[] {
 function toolCallSteps(result: LoopResult): Array<TrajectoryStep & { toolName: string }> {
   return result.trajectory.steps.filter(
     (step): step is TrajectoryStep & { toolName: string } => step.kind === "tool_call" && typeof step.toolName === "string",
+  );
+}
+
+function approvalSteps(result: LoopResult): Array<TrajectoryStep & { kind: "approval" }> {
+  return result.trajectory.steps.filter(
+    (step): step is TrajectoryStep & { kind: "approval" } => step.kind === "approval" && step.approval !== undefined,
   );
 }
 
@@ -24,11 +31,25 @@ function addFailure(failures: string[], failureCodes: EvalFailureCode[], code: E
   failureCodes.push(code);
 }
 
-function evaluateCase(evalCase: EvalCase, execution: { selectedProfile?: string; result: LoopResult }, durationMs: number): EvalCaseResult {
+function searchableEvidence(result: LoopResult): string {
+  return JSON.stringify(buildEvidenceBundle(result.trajectory)).toLowerCase();
+}
+
+function evidenceIncludes(corpus: string, needle: string): boolean {
+  return corpus.includes(needle.toLowerCase());
+}
+
+function evaluateCase(
+  evalCase: EvalCase,
+  execution: { selectedProfile?: string; result: LoopResult; executionMode?: EvalExecutionMode },
+  durationMs: number,
+): EvalCaseResult {
   const { result, selectedProfile } = execution;
   const acceptance = evalCase.acceptance;
   const toolsUsed = toolsUsedFromResult(result);
   const successfulToolsUsed = successfulToolsUsedFromResult(result);
+  const approvals = approvalSteps(result);
+  const evidenceCorpus = searchableEvidence(result);
   const failures: string[] = [];
   const failureCodes: EvalFailureCode[] = [];
 
@@ -56,6 +77,30 @@ function evaluateCase(evalCase: EvalCase, execution: { selectedProfile?: string;
     }
   }
 
+  for (const expectedApproval of acceptance.requiredApprovals ?? []) {
+    const matched = approvals.some((step) => {
+      const request = step.approval?.request;
+      if (!request) return false;
+      if (request.toolName !== expectedApproval.toolName) return false;
+      if (expectedApproval.approved !== undefined && step.approval?.approved !== expectedApproval.approved) return false;
+      if (expectedApproval.riskLevel !== undefined && request.riskLevel !== expectedApproval.riskLevel) return false;
+      return true;
+    });
+    if (!matched) {
+      const decision = expectedApproval.approved === undefined ? "any decision" : expectedApproval.approved ? "approved" : "denied";
+      addFailure(failures, failureCodes, "approval_missing", `required approval ${decision} for ${expectedApproval.toolName} was not recorded`);
+    }
+  }
+
+  if (acceptance.allowDeniedApprovals !== true) {
+    for (const approval of approvals) {
+      if (approval.approval?.approved === false) {
+        const request = approval.approval.request;
+        addFailure(failures, failureCodes, "permission_denied", `approval denied for ${request.toolName} (risk=${request.riskLevel})`);
+      }
+    }
+  }
+
   const minCheckpoints = acceptance.minCheckpoints ?? 0;
   if (result.checkpointsPassed < minCheckpoints) {
     addFailure(failures, failureCodes, "checkpoint_missing", `expected at least ${minCheckpoints} passed checkpoints, got ${result.checkpointsPassed}`);
@@ -64,6 +109,18 @@ function evaluateCase(evalCase: EvalCase, execution: { selectedProfile?: string;
   for (const expectedText of acceptance.finalResponseIncludes ?? []) {
     if (!result.finalResponse.includes(expectedText)) {
       addFailure(failures, failureCodes, "output_missing", `final response missing expected text: ${expectedText}`);
+    }
+  }
+
+  for (const requiredEvidence of evalCase.requiredEvidence ?? []) {
+    if (!evidenceIncludes(evidenceCorpus, requiredEvidence)) {
+      addFailure(failures, failureCodes, "evidence_missing", `required evidence not found: ${requiredEvidence}`);
+    }
+  }
+
+  for (const forbiddenClaim of evalCase.forbiddenClaims ?? []) {
+    if (evidenceIncludes(evidenceCorpus, forbiddenClaim)) {
+      addFailure(failures, failureCodes, "forbidden_claim", `forbidden claim appeared in output/evidence: ${forbiddenClaim}`);
     }
   }
 
@@ -82,13 +139,18 @@ function evaluateCase(evalCase: EvalCase, execution: { selectedProfile?: string;
     toolsUsed,
     successfulToolsUsed,
     durationMs,
+    executionMode: execution.executionMode,
     failures,
     failureCodes,
     finalResponse: result.finalResponse,
+    proves: evalCase.proves,
+    doesNotProve: evalCase.doesNotProve,
+    requiredEvidence: evalCase.requiredEvidence ?? [],
+    forbiddenClaims: evalCase.forbiddenClaims ?? [],
   };
 }
 
-function errorResult(evalCase: EvalCase, error: unknown, durationMs: number): EvalCaseResult {
+function errorResult(evalCase: EvalCase, error: unknown, durationMs: number, executionMode?: EvalExecutionMode): EvalCaseResult {
   const message = error instanceof Error ? error.message : String(error);
   const isTimeout = error instanceof Error && error.name === "EvalTimeoutError";
   return {
@@ -105,9 +167,14 @@ function errorResult(evalCase: EvalCase, error: unknown, durationMs: number): Ev
     toolsUsed: [],
     successfulToolsUsed: [],
     durationMs,
+    executionMode,
     failures: [isTimeout ? message : `executor error: ${message}`],
     failureCodes: [isTimeout ? "timeout" : "executor_error"],
     finalResponse: "",
+    proves: evalCase.proves,
+    doesNotProve: evalCase.doesNotProve,
+    requiredEvidence: evalCase.requiredEvidence ?? [],
+    forbiddenClaims: evalCase.forbiddenClaims ?? [],
   };
 }
 
@@ -145,6 +212,13 @@ export function buildEvalReport(cases: EvalCaseResult[], durationMs: number, sta
     return acc;
   }, {});
 
+  const executionModes = cases.reduce<Partial<Record<EvalExecutionMode, number>>>((acc, evalCase) => {
+    if (evalCase.executionMode !== undefined) {
+      acc[evalCase.executionMode] = (acc[evalCase.executionMode] ?? 0) + 1;
+    }
+    return acc;
+  }, {});
+
   return {
     startedAt,
     durationMs,
@@ -152,6 +226,7 @@ export function buildEvalReport(cases: EvalCaseResult[], durationMs: number, sta
     passed,
     failed: cases.length - passed,
     profileAccuracy,
+    executionModes,
     failuresByCode,
     cases,
   };
@@ -166,9 +241,12 @@ export async function runEvalCases(evalCases: EvalCase[], executor: EvalExecutor
     const caseStarted = Date.now();
     try {
       const execution = await runWithTimeout(executor.run(evalCase), evalCase.timeoutMs);
-      results.push(evaluateCase(evalCase, execution, Date.now() - caseStarted));
+      results.push(evaluateCase(evalCase, {
+        ...execution,
+        executionMode: execution.executionMode ?? executor.executionMode,
+      }, Date.now() - caseStarted));
     } catch (error) {
-      results.push(errorResult(evalCase, error, Date.now() - caseStarted));
+      results.push(errorResult(evalCase, error, Date.now() - caseStarted, executor.executionMode));
     }
   }
 

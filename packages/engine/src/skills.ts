@@ -1,7 +1,7 @@
 import { vlog, vwarn } from "./logger.js";
 import { readFile, readdir } from "fs/promises";
 import { join } from "path";
-import type { SkillContext, SkillMeta } from "./types.js";
+import type { SkillContext, SkillMeta, SkillStatus } from "./types.js";
 
 const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 
@@ -24,11 +24,8 @@ function parseFrontmatter(content: string): { meta: SkillMeta; body: string } | 
 
   if (!nameMatch || !descMatch) return null;
 
-  // 解析 tags（支持 `tags: [a, b]` 行内数组形式，可能在 metadata 缩进下）
-  const tagsMatch = /tags:\s*\[([^\]]*)\]/.exec(yaml);
-  const tags = tagsMatch
-    ? tagsMatch[1]!.split(",").map((t) => t.trim().replace(/^["']|["']$/g, "")).filter(Boolean)
-    : [];
+  const status = parseStatus(yaml);
+  const tags = parseArrayField(yaml, "tags");
 
   // description 可能是多行（以缩进延续），取第一行够用
   return {
@@ -36,9 +33,47 @@ function parseFrontmatter(content: string): { meta: SkillMeta; body: string } | 
       name: nameMatch[1]!.trim(),
       description: descMatch[1]!.trim(),
       tags,
+      status,
+      requiredTools: parseArrayField(yaml, "required_tools", "requiredTools"),
+      allowedTools: parseArrayField(yaml, "allowed_tools", "allowedTools"),
+      nonGoals: parseArrayField(yaml, "non_goals", "nonGoals"),
+      dangerousActions: parseArrayField(yaml, "dangerous_actions", "dangerousActions"),
+      examples: parseArrayField(yaml, "examples"),
+      evalCoverage: parseArrayField(yaml, "eval_coverage", "evalCoverage"),
     },
     body,
   };
+}
+
+function parseArrayField(yaml: string, ...keys: string[]): string[] {
+  for (const key of keys) {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = new RegExp(`${escaped}:\\s*\\[([^\\]]*)\\]`).exec(yaml);
+    if (match) {
+      return match[1]!.split(",").map((item) => item.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+    }
+  }
+  return [];
+}
+
+function parseStatus(yaml: string): SkillStatus {
+  const match = /^status:\s*(.+)$/m.exec(yaml);
+  const status = match?.[1]?.trim() as SkillStatus | undefined;
+  switch (status) {
+    case "draft":
+    case "active":
+    case "learned-note-only":
+    case "quarantined":
+    case "deprecated":
+    case "promoted":
+      return status;
+    default:
+      return "active";
+  }
+}
+
+function isExecutableSkill(meta: SkillMeta): boolean {
+  return meta.status === "active" || meta.status === "promoted" || meta.status === undefined;
 }
 
 /**
@@ -67,6 +102,10 @@ export async function loadSkillContext(skillsDir: string): Promise<SkillContext>
       const result = parseFrontmatter(content);
       if (!result) {
         vwarn(`[skills] 解析失败（无 frontmatter）: ${skillMdPath}`);
+        continue;
+      }
+      if (!isExecutableSkill(result.meta)) {
+        vlog(`[skills] 跳过非执行 skill: ${result.meta.name} status=${result.meta.status}`);
         continue;
       }
       parsed.push({
