@@ -13,6 +13,7 @@ TypeScript · pnpm monorepo · 基于 [`@earendil-works/pi-ai`](https://www.npmj
 - [项目定位](#项目定位)
 - [核心思想](#核心思想)
 - [系统成熟度](#系统成熟度)
+- [架构图速览](#架构图速览)
 - [快速开始](#快速开始)
 - [四个内置 Profile](#四个内置-profile)
 - [三层结构](#三层结构)
@@ -92,6 +93,97 @@ KeiGent 当前已经超过“demo 能跑”的阶段，但仍然明确区分不�
 | M5 | 可运营 | web workbench、replay、regression suite、debuggability | SaaS 多租户能力 |
 
 当前主线重点不是“继续做阶段性 demo”，而是补齐 **产品逻辑、证据模型、权限治理、skill 生命周期、真实世界 eval、可解释调试** 这些让系统成熟的设计与验收基线。
+
+---
+
+## 架构图速览
+
+### 1. 一引擎多 Profile
+
+```mermaid
+flowchart TB
+    User[User Task] --> Orch[Orchestrator\n规则分类 + LLM fallback + guard]
+    Orch --> Profile{LoopProfile}
+
+    Profile --> Conv[conversational\n轻量对话 / 澄清]
+    Profile --> Research[divergent-research\n发散调研 / 学习建议]
+    Profile --> Exec[convergent-exec\n收敛执行 / 自检]
+    Profile --> Verified[convergent-verified\n强验证执行 / 独立裁判]
+
+    Conv --> Engine[Single LoopEngine\n统一循环骨架]
+    Research --> Engine
+    Exec --> Engine
+    Verified --> Engine
+
+    Engine --> Skills[SKILL.md\n怎么做]
+    Engine --> Tools[ToolRegistry\n浏览器 / 文件 / shell / http / memory]
+    Engine --> Evidence[Checkpoint / Verdict\n怎么验]
+    Engine --> Trajectory[Trajectory\n可回放事实源]
+```
+
+### 2. 一次 Run 的证据闭环
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant O as Orchestrator
+    participant E as LoopEngine
+    participant S as Skills
+    participant T as ToolRegistry
+    participant V as Verify/Judge
+    participant R as Trajectory
+
+    U->>O: task + optional successDef
+    O->>O: classify profile / mode / risk
+    O->>E: run(task, profile)
+    E->>S: match + inject relevant skill body
+    loop iterations
+        E->>T: execute allowed tool
+        T-->>E: structured tool result
+        E->>R: append progress event
+        E->>V: request_verification at checkpoint
+        V-->>E: verdict + evidence refs
+        E->>R: append checkpoint/verdict
+    end
+    E-->>U: final response + exit reason
+    E-->>R: persisted trajectory for replay/eval
+```
+
+### 3. Workflow Envelope 与治理边界
+
+```mermaid
+flowchart LR
+    Spec[WorkflowSpec\nmode / budget / policy] --> Runner[WorkflowRunner\nparent envelope]
+    Runner --> Budget[Budget & Timeout\nmax child / tool / duration]
+    Runner --> Policy[Permission Policy\nreadonly / write / execute / dangerous]
+    Runner --> ChildA[Child Run: worker\nLoopEngine.run]
+    Runner --> ChildB[Child Run: verifier\nreadonly by default]
+
+    ChildA --> EvidenceA[child trajectory\ntools / checkpoints / final]
+    ChildB --> EvidenceB[review verdict\nrubric / evidence]
+    EvidenceA --> ParentVerdict[Workflow Verdict\nsuccess / verified_failure / timeout / child_error]
+    EvidenceB --> ParentVerdict
+    Budget --> ParentVerdict
+    Policy --> ParentVerdict
+    ParentVerdict --> WFTraj[WorkflowTrajectory\nparent + child evidence]
+```
+
+### 4. 产品成熟度与文档地图
+
+```mermaid
+flowchart TD
+    M0[M0 可运行\nLoopEngine / CLI] --> M1[M1 可配置\nprovider-neutral config / doctor]
+    M1 --> M2[M2 可观测\nevents / trajectory / dashboard model]
+    M2 --> M3[M3 可验收\nsuccessDef / assertion / eval]
+    M3 --> M4[M4 可治理\npermission / approval / skill lifecycle]
+    M4 --> M5[M5 可运营\nweb workbench / replay / real-world benchmark]
+
+    M3 -.-> D8[08 success-evidence-model]
+    M4 -.-> D9[09 permission-risk-governance]
+    M4 -.-> D11[11 skill-lifecycle]
+    M5 -.-> D12[12 debuggability]
+    M5 -.-> E1[real-world eval suite]
+```
 
 ---
 
