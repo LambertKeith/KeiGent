@@ -28,6 +28,8 @@ corepack pnpm --filter @keigent/cli start config show --compact
 corepack pnpm --filter @keigent/cli start doctor --compact
 ```
 
+`doctor` 会检查 Node 版本、API key、配置 schema、model capabilities 与浏览器 cache 提示。缺少 `PLAYWRIGHT_BROWSERS_PATH` 时会给出可行动 next action；正式浏览器验收仍需显式设置 browser cache 路径。
+
 最小 starter 验收路径：
 
 ```bash
@@ -74,6 +76,7 @@ corepack pnpm --filter @keigent/cli start web --api --print
 - `configVersion` 不是 `1` 时，`doctor` 输出 `configVersion.unsupported`。
 - 新增非 secret 字段必须有默认值、doctor 校验、`config show` 来源展示和 `config.example.json` 示例。
 - 新增 secret 字段必须有 redaction 测试，且不得出现在 shell-history 友好的命令建议中。
+- `modelCapabilities` 是 provider-neutral 能力声明，包含 `toolCalling`、`streaming`、`jsonMode`、`vision`、`maxContextTokens`、`parallelToolCalls`。能力不足时必须明确降级或返回可审计 failure，不能按供应商品牌推断能力。
 - 数据库 migration 文件仍然不可修改；本仓库当前没有数据库 schema 升级路径。
 
 ---
@@ -117,6 +120,8 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/data/home/.cache/ms-playwright corepack pnpm --fil
 - real-world L2 和 operator L3 fixture 报告不得宣称完整产品健康。
 - operator L3 `--packet` 输出必须保留 Proof boundary、Evidence inspected、Override reason、Next actions 与人工 sign-off 勾选项，并明确 fixture 不是 human acceptance。
 - operator L3 `--acceptance` 输出必须是 `operator-human-acceptance` 结构化记录，且缺 evidence inspected 或 override reason 时不得 accepted。
+- RunRecord / Workbench 必须展示 Proof boundary、Autonomy、Repair attempts 和 Next action。
+- Loop Event Protocol 必须继续服务 CLI、Live Console、Workbench 和 reports，不允许 UI 回退到解析 raw logs。
 
 ---
 
@@ -138,6 +143,13 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/data/home/.cache/ms-playwright corepack pnpm --fil
 - Added explicit local `modelPricing` config for custom endpoints; values map to pi-ai `Model.cost` as USD per million tokens and avoid remote price table guessing.
 - Added `configVersion: 1` with legacy no-version compatibility and doctor rejection for unsupported future versions.
 - Added Apache-2.0 package metadata and contribution policy documentation.
+- Added stable Loop Event Protocol and web normalization for unknown loop events.
+- Added Proof Boundary to RunRecord, real-world eval reports, dashboard, and Run Workbench.
+- Added autonomy/self-repair summaries for workflow results, workflow trajectories, RunRecord, eval fixtures, and Workbench.
+- Added provider capability config and tool-calling guard for tool-dependent workflows.
+- Hardened operator acceptance packets with proof boundary, evidence-inspected checks, override reason requirements, and next actions.
+- Added starter path commands and fixture boundary notes for smoke / real-world / operator evals.
+- Added CLI RunRecord -> local Web API -> Workbench product E2E regression.
 
 ### 0.0.1
 

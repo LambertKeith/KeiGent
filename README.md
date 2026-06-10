@@ -25,6 +25,7 @@ KeiGent 因此采用：
 - **多个 `LoopProfile`**：切换 attention、terminate、verify、recover、memory 策略。
 - **Skill-driven execution**：skill 负责“怎么做”。
 - **Evidence-first verification**：successDef、checkpoint、verdict、trajectory 负责“怎么验”。
+- **Proof boundary**：每个 trusted run 明确已证明、未证明、假设和证据缺口。
 - **Eval / Replay / Web Workbench**：让 agent 行为可回归、可审计、可调试。
 
 > 详细架构图与系统说明见 [`doc/design/00-system-overview.md`](doc/design/00-system-overview.md)。
@@ -84,6 +85,14 @@ corepack pnpm --filter @keigent/cli start "总结一下 https://example.com"
 | Workspace | `~/.keigent/workspace/` | 文件工具沙箱 |
 | Memory | `~/.keigent/memory/` | 记忆存储；执行 loop 默认不写 |
 | Runs | `~/.keigent/runs/` | 每次 workflow 的 `record.json`，包含 evidence/risk/replay 摘要 |
+
+当前 RunRecord / Workbench 审计面包含：
+
+- Stable Loop Event Protocol：`run_created`、`tool_requested`、`assertion_checked`、`repair_started`、`run_succeeded` 等 provider-neutral 事件可由 CLI、Live Console、reports 复用。
+- Autonomy summary：记录 `completed_without_escalation`、`self_repaired`、`degraded_without_escalation`、`escalated` 以及 repair attempts / escalation reasons。
+- Proof boundary：RunRecord、real-world eval report 与 Workbench Run Detail 展示 `proven`、`notProven`、`assumptions`、`evidenceGaps`。
+- Provider capabilities：配置中显式声明 tool calling、streaming、JSON mode、vision、context window、parallel tool calls；不按供应商品牌授予能力。
+- Acceptance packet：operator L3 `--packet` 只生成审证包，不代表 human acceptance；`--acceptance` 要求 evidence inspected 和 override reason。
 
 ---
 

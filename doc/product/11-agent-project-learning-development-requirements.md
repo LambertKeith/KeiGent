@@ -392,6 +392,8 @@ VoltAgent / starter pack 类项目的 onboarding 值得学习，但 KeiGent 不�
 
 ## 5. 下一轮优先级建议
 
+> 实现状态（2026-06-10，`agent-operations-next-round`）：P0 的 autonomy/self-repair taxonomy、Loop Event Protocol、Proof Boundary、CLI -> RunRecord -> Web API -> Workbench E2E 已落入类型、RunRecord、eval、CLI/Web 测试和 Workbench 展示。P1 的 provider capability-aware routing、acceptance packet / human sign-off artifact、starter path / doctor hardening 已完成本地产品化基线。以下列表保留为路线图语义，新增工作应先确认是否已被当前实现覆盖。
+
 ### P0
 
 1. Autonomy-first Escalation taxonomy；
@@ -408,6 +410,8 @@ VoltAgent / starter pack 类项目的 onboarding 值得学习，但 KeiGent 不�
 4. Worktree isolation 与 automation triage 产品化。
 
 ### P2
+
+P2 仍为延期项，本轮不实现，也不得用 P0/P1 验收结果暗示这些能力已完成。
 
 1. Generative UI；
 2. dynamic planner；
