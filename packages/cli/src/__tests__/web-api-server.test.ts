@@ -109,6 +109,11 @@ async function neverExecute(): Promise<never> {
 }
 
 function workflowResult(exitReason: WorkflowResult["exitReason"]): WorkflowResult {
+  const autonomy = {
+    outcome: exitReason === "success" ? "completed_without_escalation" as const : "degraded_without_escalation" as const,
+    repairAttempts: [],
+    escalations: [],
+  };
   return {
     workflowId: "wf_web",
     mode: "single-loop",
@@ -118,6 +123,7 @@ function workflowResult(exitReason: WorkflowResult["exitReason"]): WorkflowResul
     evidence: [],
     budget: { maxChildRuns: 1, maxIterationsPerRun: 1 },
     budgetUsage: { childRuns: 0, iterations: 0, toolCalls: 0, recoveryAttempts: 0, checkpointsPassed: 0, durationMs: 1 },
+    autonomy,
     durationMs: 1,
     trajectory: {
       schemaVersion: 1,
@@ -131,6 +137,7 @@ function workflowResult(exitReason: WorkflowResult["exitReason"]): WorkflowResul
       finalResponse: "done",
       budget: { maxChildRuns: 1, maxIterationsPerRun: 1 },
       budgetUsage: { childRuns: 0, iterations: 0, toolCalls: 0, recoveryAttempts: 0, checkpointsPassed: 0, durationMs: 1 },
+      autonomy,
       evidence: [],
       events: [],
       childRuns: [],

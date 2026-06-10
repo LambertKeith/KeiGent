@@ -39,6 +39,14 @@ const config: KeigentConfig = {
   maxTokenEstimate: 64_000,
   maxProviderCostUsd: null,
   modelPricing: null,
+  modelCapabilities: {
+    toolCalling: true,
+    streaming: true,
+    jsonMode: false,
+    vision: true,
+    maxContextTokens: 128_000,
+    parallelToolCalls: false,
+  },
   maxWallTimeMs: 120_000,
   maxRecoveryAttempts: 3,
 };
@@ -66,6 +74,11 @@ function childResult(overrides: Partial<LoopResult> = {}): LoopResult {
 
 function workflowResult(exitReason: WorkflowResult["exitReason"]): WorkflowResult {
   const result = childResult();
+  const autonomy = {
+    outcome: exitReason === "success" ? "completed_without_escalation" as const : "degraded_without_escalation" as const,
+    repairAttempts: [],
+    escalations: [],
+  };
   return {
     workflowId: "wf-test",
     mode: "single-loop",
@@ -83,6 +96,7 @@ function workflowResult(exitReason: WorkflowResult["exitReason"]): WorkflowResul
       timeoutMs: 120_000,
     },
     budgetUsage: { childRuns: 1, iterations: 1, toolCalls: 0, recoveryAttempts: 0, checkpointsPassed: 0, durationMs: 1 },
+    autonomy,
     durationMs: 1,
     trajectory: {
       schemaVersion: 1,
@@ -106,6 +120,7 @@ function workflowResult(exitReason: WorkflowResult["exitReason"]): WorkflowResul
         timeoutMs: 120_000,
       },
       budgetUsage: { childRuns: 1, iterations: 1, toolCalls: 0, recoveryAttempts: 0, checkpointsPassed: 0, durationMs: 1 },
+      autonomy,
       durationMs: 1,
     },
   } as WorkflowResult;

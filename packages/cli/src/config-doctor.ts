@@ -1,6 +1,6 @@
 import { access, stat } from "fs/promises";
 import type { KeigentConfig } from "./config.js";
-import { isModelApiProtocol, isModelPricing } from "./config.js";
+import { isModelApiProtocol, isModelCapabilities, isModelPricing } from "./config.js";
 
 export type ConfigIssueSeverity = "info" | "warning" | "error";
 export type ConfigSource = "env" | "file" | "default";
@@ -96,6 +96,18 @@ export function validateConfig(config: KeigentConfig, env: NodeJS.ProcessEnv = p
 
   if (config.maxProviderCostUsd !== null && config.modelPricing === null) {
     issues.push({ code: "modelPricing.missing_for_cost_budget", severity: "warning", field: "modelPricing", message: "maxProviderCostUsd only enforces priced provider usage; configure modelPricing for custom endpoints" });
+  }
+
+  if (!isModelCapabilities(config.modelCapabilities)) {
+    issues.push({ code: "modelCapabilities.invalid", severity: "error", field: "modelCapabilities", message: "modelCapabilities must declare boolean feature flags and positive maxContextTokens" });
+  } else if (config.modelCapabilities.maxContextTokens < 8_192 || config.modelCapabilities.maxContextTokens < config.maxTokenEstimate) {
+    issues.push({
+      code: "modelCapabilities.maxContextTokens.low",
+      severity: "warning",
+      field: "modelCapabilities",
+      message: "modelCapabilities.maxContextTokens is lower than the configured runtime token budget or below the supported floor",
+      nextAction: "Choose a larger-context model or lower maxTokenEstimate before running long tasks.",
+    });
   }
 
   if (!Number.isInteger(config.maxWallTimeMs) || config.maxWallTimeMs < 1) {

@@ -57,6 +57,22 @@ describe("config doctor", () => {
     expect(validateConfig(config).map((issue) => issue.code)).not.toContain("modelPricing.missing_for_cost_budget");
   });
 
+  it("warns when model context capability is lower than runtime budgets need", () => {
+    const config = resolveConfig({
+      apiKey: "file-key",
+      maxTokenEstimate: 8_000,
+      modelCapabilities: { maxContextTokens: 1_024 },
+    }, {}, "/tmp/keigent-home");
+
+    expect(validateConfig(config)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: "modelCapabilities.maxContextTokens.low",
+        severity: "warning",
+        field: "modelCapabilities",
+      }),
+    ]));
+  });
+
   it("rejects insecure remote endpoints but permits localhost development", () => {
     const remote = resolveConfig({ baseUrl: "http://example.com", apiKey: "file-key" }, {}, "/tmp/keigent-home");
     const local = resolveConfig({ baseUrl: "http://127.0.0.1:4000", apiKey: "file-key" }, {}, "/tmp/keigent-home");
