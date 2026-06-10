@@ -1,13 +1,16 @@
 import {
+  buildRunRecordFromWorkflowResult,
   saveTrajectory,
+  saveRunRecord,
   saveWorkflowTrajectory,
   formatLearningResult,
+  summarizeRunRecord,
   type Learner,
   type LoopResult,
   type WorkflowResult,
 } from "@keigent/engine";
 import { join } from "node:path";
-import type { KeigentConfig } from "./config.js";
+import { KEIGENT_HOME, type KeigentConfig } from "./config.js";
 import { printInfo, printError } from "./renderer.js";
 
 /**
@@ -40,7 +43,17 @@ export async function persistWorkflowAndLearn(
   learner: Learner,
   skillBodies: Map<string, string>,
 ): Promise<void> {
-  await saveWorkflowTrajectory(result.trajectory, { dir: join(config.skillsDir, ".trajectories", "workflows") }).catch(() => {});
+  const workflowTrajectoryPath = await saveWorkflowTrajectory(result.trajectory, { dir: join(config.skillsDir, ".trajectories", "workflows") }).catch(() => undefined);
+  const record = buildRunRecordFromWorkflowResult(result, {
+    id: `run_${result.workflowId}`,
+    taskSource: "cli",
+    workflowTrajectoryPath,
+  });
+  await saveRunRecord(record, { runsDir: join(KEIGENT_HOME, "runs") }).catch((e) => {
+    printError(`保存 run record 失败: ${e}`);
+    return undefined;
+  });
+  printInfo(summarizeRunRecord(record));
 
   if (result.exitReason !== "success") return;
 

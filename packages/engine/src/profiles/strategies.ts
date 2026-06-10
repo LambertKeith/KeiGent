@@ -94,22 +94,40 @@ export function explainSkillMatches(task: Task, metas: SkillMeta[], matchedNames
   return metas.map((meta) => {
     const score = scoreSkill(meta, task.goal);
     const isMatched = matched.has(meta.name);
-    const executable = meta.status === undefined || meta.status === "active" || meta.status === "promoted";
+    const executable = isExecutableSkillMeta(meta);
+    const signals = skillSignals(meta, task.goal);
     return {
       name: meta.name,
       status: meta.status,
       score,
-      signals: skillSignals(meta, task.goal),
+      signals,
       matched: isMatched,
       injected: isMatched && executable,
+      matchedBy: signals,
+      confidence: score >= 10 ? "high" : score >= 4 ? "medium" : score > 0 ? "low" : "none",
+      includedBody: isMatched && executable,
+      ...(meta.blockedReason ? { blockedReason: meta.blockedReason } : {}),
+      ...(meta.riskLevel ? { riskDelta: `declared ${meta.riskLevel}` } : {}),
       ...(meta.evalCoverage ? { evalCoverage: meta.evalCoverage } : {}),
       ...(!executable
-        ? { exclusionReason: "status_not_executable" as const }
+        ? { exclusionReason: skillExclusionReason(meta) }
         : isMatched
           ? {}
           : { exclusionReason: score <= 0 ? "score_below_threshold" as const : "lower_ranked" as const }),
     };
   });
+}
+
+function isExecutableSkillMeta(meta: SkillMeta): boolean {
+  if (meta.status === "verified") return (meta.evalCoverage?.length ?? 0) > 0;
+  return meta.status === undefined || meta.status === "active" || meta.status === "promoted";
+}
+
+function skillExclusionReason(meta: SkillMeta): SkillMatchExplanation["exclusionReason"] {
+  if (meta.status === "blocked") return "blocked";
+  if (meta.status === "candidate") return "candidate_not_enabled";
+  if (meta.status === "verified" && (meta.evalCoverage?.length ?? 0) === 0) return "missing_eval_coverage";
+  return "status_not_executable";
 }
 
 function skillSignals(meta: SkillMeta, goal: string): string[] {

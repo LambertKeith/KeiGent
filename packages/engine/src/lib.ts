@@ -36,6 +36,29 @@ export type {
 export { describeAssertion, evaluateAssertion, evaluateAssertions } from "./assertions.js";
 export { failureSummaryForLoopExit, failureSummaryForWorkflowExit, recommendedNextActionFor } from "./failures.js";
 export type { FailureCode, FailureLayer, FailureSummary } from "./failures.js";
+export {
+  buildRunRecordFromWorkflowResult,
+  saveRunRecord,
+  summarizeRunRecord,
+} from "./run-record.js";
+export type {
+  ApprovalSummary,
+  BuildRunRecordOptions,
+  EvidenceSummary as RunEvidenceSummary,
+  ExecutionSummary as RunExecutionSummary,
+  RedactionSummary,
+  ReplayCapability,
+  RiskSummary,
+  RouteDecisionSnapshot,
+  RunArtifact,
+  RunEvidenceStatus,
+  RunRecord,
+  RunStatus,
+  RunTaskSnapshot,
+  RunTaskSource,
+  SaveRunRecordOptions,
+  WorkflowSnapshot,
+} from "./run-record.js";
 
 export type {
   Task,
@@ -70,6 +93,12 @@ export {
 } from "./evals/replay.js";
 export { parseEvalCliArgs } from "./evals/cli-options.js";
 export { DEFAULT_ORCHESTRATOR_EVAL_CASES, runOrchestratorEvalCases } from "./evals/orchestrator-eval.js";
+export {
+  DEFAULT_REAL_WORLD_L2_CASES,
+  REAL_WORLD_L2_DATASET_ID,
+  createRealWorldFixtureExecutor,
+  runRealWorldEvalCases,
+} from "./evals/real-world.js";
 export {
   createEngineWorkflowChildRunner,
   DEFAULT_WORKFLOW_BUDGET,
@@ -127,3 +156,14 @@ export type {
   OrchestratorEvalCaseResult,
   OrchestratorEvalReport,
 } from "./evals/orchestrator-eval.js";
+export type {
+  RealWorldEvalCase,
+  RealWorldEvalCaseExpectedResult,
+  RealWorldEvalCaseResult,
+  RealWorldEvalCaseResultKind,
+  RealWorldEvalExecutor,
+  RealWorldEvalExecution,
+  RealWorldEvalFinding,
+  RealWorldEvalLevel,
+  RealWorldEvalReport,
+} from "./evals/real-world.js";

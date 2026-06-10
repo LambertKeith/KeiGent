@@ -70,6 +70,21 @@ describe("eval and replay commands", () => {
     expect(output.lines[0]).not.toContain("\n");
   });
 
+  it("runs real-world L2 eval through the fixture baseline", async () => {
+    const output = capture();
+
+    await runEvalCommand(["real-world", "--compact"], { stdout: output.stdout });
+    const report = JSON.parse(output.lines[0]!);
+
+    expect(report).toMatchObject({
+      level: "L2",
+      datasetId: "local-real-task-v1",
+      totals: { total: 8, failed: 0 },
+      falseSuccessCount: 0,
+    });
+    expect(report.cases.map((testCase: { id: string }) => testCase.id)).toContain("approval-denied");
+  });
+
   it("runs replay eval from trajectory mappings", async () => {
     const path = await writeTrajectory();
     const output = capture();

@@ -16,6 +16,7 @@
     "eval:smoke": "tsx src/evals/cli.ts",
     "eval:replay": "tsx src/evals/cli.ts --mode replay",
     "eval:orchestrator": "tsx src/evals/orchestrator-cli.ts",
+    "eval:real-world": "tsx src/evals/real-world-cli.ts",
     "check": "tsc --noEmit",
     "test": "vitest run"
   },

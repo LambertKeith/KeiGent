@@ -72,9 +72,11 @@ corepack pnpm --filter @keigent/cli start config show --compact
 # Eval / replay
 corepack pnpm --filter @keigent/engine eval:smoke
 corepack pnpm --filter @keigent/engine eval:orchestrator
+corepack pnpm --filter @keigent/engine eval:real-world -- --compact
 corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/eval-replay.test.ts
 corepack pnpm --filter @keigent/cli start eval smoke --compact
 corepack pnpm --filter @keigent/cli start eval orchestrator --compact
+corepack pnpm --filter @keigent/cli start eval real-world --compact
 corepack pnpm --filter @keigent/cli start replay /path/to/trajectory.json --compact
 
 # 单项验收
@@ -98,6 +100,7 @@ corepack pnpm --filter @keigent/cli start eval replay --trajectory smoke-convers
 | Skills | `~/.keigent/skills/` |
 | Workspace | `~/.keigent/workspace/` |
 | Memory | `~/.keigent/memory/` |
+| Runs | `~/.keigent/runs/` |
 
 环境变量：复制 `.env.example` 为 `.env.local`，设置 `KEIGENT_API_KEY`；可选设置 `KEIGENT_API_PROTOCOL=openai|anthropic`、`KEIGENT_BASE_URL`、`KEIGENT_MODEL_ID`。
 
@@ -146,7 +149,7 @@ doc/references/          # 外部参考项目研读
 - Workflow：`single-loop`、`verified-loop`、`reviewed-loop` envelope，包含 budget、policy、child evidence、workflow trajectory。
 - CLI：REPL、单次执行、config、doctor、eval/replay、web print；机器可读命令支持 `--json` 和 `--compact`。
 - Web：当前是 Workbench view model 与静态 shell 阶段，不宣称完整交互式产品已完成。
-- Eval：smoke、orchestrator、replay fixture 作为确定性主干回归门。
+- Eval：smoke、orchestrator、replay fixture 与 real-world L2 fixture 作为确定性主干回归门。
 
 ---
 

@@ -6,6 +6,8 @@ import type { LoopResult, WorkflowResult } from "@keigent/engine";
 const mocks = vi.hoisted(() => ({
   saveTrajectory: vi.fn(async () => "/tmp/trajectory.json"),
   saveWorkflowTrajectory: vi.fn(async () => "/tmp/workflow.json"),
+  saveRunRecord: vi.fn(async () => "/tmp/run/record.json"),
+  summarizeRunRecord: vi.fn(() => "Run: run_wf-test\nStatus: succeeded"),
   formatLearningResult: vi.fn(() => "learned\nmore"),
 }));
 
@@ -15,6 +17,8 @@ vi.mock("@keigent/engine", async (importOriginal) => {
     ...actual,
     saveTrajectory: mocks.saveTrajectory,
     saveWorkflowTrajectory: mocks.saveWorkflowTrajectory,
+    saveRunRecord: mocks.saveRunRecord,
+    summarizeRunRecord: mocks.summarizeRunRecord,
     formatLearningResult: mocks.formatLearningResult,
   };
 });
@@ -106,6 +110,7 @@ describe("persistWorkflowAndLearn", () => {
     await persistWorkflowAndLearn(workflowResult("budget_exceeded"), config, learner as never, new Map());
 
     expect(mocks.saveWorkflowTrajectory).toHaveBeenCalledOnce();
+    expect(mocks.saveRunRecord).toHaveBeenCalledOnce();
     expect(mocks.saveTrajectory).not.toHaveBeenCalled();
     expect(learner.learn).not.toHaveBeenCalled();
   });
@@ -116,6 +121,7 @@ describe("persistWorkflowAndLearn", () => {
     await persistWorkflowAndLearn(workflowResult("success"), config, learner as never, new Map([["example-skill", "body"]]));
 
     expect(mocks.saveWorkflowTrajectory).toHaveBeenCalledOnce();
+    expect(mocks.saveRunRecord).toHaveBeenCalledOnce();
     expect(mocks.saveTrajectory).toHaveBeenCalledOnce();
     expect(learner.learn).toHaveBeenCalledOnce();
   });

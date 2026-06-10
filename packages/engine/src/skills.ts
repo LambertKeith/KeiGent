@@ -39,10 +39,28 @@ function parseFrontmatter(content: string): { meta: SkillMeta; body: string } | 
       nonGoals: parseArrayField(yaml, "non_goals", "nonGoals"),
       dangerousActions: parseArrayField(yaml, "dangerous_actions", "dangerousActions"),
       examples: parseArrayField(yaml, "examples"),
+      version: parseScalarField(yaml, "version"),
+      taskTypes: parseArrayField(yaml, "task_types", "taskTypes"),
+      triggers: parseArrayField(yaml, "triggers"),
+      riskLevel: parseScalarField(yaml, "risk_level", "riskLevel"),
+      permissionsExpected: parseArrayField(yaml, "permissions_expected", "permissionsExpected"),
+      source: parseSource(yaml),
+      blockedReason: parseScalarField(yaml, "blocked_reason", "blockedReason"),
+      deprecatedReason: parseScalarField(yaml, "deprecated_reason", "deprecatedReason"),
       evalCoverage: parseArrayField(yaml, "eval_coverage", "evalCoverage"),
     },
     body,
   };
+}
+
+function parseScalarField(yaml: string, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = new RegExp(`^${escaped}:\\s*(.+)$`, "m").exec(yaml);
+    const value = match?.[1]?.trim().replace(/^["']|["']$/g, "");
+    if (value) return value;
+  }
+  return undefined;
 }
 
 function parseArrayField(yaml: string, ...keys: string[]): string[] {
@@ -56,13 +74,23 @@ function parseArrayField(yaml: string, ...keys: string[]): string[] {
   return [];
 }
 
+function parseSource(yaml: string): SkillMeta["source"] | undefined {
+  const type = parseScalarField(yaml, "source_type", "sourceType");
+  const trajectoryId = parseScalarField(yaml, "source_trajectory_id", "sourceTrajectoryId");
+  if (!type && !trajectoryId) return undefined;
+  return { type, trajectoryId };
+}
+
 function parseStatus(yaml: string): SkillStatus {
   const match = /^status:\s*(.+)$/m.exec(yaml);
   const status = match?.[1]?.trim() as SkillStatus | undefined;
   switch (status) {
     case "draft":
+    case "candidate":
     case "active":
+    case "verified":
     case "learned-note-only":
+    case "blocked":
     case "quarantined":
     case "deprecated":
     case "promoted":
@@ -73,6 +101,7 @@ function parseStatus(yaml: string): SkillStatus {
 }
 
 function isExecutableSkill(meta: SkillMeta): boolean {
+  if (meta.status === "verified") return (meta.evalCoverage?.length ?? 0) > 0;
   return meta.status === "active" || meta.status === "promoted" || meta.status === undefined;
 }
 

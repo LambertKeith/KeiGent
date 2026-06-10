@@ -78,6 +78,7 @@ corepack pnpm --filter @keigent/cli start "总结一下 https://example.com"
 | Skills | `~/.keigent/skills/` | 标准 SKILL.md 技能库 |
 | Workspace | `~/.keigent/workspace/` | 文件工具沙箱 |
 | Memory | `~/.keigent/memory/` | 记忆存储；执行 loop 默认不写 |
+| Runs | `~/.keigent/runs/` | 每次 workflow 的 `record.json`，包含 evidence/risk/replay 摘要 |
 
 ---
 
@@ -137,6 +138,7 @@ corepack pnpm --filter @keigent/cli start config show
 corepack pnpm --filter @keigent/cli start config path
 corepack pnpm --filter @keigent/cli start eval smoke
 corepack pnpm --filter @keigent/cli start eval orchestrator
+corepack pnpm --filter @keigent/cli start eval real-world --compact
 corepack pnpm --filter @keigent/cli start eval replay --trajectory smoke-conversational-hello=/path/to/trajectory.json
 corepack pnpm --filter @keigent/cli start replay /path/to/trajectory.json
 corepack pnpm --filter @keigent/cli start web --print
@@ -148,6 +150,7 @@ corepack pnpm --filter @keigent/engine verify:browser
 # Eval Harness
 corepack pnpm --filter @keigent/engine eval:smoke
 corepack pnpm --filter @keigent/engine eval:orchestrator
+corepack pnpm --filter @keigent/engine eval:real-world -- --compact
 corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/eval-replay.test.ts
 ```
 
@@ -169,8 +172,9 @@ Eval Harness 是 KeiGent 的工程化验收层，不新增 agent 行为，只负
 | `eval:smoke` | 不调 LLM，用 smoke executor 验证 runner/report 本身 |
 | `eval:replay -- --trajectory case-id=/path/to/trajectory.json` | 从已保存 trajectory 派生结果，离线重评历史轨迹 |
 | `eval:orchestrator` | 纯规则跑 fixture，验证 Orchestrator profile 选择零退化 |
+| `eval:real-world -- --compact` | L2 本地真实任务 fixture 基线，分开统计 route/task/evidence/risk/false confidence |
 
-当前确定性 smoke suite 覆盖 57 个产品用例，其中 browser 类 10 个；orchestrator suite 覆盖 32 个路由 fixture。CLI 也提供 `keigent eval smoke/orchestrator/replay` 和 `keigent replay <trajectory>` 包装入口。
+当前确定性 smoke suite 覆盖 57 个产品用例，其中 browser 类 10 个；orchestrator suite 覆盖 32 个路由 fixture；real-world L2 suite 覆盖 8 个本地任务基线。CLI 也提供 `keigent eval smoke/orchestrator/real-world/replay` 和 `keigent replay <trajectory>` 包装入口。
 
 真实 replay 需要显式指定 case 与 trajectory 文件：
 
@@ -214,6 +218,7 @@ corepack pnpm --filter @keigent/cli test
 corepack pnpm --filter @keigent/web test
 corepack pnpm --filter @keigent/engine eval:smoke
 corepack pnpm --filter @keigent/engine eval:orchestrator
+corepack pnpm --filter @keigent/engine eval:real-world -- --compact
 corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/eval-replay.test.ts
 corepack pnpm --filter @keigent/engine verify:browser
 git diff --check

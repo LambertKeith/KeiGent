@@ -61,4 +61,56 @@ describe("skill library view model", () => {
     expect(library.skills[1]?.deprecationReason).toBe("replaced by browser-ref workflow");
     expect(library.skills[2]?.quarantineReason).toBe("failed permission eval");
   });
+
+  it("surfaces candidate, verified, and blocked governance metadata", () => {
+    const library = normalizeSkillLibrary({
+      skills: [
+        {
+          name: "verified-file",
+          description: "Verified file workflow",
+          tags: ["file"],
+          status: "verified",
+          version: "1.2.0",
+          taskTypes: ["file.write"],
+          triggers: ["create file"],
+          riskLevel: "R2",
+          permissionsExpected: ["file.write"],
+          source: { type: "human-authored", trajectoryId: "run-123" },
+          evalCoverage: ["verified-file-positive"],
+        },
+        {
+          name: "candidate-browser",
+          description: "Candidate browser workflow",
+          tags: ["browser"],
+          status: "candidate",
+          evalCoverage: ["candidate-browser-positive"],
+        },
+        {
+          name: "blocked-shell",
+          description: "Unsafe shell workflow",
+          tags: ["shell"],
+          status: "blocked",
+          blockedReason: "failed risk eval",
+        },
+      ],
+    });
+
+    expect(library.skills.map((skill) => [skill.name, skill.statusLabel, skill.executable])).toEqual([
+      ["verified-file", "Verified", true],
+      ["candidate-browser", "Candidate", false],
+      ["blocked-shell", "Blocked", false],
+    ]);
+    expect(library.skills[0]).toMatchObject({
+      triggerConditions: ["tag:file", "task:file.write", "trigger:create file", "permission:file.write"],
+      governance: {
+        version: "1.2.0",
+        riskLevel: "R2",
+        permissionsExpected: ["file.write"],
+        sourceType: "human-authored",
+        sourceTrajectoryId: "run-123",
+        evalCoverageCount: 1,
+      },
+    });
+    expect(library.skills[2]?.blockedReason).toBe("failed risk eval");
+  });
 });

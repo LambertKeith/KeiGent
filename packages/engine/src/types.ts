@@ -210,8 +210,11 @@ export type RecoverDecision =
 
 export type SkillStatus =
   | "draft"
+  | "candidate"
   | "active"
+  | "verified"
   | "learned-note-only"
+  | "blocked"
   | "quarantined"
   | "deprecated"
   | "promoted";
@@ -226,6 +229,17 @@ export interface SkillMeta {
   nonGoals?: string[];
   dangerousActions?: string[];
   examples?: string[];
+  version?: string;
+  taskTypes?: string[];
+  triggers?: string[];
+  riskLevel?: string;
+  permissionsExpected?: string[];
+  source?: {
+    type?: string;
+    trajectoryId?: string;
+  };
+  blockedReason?: string;
+  deprecatedReason?: string;
   evalCoverage?: string[];
 }
 
@@ -236,7 +250,19 @@ export interface SkillMatchExplanation {
   signals: string[];
   matched: boolean;
   injected: boolean;
-  exclusionReason?: "score_below_threshold" | "lower_ranked" | "status_not_executable" | "body_not_injected";
+  exclusionReason?:
+    | "score_below_threshold"
+    | "lower_ranked"
+    | "status_not_executable"
+    | "body_not_injected"
+    | "missing_eval_coverage"
+    | "blocked"
+    | "candidate_not_enabled";
+  matchedBy?: string[];
+  confidence?: "none" | "low" | "medium" | "high";
+  includedBody?: boolean;
+  blockedReason?: string;
+  riskDelta?: string;
   evalCoverage?: string[];
 }
 

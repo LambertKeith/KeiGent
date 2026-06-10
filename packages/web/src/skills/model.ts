@@ -2,8 +2,11 @@ import { redactText } from "../shared/redaction.js";
 
 export type SkillStatus =
   | "draft"
+  | "candidate"
   | "active"
+  | "verified"
   | "learned-note-only"
+  | "blocked"
   | "quarantined"
   | "deprecated"
   | "promoted";
@@ -24,6 +27,16 @@ export interface SkillInput {
   nonGoals?: string[];
   dangerousActions?: string[];
   examples?: string[];
+  version?: string;
+  taskTypes?: string[];
+  triggers?: string[];
+  riskLevel?: string;
+  permissionsExpected?: string[];
+  source?: {
+    type?: string;
+    trajectoryId?: string;
+  };
+  blockedReason?: string;
   evalCoverage?: string[];
   quarantineReason?: string;
   deprecationReason?: string;
@@ -53,6 +66,15 @@ export interface SkillView {
   recentMatches: SkillRecentMatchInput[];
   learningNotes: string[];
   evalCoverageLinks: SkillEvalCoverageLink[];
+  governance: {
+    version?: string;
+    riskLevel?: string;
+    permissionsExpected: string[];
+    sourceType?: string;
+    sourceTrajectoryId?: string;
+    evalCoverageCount: number;
+  };
+  blockedReason?: string;
   quarantineReason?: string;
   deprecationReason?: string;
 }
@@ -81,7 +103,7 @@ function normalizeSkill(skill: SkillInput, input: SkillLibraryInput): SkillView 
     description: redactText(skill.description),
     status,
     statusLabel: statusLabel(status),
-    executable: isExecutable(status),
+    executable: isExecutable(skill),
     triggerConditions: triggerConditions(skill),
     recentMatches: (input.recentMatches ?? [])
       .filter((match) => match.skillName === skill.name)
@@ -96,12 +118,23 @@ function normalizeSkill(skill: SkillInput, input: SkillLibraryInput): SkillView 
       label: redactText(id),
       href: `#eval/${encodeURIComponent(id)}`,
     })),
+    governance: {
+      ...(skill.version ? { version: redactText(skill.version) } : {}),
+      ...(skill.riskLevel ? { riskLevel: redactText(skill.riskLevel) } : {}),
+      permissionsExpected: (skill.permissionsExpected ?? []).map((permission) => redactText(permission)),
+      ...(skill.source?.type ? { sourceType: redactText(skill.source.type) } : {}),
+      ...(skill.source?.trajectoryId ? { sourceTrajectoryId: redactText(skill.source.trajectoryId) } : {}),
+      evalCoverageCount: (skill.evalCoverage ?? []).length,
+    },
+    ...(skill.blockedReason ? { blockedReason: redactText(skill.blockedReason) } : {}),
     ...(skill.quarantineReason ? { quarantineReason: redactText(skill.quarantineReason) } : {}),
     ...(skill.deprecationReason ? { deprecationReason: redactText(skill.deprecationReason) } : {}),
   };
 }
 
-function isExecutable(status: SkillStatus): boolean {
+function isExecutable(skill: SkillInput): boolean {
+  const status = skill.status ?? "active";
+  if (status === "verified") return (skill.evalCoverage ?? []).length > 0;
   return status === "active" || status === "promoted";
 }
 
@@ -109,8 +142,14 @@ function statusLabel(status: SkillStatus): string {
   switch (status) {
     case "active":
       return "Active";
+    case "verified":
+      return "Verified";
     case "promoted":
       return "Promoted";
+    case "candidate":
+      return "Candidate";
+    case "blocked":
+      return "Blocked";
     case "draft":
       return "Draft";
     case "learned-note-only":
@@ -125,8 +164,11 @@ function statusLabel(status: SkillStatus): string {
 function triggerConditions(skill: SkillInput): string[] {
   return [
     ...skill.tags.map((tag) => `tag:${redactText(tag)}`),
+    ...(skill.taskTypes ?? []).map((taskType) => `task:${redactText(taskType)}`),
+    ...(skill.triggers ?? []).map((trigger) => `trigger:${redactText(trigger)}`),
     ...(skill.requiredTools ?? []).map((tool) => `requires:${redactText(tool)}`),
     ...(skill.allowedTools ?? []).map((tool) => `allows:${redactText(tool)}`),
+    ...(skill.permissionsExpected ?? []).map((permission) => `permission:${redactText(permission)}`),
     ...(skill.nonGoals ?? []).map((nonGoal) => `not:${redactText(nonGoal)}`),
   ];
 }

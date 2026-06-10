@@ -2,11 +2,14 @@ import { readFile } from "node:fs/promises";
 import {
   DEFAULT_EVAL_CASES,
   DEFAULT_ORCHESTRATOR_EVAL_CASES,
+  DEFAULT_REAL_WORLD_L2_CASES,
   createSmokeEvalExecutor,
+  createRealWorldFixtureExecutor,
   createTrajectoryReplayExecutorFromFiles,
   parseEvalCliArgs,
   runEvalCases,
   runOrchestratorEvalCases,
+  runRealWorldEvalCases,
   type Trajectory,
 } from "@keigent/engine";
 import { formatJson } from "./json-output.js";
@@ -65,6 +68,13 @@ export async function runEvalCommand(
     return;
   }
 
+  if (subcommand === "real-world") {
+    const report = await runRealWorldEvalCases(DEFAULT_REAL_WORLD_L2_CASES, createRealWorldFixtureExecutor());
+    print(options, formatJson(report, rest));
+    if (report.totals.failed > 0 || report.falseSuccessCount > 0) process.exitCode = 1;
+    return;
+  }
+
   if (subcommand === "replay") {
     const opts = parseEvalCliArgs(["--mode", "replay", ...rest]);
     if (Object.keys(opts.trajectories).length === 0) {
@@ -80,7 +90,7 @@ export async function runEvalCommand(
     return;
   }
 
-  throw new Error("Usage: keigent eval smoke|orchestrator|replay");
+  throw new Error("Usage: keigent eval smoke|orchestrator|real-world|replay");
 }
 
 export async function runReplayCommand(

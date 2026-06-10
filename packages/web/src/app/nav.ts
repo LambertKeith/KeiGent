@@ -1,4 +1,4 @@
-export type AppSection = "conversation" | "dashboard" | "config";
+export type AppSection = "runs" | "conversation" | "dashboard" | "config";
 
 export interface NavItem {
   id: AppSection;
@@ -7,6 +7,11 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
+  {
+    id: "runs",
+    label: "Runs",
+    description: "Review saved RunRecords, evidence, risk, and replay status.",
+  },
   {
     id: "conversation",
     label: "Conversation",
