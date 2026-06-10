@@ -1,15 +1,6 @@
 import { redactObject, redactText } from "./redaction.js";
 import type { ExitReason, ProgressEvent } from "./types.js";
-import type { WorkflowEvent, WorkflowExitReason } from "./workflow/types.js";
-
-export type EscalationReason =
-  | "permission_required"
-  | "risk_confirmation_required"
-  | "goal_ambiguity_blocking"
-  | "evidence_insufficient_after_retry"
-  | "acceptance_failed_after_repair"
-  | "budget_exhausted"
-  | "external_dependency_blocked";
+import type { EscalationReason, WorkflowEvent, WorkflowExitReason } from "./workflow/types.js";
 
 export type LoopEventType =
   | "run_created"

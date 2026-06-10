@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { emptyAutonomySummary } from "./autonomy.js";
 import type { WorkflowResult, WorkflowTrajectory } from "./types.js";
 
 export async function saveWorkflowTrajectory(
@@ -16,27 +17,38 @@ export async function saveWorkflowTrajectory(
 
 export async function loadWorkflowTrajectory(path: string): Promise<WorkflowTrajectory> {
   const text = await readFile(path, "utf-8");
-  return JSON.parse(text) as WorkflowTrajectory;
+  return normalizeWorkflowTrajectory(JSON.parse(text));
 }
 
 export function replayWorkflowTrajectory(trajectory: WorkflowTrajectory): WorkflowResult {
+  const normalized = normalizeWorkflowTrajectory(trajectory);
   return {
-    workflowId: trajectory.workflowId,
-    mode: trajectory.mode,
-    exitReason: trajectory.exitReason,
-    finalResponse: trajectory.finalResponse,
-    childRuns: trajectory.childRuns.map((child) => ({
+    workflowId: normalized.workflowId,
+    mode: normalized.mode,
+    exitReason: normalized.exitReason,
+    finalResponse: normalized.finalResponse,
+    childRuns: normalized.childRuns.map((child) => ({
       id: child.id,
       role: child.role,
       result: child.result,
       trajectory: child.trajectory,
     })),
-    evidence: trajectory.evidence,
-    budget: trajectory.budget,
-    budgetUsage: trajectory.budgetUsage,
-    durationMs: trajectory.durationMs,
-    trajectory,
+    evidence: normalized.evidence,
+    budget: normalized.budget,
+    budgetUsage: normalized.budgetUsage,
+    autonomy: normalized.autonomy,
+    durationMs: normalized.durationMs,
+    trajectory: normalized,
   };
+}
+
+function normalizeWorkflowTrajectory(value: unknown): WorkflowTrajectory {
+  const source = value as Partial<WorkflowTrajectory>;
+  if (source.autonomy) return source as WorkflowTrajectory;
+  return {
+    ...source,
+    autonomy: source.autonomy ?? emptyAutonomySummary(),
+  } as WorkflowTrajectory;
 }
 
 function safeName(value: string): string {

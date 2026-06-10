@@ -3,6 +3,7 @@ import { buildEvidenceBundle } from "../evidence.js";
 import { failureSummaryForWorkflowExit } from "../failures.js";
 import type { Assertion, LoopResult, ProgressEvent, ProviderUsageSummary, Task, Trajectory } from "../types.js";
 import { addProviderUsage } from "../provider-usage.js";
+import { buildAutonomySummary } from "./autonomy.js";
 import type {
   ChildRunResult,
   ChildRunSpec,
@@ -239,6 +240,11 @@ export class WorkflowRunner {
     const failure = failureSummaryForWorkflowExit(input.exitReason);
     input.emit({ kind: "workflow_done", workflowId: input.spec.id, exitReason: input.exitReason, ...(failure ? { failure } : {}) });
     const budgetUsage = input.budgetUsage ?? computeBudgetUsage(input.childRuns, input.durationMs);
+    const autonomy = buildAutonomySummary({
+      exitReason: input.exitReason,
+      childRuns: input.childRuns,
+      evidence: input.evidence,
+    });
     const trajectory: WorkflowTrajectory = {
       schemaVersion: 1,
       workflowId: input.spec.id,
@@ -251,6 +257,7 @@ export class WorkflowRunner {
       finalResponse: input.finalResponse,
       budget: input.spec.budget,
       budgetUsage,
+      autonomy,
       evidence: input.evidence,
       ...(failure ? { failure } : {}),
       events: input.events,
@@ -271,6 +278,7 @@ export class WorkflowRunner {
       evidence: input.evidence,
       budget: input.spec.budget,
       budgetUsage,
+      autonomy,
       durationMs: input.durationMs,
       trajectory,
       ...(failure ? { failure } : {}),

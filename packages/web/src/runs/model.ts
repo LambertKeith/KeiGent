@@ -1,4 +1,4 @@
-import type { ApprovalSummary, ProofBoundary, ProviderUsageSummary, RunRecord, SkillRunSummary, ToolRunSummary } from "@keigent/engine";
+import type { ApprovalSummary, AutonomySummary, ProofBoundary, ProviderUsageSummary, RunRecord, SkillRunSummary, ToolRunSummary } from "@keigent/engine";
 import { redactObject, redactText } from "../shared/redaction.js";
 
 export interface RunRecordListItem {
@@ -91,6 +91,7 @@ export interface RunRecordDetailView {
   risk: RunRiskPanel;
   budget: RunBudgetPanel;
   replay: RunReplayPanel;
+  autonomy: AutonomySummary;
   proofBoundary: ProofBoundary;
   approvals: Array<{
     toolName: string;
@@ -150,6 +151,19 @@ export function normalizeRunRecord(input: unknown): RunRecordDetailView {
       ...(record.replay.trajectoryPath ? { trajectoryPath: redactText(record.replay.trajectoryPath) } : {}),
       ...(record.replay.latestReplayReportId ? { latestReplayReportId: redactText(record.replay.latestReplayReportId) } : {}),
       label: replayLabel(record),
+    },
+    autonomy: {
+      outcome: record.autonomy.outcome,
+      repairAttempts: record.autonomy.repairAttempts.map((attempt) => ({
+        targetAssertion: redactText(attempt.targetAssertion),
+        reason: redactText(attempt.reason),
+        attempt: attempt.attempt,
+        finalVerdict: attempt.finalVerdict,
+      })),
+      escalations: record.autonomy.escalations.map((escalation) => ({
+        reason: escalation.reason,
+        message: redactText(escalation.message),
+      })),
     },
     proofBoundary: {
       proven: record.proofBoundary.proven.map((item) => redactText(item)),
@@ -243,6 +257,7 @@ function normalizeRecordShape(input: unknown): RunRecord {
   const proofBoundary = isObject(source.proofBoundary)
     ? proofBoundaryValue(source.proofBoundary)
     : fallbackProofBoundaryForRecord({ evidence: evidenceSummary, failures, ...(automation ? { automation } : {}), replay: replayCapability });
+  const autonomy = isObject(source.autonomy) ? autonomyValue(source.autonomy) : emptyAutonomy();
 
   return {
     schemaVersion: 1,
@@ -299,6 +314,7 @@ function normalizeRecordShape(input: unknown): RunRecord {
     artifacts: Array.isArray(source.artifacts) ? source.artifacts as RunRecord["artifacts"] : [],
     ...(automation ? { automation } : {}),
     ...(typeof source.nextAction === "string" ? { nextAction: source.nextAction } : {}),
+    autonomy,
     replay: replayCapability,
     proofBoundary,
     redaction: isObject(source.redaction) ? source.redaction as unknown as RunRecord["redaction"] : { applied: true, rawPayloadStored: false },
@@ -465,6 +481,75 @@ function proofBoundaryValue(value: unknown): ProofBoundary {
     assumptions: stringArray(source.assumptions),
     evidenceGaps: stringArray(source.evidenceGaps),
   };
+}
+
+function autonomyValue(value: unknown): AutonomySummary {
+  const source = objectValue(value);
+  return {
+    outcome: autonomyOutcomeValue(source.outcome),
+    repairAttempts: Array.isArray(source.repairAttempts)
+      ? source.repairAttempts.map(repairAttemptValue)
+      : [],
+    escalations: Array.isArray(source.escalations)
+      ? source.escalations.map(escalationValue)
+      : [],
+  };
+}
+
+function emptyAutonomy(): AutonomySummary {
+  return { outcome: "completed_without_escalation", repairAttempts: [], escalations: [] };
+}
+
+function repairAttemptValue(value: unknown): AutonomySummary["repairAttempts"][number] {
+  const source = objectValue(value);
+  return {
+    targetAssertion: stringValue(source.targetAssertion, "unknown assertion"),
+    reason: stringValue(source.reason, "repair requested"),
+    attempt: numberValue(source.attempt),
+    finalVerdict: repairVerdictValue(source.finalVerdict),
+  };
+}
+
+function escalationValue(value: unknown): AutonomySummary["escalations"][number] {
+  const source = objectValue(value);
+  return {
+    reason: escalationReasonValue(source.reason),
+    message: stringValue(source.message, "Escalation required."),
+  };
+}
+
+function autonomyOutcomeValue(value: unknown): AutonomySummary["outcome"] {
+  const allowed = new Set<AutonomySummary["outcome"]>([
+    "completed_without_escalation",
+    "self_repaired",
+    "degraded_without_escalation",
+    "escalated",
+  ]);
+  return typeof value === "string" && allowed.has(value as AutonomySummary["outcome"])
+    ? value as AutonomySummary["outcome"]
+    : "completed_without_escalation";
+}
+
+function repairVerdictValue(value: unknown): AutonomySummary["repairAttempts"][number]["finalVerdict"] {
+  const allowed = new Set<AutonomySummary["repairAttempts"][number]["finalVerdict"]>(["passed", "failed", "budget_exhausted"]);
+  return typeof value === "string" && allowed.has(value as AutonomySummary["repairAttempts"][number]["finalVerdict"])
+    ? value as AutonomySummary["repairAttempts"][number]["finalVerdict"]
+    : "failed";
+}
+
+function escalationReasonValue(value: unknown): AutonomySummary["escalations"][number]["reason"] {
+  const allowed = new Set<AutonomySummary["escalations"][number]["reason"]>([
+    "permission_required",
+    "risk_confirmation_required",
+    "goal_ambiguity_blocking",
+    "evidence_insufficient_after_retry",
+    "acceptance_failed_after_repair",
+    "budget_exhausted",
+    "external_dependency_blocked",
+  ]);
+  return typeof value === "string" && allowed.has(value as AutonomySummary["escalations"][number]["reason"])
+    ? value as AutonomySummary["escalations"][number]["reason"]
+    : "external_dependency_blocked";
 }
 
 function fallbackProofBoundaryForRecord(record: Pick<RunRecord, "evidence" | "automation" | "replay" | "failures">): ProofBoundary {

@@ -48,7 +48,14 @@ export {
   loopEventFromUnknown,
   loopEventsFromWorkflow,
 } from "./loop-events.js";
-export type { EscalationReason, LoopEvent, LoopEventType } from "./loop-events.js";
+export type { LoopEvent, LoopEventType } from "./loop-events.js";
+export type {
+  AutonomyOutcome,
+  AutonomySummary,
+  EscalationReason,
+  EscalationDecision,
+  RepairAttemptSummary,
+} from "./workflow/types.js";
 export {
   buildNoOpRunRecord,
   buildRunRecordFromWorkflowResult,

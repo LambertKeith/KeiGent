@@ -33,6 +33,11 @@ describe("proof boundary", () => {
 
 function workflowWithoutEvidence(): WorkflowResult {
   const task = { goal: "Report status", profile: "auto" };
+  const autonomy = {
+    outcome: "completed_without_escalation" as const,
+    repairAttempts: [],
+    escalations: [],
+  };
   const loop = {
     exitReason: "success" as const,
     finalResponse: "done",
@@ -58,6 +63,7 @@ function workflowWithoutEvidence(): WorkflowResult {
     evidence: [],
     budget: { maxChildRuns: 1, maxIterationsPerRun: 1 },
     budgetUsage: { childRuns: 1, iterations: 1, toolCalls: 0, recoveryAttempts: 0, checkpointsPassed: 0, durationMs: 1 },
+    autonomy,
     durationMs: 1,
     trajectory: {
       schemaVersion: 1,
@@ -71,6 +77,7 @@ function workflowWithoutEvidence(): WorkflowResult {
       finalResponse: "done",
       budget: { maxChildRuns: 1, maxIterationsPerRun: 1 },
       budgetUsage: { childRuns: 1, iterations: 1, toolCalls: 0, recoveryAttempts: 0, checkpointsPassed: 0, durationMs: 1 },
+      autonomy,
       evidence: [],
       events: [],
       childRuns: [{ id: "wf_no_evidence:worker-1", role: "worker", result: loop, trajectory: loop.trajectory }],

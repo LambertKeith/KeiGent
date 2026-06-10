@@ -134,6 +134,11 @@ const demoRunRecord: RunRecord = {
     trajectorySchemaVersion: 1,
     freshExecution: true,
   },
+  autonomy: {
+    outcome: "completed_without_escalation",
+    repairAttempts: [],
+    escalations: [],
+  },
   proofBoundary: {
     proven: ["Evidence passed: hello.txt exists"],
     notProven: ["External production health is not proven by this run."],

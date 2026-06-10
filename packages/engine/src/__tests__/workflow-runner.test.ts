@@ -359,6 +359,84 @@ describe("WorkflowRunner", () => {
     );
   });
 
+  it("summarizes repair attempts that finish with passing evidence", async () => {
+    const repairedTrajectory = trajectory({
+      steps: [
+        {
+          iteration: 1,
+          kind: "recovery",
+          recovery: { decision: "repair", reason: "initial assertion failed", hint: "collect file evidence" },
+        },
+        {
+          iteration: 2,
+          kind: "checkpoint",
+          checkpointDesc: "fileExists:output.txt",
+          verdictPassed: true,
+          verdictEvidence: "output.txt exists",
+          snapshot: { raw: {} },
+        },
+      ],
+    });
+    const runner = new WorkflowRunner(fakeChildRunner(loopResult({
+      trajectory: repairedTrajectory,
+      checkpointsPassed: 1,
+    })));
+
+    const result = await runner.run(createWorkflowSpec({ id: "wf-repair-success", task: task() }));
+
+    expect(result.autonomy.outcome).toBe("self_repaired");
+    expect(result.autonomy.repairAttempts[0]).toMatchObject({
+      targetAssertion: "fileExists:output.txt",
+      reason: "initial assertion failed",
+      attempt: 1,
+      finalVerdict: "passed",
+    });
+    expect(result.autonomy.escalations).toEqual([]);
+    expect(result.trajectory.autonomy).toEqual(result.autonomy);
+  });
+
+  it("escalates when evidence remains insufficient after repair", async () => {
+    const assertionTask = task({
+      successDef: {
+        goal: "File written",
+        assertions: [{ kind: "fileExists", path: "output.txt" }],
+      },
+    });
+    const failedAfterRepair = trajectory({
+      steps: [
+        {
+          iteration: 1,
+          kind: "recovery",
+          recovery: { decision: "repair", reason: "missing file evidence", hint: "rewrite output.txt" },
+        },
+        {
+          iteration: 2,
+          kind: "checkpoint",
+          checkpointDesc: "fileExists:output.txt",
+          verdictPassed: false,
+          verdictEvidence: "output.txt missing after repair",
+          snapshot: { raw: {} },
+        },
+      ],
+    });
+    const runner = new WorkflowRunner(fakeChildRunner(loopResult({
+      trajectory: failedAfterRepair,
+      checkpointsPassed: 0,
+    })));
+
+    const budgetResult = await runner.run(createWorkflowSpec({ id: "wf-repair-insufficient", task: assertionTask }));
+
+    expect(budgetResult.exitReason).toBe("verified_failure");
+    expect(budgetResult.autonomy.outcome).toBe("escalated");
+    expect(budgetResult.autonomy.repairAttempts[0]).toMatchObject({
+      targetAssertion: "fileExists:output.txt",
+      finalVerdict: "failed",
+    });
+    expect(budgetResult.autonomy.escalations[0]).toMatchObject({
+      reason: "evidence_insufficient_after_retry",
+    });
+  });
+
   it("does not mark workflow verdict passed when a verified child fails after a passed checkpoint", async () => {
     const assertionTask = task({
       successDef: {

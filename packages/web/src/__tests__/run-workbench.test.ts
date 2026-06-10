@@ -115,6 +115,11 @@ function record(overrides: Partial<RunRecord> = {}): RunRecord {
       trajectorySchemaVersion: 1,
       freshExecution: true,
     },
+    autonomy: {
+      outcome: "completed_without_escalation",
+      repairAttempts: [],
+      escalations: [],
+    },
     proofBoundary: {
       proven: ["Evidence passed: file exists"],
       notProven: ["External production health is not proven by this run."],
@@ -150,6 +155,7 @@ describe("run workbench page", () => {
     expect(html).toContain("Route and skills");
     expect(html).toContain("Evidence");
     expect(html).toContain("Risk and approvals");
+    expect(html).toContain("Autonomy");
     expect(html).toContain("Tools and budget");
     expect(html).toContain("Replay and artifacts");
     expect(html).toContain("Raw redacted record");

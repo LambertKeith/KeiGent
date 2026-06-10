@@ -15,6 +15,39 @@ export type WorkflowExitReason =
 
 export type WorkflowChildRole = "worker" | "reviewer" | "verifier";
 
+export type EscalationReason =
+  | "permission_required"
+  | "risk_confirmation_required"
+  | "goal_ambiguity_blocking"
+  | "evidence_insufficient_after_retry"
+  | "acceptance_failed_after_repair"
+  | "budget_exhausted"
+  | "external_dependency_blocked";
+
+export type AutonomyOutcome =
+  | "completed_without_escalation"
+  | "self_repaired"
+  | "degraded_without_escalation"
+  | "escalated";
+
+export interface RepairAttemptSummary {
+  targetAssertion: string;
+  reason: string;
+  attempt: number;
+  finalVerdict: "passed" | "failed" | "budget_exhausted";
+}
+
+export interface EscalationDecision {
+  reason: EscalationReason;
+  message: string;
+}
+
+export interface AutonomySummary {
+  outcome: AutonomyOutcome;
+  repairAttempts: RepairAttemptSummary[];
+  escalations: EscalationDecision[];
+}
+
 export interface WorkflowBudget {
   maxChildRuns: number;
   maxIterationsPerRun: number;
@@ -121,6 +154,7 @@ export interface WorkflowTrajectory {
   finalResponse: string;
   budget: WorkflowBudget;
   budgetUsage: WorkflowBudgetUsage;
+  autonomy: AutonomySummary;
   evidence: WorkflowEvidence[];
   failure?: FailureSummary;
   events: WorkflowEvent[];
@@ -141,6 +175,7 @@ export interface WorkflowResult {
   evidence: WorkflowEvidence[];
   budget: WorkflowBudget;
   budgetUsage: WorkflowBudgetUsage;
+  autonomy: AutonomySummary;
   durationMs: number;
   trajectory: WorkflowTrajectory;
   failure?: FailureSummary;

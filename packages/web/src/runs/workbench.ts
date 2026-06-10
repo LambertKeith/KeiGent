@@ -55,6 +55,7 @@ export function renderRunWorkbench(view: RunWorkbenchView): string {
         ${renderRouteAndSkills(view.selected)}
         ${renderEvidenceAndRisk(view.selected)}
         ${renderProofBoundary(view.selected)}
+        ${renderAutonomy(view.selected)}
         ${renderToolsAndBudget(view.selected)}
         ${renderReplayAndFailures(view.selected)}
         ${renderRawInspector(view.selected)}
@@ -147,6 +148,26 @@ function renderProofBoundary(run: RunRecordDetailView): string {
     <div class="split-panels">
       ${renderListBlock("Assumptions", run.proofBoundary.assumptions)}
       ${renderListBlock("Evidence gaps", run.proofBoundary.evidenceGaps)}
+    </div>
+  `);
+}
+
+function renderAutonomy(run: RunRecordDetailView): string {
+  const repairs = run.autonomy.repairAttempts.map((attempt) => `
+    <li><strong>${escapeHtml(attempt.targetAssertion)}</strong><span>${escapeHtml(`attempt ${attempt.attempt}: ${attempt.finalVerdict} - ${attempt.reason}`)}</span></li>
+  `).join("");
+  const escalations = run.autonomy.escalations.map((escalation) => `
+    <li><strong>${escapeHtml(escalation.reason)}</strong><span>${escapeHtml(escalation.message)}</span></li>
+  `).join("");
+  return panel("Autonomy", `
+    <div class="summary-strip">
+      ${renderFact("Outcome", run.autonomy.outcome)}
+      ${renderFact("Repairs", String(run.autonomy.repairAttempts.length))}
+      ${renderFact("Escalations", String(run.autonomy.escalations.length))}
+    </div>
+    <div class="split-panels">
+      <div class="list-block"><strong>Repair attempts</strong><ul>${repairs || "<li>None</li>"}</ul></div>
+      <div class="list-block"><strong>Escalations</strong><ul>${escalations || "<li>None</li>"}</ul></div>
     </div>
   `);
 }

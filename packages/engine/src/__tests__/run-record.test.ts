@@ -94,6 +94,13 @@ function loopResult(overrides: Partial<LoopResult> = {}): LoopResult {
 
 function workflowResult(exitReason: WorkflowResult["exitReason"] = "success"): WorkflowResult {
   const child = loopResult();
+  const autonomy = {
+    outcome: exitReason === "success" ? "completed_without_escalation" as const : "escalated" as const,
+    repairAttempts: [],
+    escalations: exitReason === "success"
+      ? []
+      : [{ reason: "evidence_insufficient_after_retry" as const, message: "Workflow did not complete successfully." }],
+  };
   return {
     workflowId: "wf-run-record",
     mode: "verified-loop",
@@ -115,6 +122,7 @@ function workflowResult(exitReason: WorkflowResult["exitReason"] = "success"): W
       timeoutMs: 120_000,
     },
     budgetUsage: { childRuns: 1, iterations: 2, toolCalls: 1, tokenEstimate: 120, recoveryAttempts: 0, checkpointsPassed: 1, durationMs: 20 },
+    autonomy,
     durationMs: 20,
     trajectory: {
       schemaVersion: 1,
@@ -138,6 +146,7 @@ function workflowResult(exitReason: WorkflowResult["exitReason"] = "success"): W
         timeoutMs: 120_000,
       },
       budgetUsage: { childRuns: 1, iterations: 2, toolCalls: 1, tokenEstimate: 120, recoveryAttempts: 0, checkpointsPassed: 1, durationMs: 20 },
+      autonomy,
       evidence: [
         { kind: "checkpoint", passed: true, message: "file exists", sourceChildRunId: "wf-run-record:worker-1" },
       ],
@@ -235,6 +244,11 @@ describe("RunRecord", () => {
         notProven: expect.arrayContaining(["External production health is not proven by this run."]),
         evidenceGaps: [],
       },
+      autonomy: {
+        outcome: "completed_without_escalation",
+        repairAttempts: [],
+        escalations: [],
+      },
     });
     expect(record.approvals).toHaveLength(1);
     expect(record.artifacts).toContainEqual({ kind: "workflow_trajectory", path: "/tmp/workflow.json" });
@@ -276,6 +290,31 @@ describe("RunRecord", () => {
     expect(record.proofBoundary.evidenceGaps).toContain("No verification evidence was checked.");
   });
 
+  it("persists workflow autonomy decisions into run records", () => {
+    const result = workflowResult("verified_failure") as WorkflowResult & {
+      autonomy: RunRecord["autonomy"];
+      trajectory: WorkflowResult["trajectory"] & { autonomy: RunRecord["autonomy"] };
+    };
+    result.autonomy = {
+      outcome: "escalated",
+      repairAttempts: [{
+        targetAssertion: "fileExists:output.txt",
+        reason: "missing file evidence",
+        attempt: 1,
+        finalVerdict: "failed",
+      }],
+      escalations: [{
+        reason: "evidence_insufficient_after_retry",
+        message: "Evidence remained insufficient after repair.",
+      }],
+    };
+    result.trajectory.autonomy = result.autonomy;
+
+    const record = buildRunRecordFromWorkflowResult(result, { id: "run_autonomy" });
+
+    expect(record.autonomy).toEqual(result.autonomy);
+  });
+
   it("marks timeout and replay records without overriding fresh execution semantics", () => {
     const record = buildRunRecordFromWorkflowResult(workflowResult("timeout"), {
       id: "run_timeout",
@@ -308,6 +347,11 @@ describe("RunRecord", () => {
         scope: "last 20 runs",
         noOpReason: "No triage candidates found.",
         doesNotProve: ["No hidden failures outside this scope."],
+      },
+      autonomy: {
+        outcome: "completed_without_escalation",
+        repairAttempts: [],
+        escalations: [],
       },
       replay: { supported: false, freshExecution: true },
     });

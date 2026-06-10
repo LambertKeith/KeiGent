@@ -35,6 +35,11 @@ function childResult(trajectory: Trajectory = childTrajectory()): LoopResult {
 
 function workflowTrajectory(overrides: Partial<WorkflowTrajectory> = {}): WorkflowTrajectory {
   const child = childTrajectory();
+  const autonomy = {
+    outcome: "completed_without_escalation" as const,
+    repairAttempts: [],
+    escalations: [],
+  };
   return {
     schemaVersion: 1,
     workflowId: "wf-save",
@@ -54,6 +59,7 @@ function workflowTrajectory(overrides: Partial<WorkflowTrajectory> = {}): Workfl
       maxRecoveryAttemptsPerRun: 3,
     },
     budgetUsage: { childRuns: 1, iterations: 1, toolCalls: 0, recoveryAttempts: 0, checkpointsPassed: 0, durationMs: 7 },
+    autonomy,
     evidence: [],
     events: [
       { kind: "workflow_start", workflowId: "wf-save", mode: "single-loop", goal: "Persist me" },
