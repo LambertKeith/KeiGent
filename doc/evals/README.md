@@ -14,6 +14,8 @@ corepack pnpm --filter @keigent/engine eval:real-world -- --compact
 corepack pnpm --filter @keigent/cli start eval real-world --compact
 ```
 
+边界：L2 real-world fixture 只证明确定性本地 case 被执行和记录；它不证明产品健康、生产可用性、外部系统状态或真人验收。
+
 当前本地 L3 operator scenario fixture 入口：
 
 ```bash
@@ -25,7 +27,7 @@ corepack pnpm --filter @keigent/cli start eval operator --acceptance /path/to/op
 
 `--packet` 输出面向人类 reviewer 的 L3 acceptance packet，包含 evidence links、scenario checklist 与 manual sign-off；它不把 fixture pass 解释为真实人工验收通过。
 
-`--acceptance` 读取人类 reviewer 填写的 JSON sign-off，输出 `operator-human-acceptance` 结构化记录；它只校验签署完整性、override reason、evidence inspected 和 false-confidence 风险确认，不能替代真人实际审证。
+`--packet` 必须包含 Proof boundary、Evidence inspected、Override reason 和 Next actions 字段。`--acceptance` 读取人类 reviewer 填写的 JSON sign-off，输出 `operator-human-acceptance` 结构化记录；它只校验签署完整性、override reason、evidence inspected 和 false-confidence 风险确认，不能替代真人实际审证。
 
 最小 sign-off 形态：
 

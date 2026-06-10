@@ -107,7 +107,7 @@ describe("eval and replay commands", () => {
     expect(report).toMatchObject({
       level: "L2",
       datasetId: "local-real-task-v1",
-      totals: { total: 17, failed: 0 },
+      totals: { total: 19, failed: 0 },
       falseSuccessCount: 0,
     });
     expect(report.cases.map((testCase: { id: string }) => testCase.id)).toContain("approval-denied");
@@ -145,6 +145,8 @@ describe("eval and replay commands", () => {
 
     expect(output.lines[0]).toContain("# L3 Operator Acceptance Packet");
     expect(output.lines[0]).toContain("Fixture results are not human acceptance");
+    expect(output.lines[0]).toContain("Proof boundary");
+    expect(output.lines[0]).toContain("Override reason");
     expect(output.lines[0]).toContain("## Manual Sign-off");
     expect(output.lines[0]).toContain("repo-acceptance");
   });

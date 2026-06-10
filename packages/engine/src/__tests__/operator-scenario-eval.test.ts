@@ -73,6 +73,10 @@ describe("operator scenario L3 eval", () => {
     expect(packet).toContain("Expected decision: accepted");
     expect(packet).toContain("Evidence links:");
     expect(packet).toContain("run:quality-gates");
+    expect(packet).toContain("Proof boundary");
+    expect(packet).toContain("Evidence inspected");
+    expect(packet).toContain("Override reason");
+    expect(packet).toContain("Next actions");
     expect(packet).toContain("False-confidence risks:");
     expect(packet).toContain("Branch acceptance still depends on code owner review.");
     expect(packet).toContain("- [ ] Human decision matches or overrides fixture decision");
@@ -133,6 +137,35 @@ describe("operator scenario L3 eval", () => {
       code: "override_missing_reason",
       severity: "blocking",
       caseId: "repo-acceptance",
+    }));
+  });
+
+  it("blocks accepted sign-off when evidence was not inspected or failed evidence is overridden without reason", async () => {
+    const report = await runOperatorScenarioEvalCases(DEFAULT_OPERATOR_L3_CASES, createOperatorScenarioFixtureReviewer());
+
+    const record = buildOperatorAcceptanceRecord(report, {
+      datasetId: OPERATOR_L3_DATASET_ID,
+      reviewerName: "Casey Reviewer",
+      reviewedAt: "2026-06-10T00:00:00.000Z",
+      finalDecision: "accepted",
+      cases: report.cases.map((testCase) => ({
+        caseId: testCase.id,
+        humanDecision: testCase.id === "governed-execution" ? "accepted" : testCase.expectedDecision,
+        evidenceInspected: testCase.id !== "repo-acceptance",
+        falseConfidenceRisksAccepted: true,
+      })),
+    });
+
+    expect(record.accepted).toBe(false);
+    expect(record.issues).toContainEqual(expect.objectContaining({
+      code: "evidence_not_inspected",
+      severity: "blocking",
+      caseId: "repo-acceptance",
+    }));
+    expect(record.issues).toContainEqual(expect.objectContaining({
+      code: "override_missing_reason",
+      severity: "blocking",
+      caseId: "governed-execution",
     }));
   });
 });

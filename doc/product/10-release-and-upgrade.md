@@ -28,15 +28,24 @@ corepack pnpm --filter @keigent/cli start config show --compact
 corepack pnpm --filter @keigent/cli start doctor --compact
 ```
 
-首次 smoke / operator fixture 验收：
+最小 starter 验收路径：
 
 ```bash
-corepack pnpm --filter @keigent/engine eval:smoke
-corepack pnpm --filter @keigent/engine eval:operator -- --compact
+corepack pnpm install
+corepack pnpm --filter @keigent/cli start doctor --compact
+corepack pnpm --filter @keigent/cli start eval smoke --compact
 corepack pnpm --filter @keigent/cli start eval real-world --compact
+```
+
+operator fixture / human packet 入口：
+
+```bash
+corepack pnpm --filter @keigent/engine eval:operator -- --compact
 corepack pnpm --filter @keigent/cli start eval operator --packet
 corepack pnpm --filter @keigent/cli start eval operator --acceptance /path/to/operator-signoff.json --compact
 ```
+
+real-world L2 与 operator L3 fixture 只证明确定性本地样本和人工验收 packet 生成路径；它们不证明生产健康、外部系统状态、完整 Workbench 成熟度或真人已接受。
 
 正式 CLI bin shim 验证：
 
@@ -106,7 +115,7 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/data/home/.cache/ms-playwright corepack pnpm --fil
 - `corepack pnpm --filter @keigent/cli start web --api --print` 输出 Workbench URL、API URL 和 `VITE_KEIGENT_API_URL` dev command。
 - debug bundle 不泄露 secret，并包含 `observability-summary.json`。
 - real-world L2 和 operator L3 fixture 报告不得宣称完整产品健康。
-- operator L3 `--packet` 输出必须保留人工 sign-off 勾选项，并明确 fixture 不是 human acceptance。
+- operator L3 `--packet` 输出必须保留 Proof boundary、Evidence inspected、Override reason、Next actions 与人工 sign-off 勾选项，并明确 fixture 不是 human acceptance。
 - operator L3 `--acceptance` 输出必须是 `operator-human-acceptance` 结构化记录，且缺 evidence inspected 或 override reason 时不得 accepted。
 
 ---

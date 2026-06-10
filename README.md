@@ -55,6 +55,7 @@ cp .env.example .env.local
 
 # 配置诊断（密钥会脱敏）
 corepack pnpm --filter @keigent/cli start doctor
+corepack pnpm --filter @keigent/cli start doctor --compact
 corepack pnpm --filter @keigent/cli start config show
 corepack pnpm --filter @keigent/cli start config path
 corepack pnpm --filter @keigent/cli start config set modelId gpt-4o-mini
@@ -62,6 +63,10 @@ corepack pnpm --filter @keigent/cli start config unset modelId
 
 # 本地 Workbench（默认 localhost；只打印启动命令）
 corepack pnpm --filter @keigent/cli start web --print
+
+# 最小 starter 验收路径（fixture 结果不证明产品健康或人工接受）
+corepack pnpm --filter @keigent/cli start eval smoke --compact
+corepack pnpm --filter @keigent/cli start eval real-world --compact
 
 # 对话式 REPL
 corepack pnpm --filter @keigent/cli start
