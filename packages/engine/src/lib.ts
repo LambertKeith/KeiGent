@@ -38,6 +38,12 @@ export { failureSummaryForLoopExit, failureSummaryForWorkflowExit, recommendedNe
 export type { FailureCode, FailureLayer, FailureSummary } from "./failures.js";
 export { addProviderUsage, normalizeProviderUsage } from "./provider-usage.js";
 export {
+  loopEventFromProgress,
+  loopEventFromUnknown,
+  loopEventsFromWorkflow,
+} from "./loop-events.js";
+export type { EscalationReason, LoopEvent, LoopEventType } from "./loop-events.js";
+export {
   buildNoOpRunRecord,
   buildRunRecordFromWorkflowResult,
   readRunRecord,

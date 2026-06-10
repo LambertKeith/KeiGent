@@ -35,6 +35,34 @@ export interface SkillMatchExplanationView {
   evalCoverage?: string[];
 }
 
+export type LoopEventTypeView =
+  | "run_created"
+  | "route_decided"
+  | "skill_matched"
+  | "iteration_started"
+  | "tool_requested"
+  | "tool_completed"
+  | "evidence_collected"
+  | "assertion_checked"
+  | "repair_started"
+  | "escalation_decided"
+  | "run_succeeded"
+  | "run_failed"
+  | "run_degraded"
+  | "unknown";
+
+export interface LoopEventView {
+  type: LoopEventTypeView;
+  iteration?: number;
+  toolName?: string;
+  status?: "requested" | "succeeded" | "failed" | "pending" | "approved" | "denied";
+  escalationReason?: string;
+  approvalStatus?: "approved" | "denied";
+  rawKind?: string;
+  message?: string;
+  payload?: Record<string, unknown>;
+}
+
 export type ProgressEvent =
   | {
       kind: "profile_selected";
@@ -58,6 +86,7 @@ export type ProgressEvent =
   | { kind: "recovery"; iteration: number; decision: "retry" | "repair" | "escalate"; hint?: string; reason?: string }
   | { kind: "escalate"; reason: string }
   | { kind: "done"; exitReason: ExitReason; finalResponse: string; failure?: FailureSummaryView }
+  | { kind: "loop_event"; event: LoopEventView }
   | { kind: "unknown"; raw: unknown };
 
 export type RunStatus =
@@ -291,6 +320,103 @@ export function normalizeConversationRun(options: NormalizeRunOptions): Conversa
         status = terminalStatus(event.exitReason);
         timeline.push({ id: `done-${index}`, kind: "done", exitReason: event.exitReason, finalResponse, ...(failure ? { failure } : {}) });
         break;
+      case "loop_event": {
+        const protocol = event.event;
+        const iteration = protocol.iteration ?? 0;
+        switch (protocol.type) {
+          case "run_created":
+            if (protocol.message) {
+              timeline.push({ id: `protocol-run-${index}`, kind: "debug_unknown", raw: redactObject(protocol) });
+            }
+            break;
+          case "route_decided":
+            selectedProfile = typeof protocol.payload?.profile === "string" ? protocol.payload.profile : selectedProfile;
+            profileVia = protocol.payload?.via === "llm" ? "llm" : protocol.payload?.via === "rule" ? "rule" : profileVia;
+            timeline.push({
+              id: `protocol-route-${index}`,
+              kind: "profile",
+              profile: selectedProfile ?? "unknown",
+              via: profileVia ?? "rule",
+              rationale: protocol.message,
+              signals: Array.isArray(protocol.payload?.signals) ? protocol.payload.signals.map(String) : [],
+            });
+            break;
+          case "skill_matched": {
+            const matchedSkills = Array.isArray(protocol.payload?.skills) ? protocol.payload.skills.map(String) : [];
+            skills.splice(0, skills.length, ...matchedSkills);
+            timeline.push({ id: `protocol-skills-${index}`, kind: "skills", skills: matchedSkills });
+            break;
+          }
+          case "iteration_started":
+            if (protocol.iteration !== undefined) iterations.add(protocol.iteration);
+            timeline.push({ id: `protocol-iteration-${iteration}`, kind: "iteration", iteration });
+            break;
+          case "tool_requested":
+            if (protocol.iteration !== undefined) iterations.add(protocol.iteration);
+            timeline.push({
+              id: `protocol-tool-${index}`,
+              kind: "tool_activity",
+              iteration,
+              toolName: protocol.toolName ?? "unknown",
+              args: redactObject(protocol.payload ?? {}),
+              state: "pending",
+            });
+            break;
+          case "tool_completed": {
+            if (protocol.iteration !== undefined) iterations.add(protocol.iteration);
+            const toolName = protocol.toolName ?? "unknown";
+            const tool = [...timeline].reverse().find((item): item is Extract<TimelineItem, { kind: "tool_activity" }> => item.kind === "tool_activity" && item.iteration === iteration && item.toolName === toolName && item.state === "pending");
+            const state = protocol.status === "succeeded" || protocol.status === "approved" ? "succeeded" : "failed";
+            if (tool) {
+              tool.result = redactText(protocol.message ?? "");
+              tool.state = state;
+            } else {
+              timeline.push({ id: `protocol-tool-result-${index}`, kind: "tool_activity", iteration, toolName, args: {}, result: redactText(protocol.message ?? ""), state });
+            }
+            break;
+          }
+          case "evidence_collected":
+            if (protocol.iteration !== undefined) iterations.add(protocol.iteration);
+            timeline.push({ id: `protocol-evidence-${index}`, kind: "checkpoint", iteration, desc: protocol.message ?? "Evidence collected", state: protocol.status === "succeeded" ? "passed" : "pending" });
+            break;
+          case "assertion_checked": {
+            if (protocol.iteration !== undefined) iterations.add(protocol.iteration);
+            const passed = protocol.status === "succeeded";
+            timeline.push({ id: `protocol-assertion-${index}`, kind: "checkpoint", iteration, desc: "Assertion checked", verdict: { passed, evidence: redactText(protocol.message ?? "") }, state: passed ? "passed" : "failed" });
+            break;
+          }
+          case "repair_started":
+            if (protocol.iteration !== undefined) iterations.add(protocol.iteration);
+            timeline.push({ id: `protocol-repair-${index}`, kind: "recovery", iteration, decision: "repair", hint: protocol.message });
+            break;
+          case "escalation_decided":
+            status = "escalated";
+            timeline.push({ id: `protocol-escalation-${index}`, kind: "escalation", reason: redactText(protocol.message ?? protocol.escalationReason ?? "escalation") });
+            break;
+          case "run_succeeded":
+            exitReason = "success";
+            finalResponse = redactText(protocol.message ?? "");
+            status = terminalStatus(exitReason);
+            timeline.push({ id: `protocol-done-${index}`, kind: "done", exitReason, finalResponse });
+            break;
+          case "run_degraded":
+            exitReason = "budget_exceeded";
+            finalResponse = redactText(protocol.message ?? "");
+            status = terminalStatus(exitReason);
+            timeline.push({ id: `protocol-done-${index}`, kind: "done", exitReason, finalResponse });
+            break;
+          case "run_failed":
+            exitReason = "error";
+            finalResponse = redactText(protocol.message ?? "");
+            status = terminalStatus(exitReason);
+            timeline.push({ id: `protocol-done-${index}`, kind: "done", exitReason, finalResponse });
+            break;
+          case "unknown":
+            timeline.push({ id: `protocol-unknown-${index}`, kind: "debug_unknown", raw: redactObject(protocol) });
+            break;
+        }
+        break;
+      }
       default:
         timeline.push({ id: `unknown-${index}`, kind: "debug_unknown", raw: redactObject(event) });
     }
