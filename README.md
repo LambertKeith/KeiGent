@@ -265,6 +265,7 @@ git diff --check
 - [产品规格] [`doc/product/06-skill-governance-product-spec.md`](doc/product/06-skill-governance-product-spec.md) —— 下一阶段 P0：skill 生命周期、晋升门槛、eval guard 与回滚边界
 - [产品旅程] [`doc/product/07-local-operator-user-journeys.md`](doc/product/07-local-operator-user-journeys.md) —— operator 安装、执行、审批、复盘、skill 晋升与 eval 旅程
 - [开发要求] [`doc/product/08-loop-engineering-development-requirements.md`](doc/product/08-loop-engineering-development-requirements.md) —— Loop Engineering 对 automation、worktree、skill、connector、sub-agent、memory 的产品约束
+- [成熟路线图] [`doc/product/09-agent-operations-maturity-roadmap.md`](doc/product/09-agent-operations-maturity-roadmap.md) —— Run 可审计、Eval 可复盘、Loop 可治理、Ops 可扩展的下一阶段任务与验收标准
 - [设计蓝图] [`doc/evals/01-real-world-eval-suite.md`](doc/evals/01-real-world-eval-suite.md) —— 真实世界 Eval Suite 蓝图
 - [验收报告] [`doc/evals/02-main-acceptance-report.md`](doc/evals/02-main-acceptance-report.md) —— main 分支产品/架构验收意见
 - [Eval 路线图] [`doc/evals/03-real-world-eval-roadmap.md`](doc/evals/03-real-world-eval-roadmap.md) —— L1/L2/L3 分层 eval 与 false confidence 防线
