@@ -155,7 +155,10 @@ describe("run workbench page", () => {
     expect(html).toContain("Route and skills");
     expect(html).toContain("Evidence");
     expect(html).toContain("Risk and approvals");
+    expect(html).toContain("Proof boundary");
     expect(html).toContain("Autonomy");
+    expect(html).toContain("Repair attempts");
+    expect(html).toContain("Next action");
     expect(html).toContain("Tools and budget");
     expect(html).toContain("Replay and artifacts");
     expect(html).toContain("Raw redacted record");
