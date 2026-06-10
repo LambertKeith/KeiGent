@@ -2,14 +2,16 @@
   "name": "@keigent/cli",
   "version": "0.0.1",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
-    "keigent": "./src/main.ts"
+    "keigent": "./bin/keigent.mjs"
   },
   "scripts": {
     "start": "tsx src/main.ts",
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run src"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.77.0",

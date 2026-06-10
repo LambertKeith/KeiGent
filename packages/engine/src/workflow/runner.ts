@@ -1,7 +1,8 @@
 import { describeAssertion, evaluateAssertions } from "../assertions.js";
 import { buildEvidenceBundle } from "../evidence.js";
 import { failureSummaryForWorkflowExit } from "../failures.js";
-import type { Assertion, LoopResult, ProgressEvent, Task, Trajectory } from "../types.js";
+import type { Assertion, LoopResult, ProgressEvent, ProviderUsageSummary, Task, Trajectory } from "../types.js";
+import { addProviderUsage } from "../provider-usage.js";
 import type {
   ChildRunResult,
   ChildRunSpec,
@@ -18,8 +19,19 @@ import type {
 export interface WorkflowChildRunner {
   runChild(
     child: ChildRunSpec,
-    options?: { onProgress?: (event: ProgressEvent) => void; maxIterations?: number; signal?: AbortSignal },
+    options?: WorkflowChildRunOptions,
   ): Promise<LoopResult>;
+}
+
+export interface WorkflowChildRunOptions {
+  onProgress?: (event: ProgressEvent) => void;
+  maxIterations?: number;
+  maxToolCalls?: number;
+  maxTokenEstimate?: number;
+  maxProviderCostUsd?: number;
+  maxWallTimeMs?: number;
+  maxRecoveryAttempts?: number;
+  signal?: AbortSignal;
 }
 
 export class WorkflowRunner {
@@ -118,9 +130,9 @@ export class WorkflowRunner {
     };
     const workerRun = await this.executeChild(input.spec, worker, input.emit);
 
-    const verifier: ChildRunSpec = {
-      id: `${input.spec.id}:verifier-1`,
-      role: "verifier",
+    const reviewer: ChildRunSpec = {
+      id: `${input.spec.id}:reviewer-1`,
+      role: "reviewer",
       task: {
         ...input.spec.rootTask,
         goal: `${input.spec.goal}\n\nReview worker result:\n${workerRun.childRun.result.finalResponse}`,
@@ -131,21 +143,21 @@ export class WorkflowRunner {
         allowExternalSideEffects: false,
       },
     };
-    const verifierRun = await this.executeChild(input.spec, verifier, input.emit);
+    const reviewerRun = await this.executeChild(input.spec, reviewer, input.emit);
 
-    const childRuns = [workerRun.childRun, verifierRun.childRun];
+    const childRuns = [workerRun.childRun, reviewerRun.childRun];
     const durationMs = Date.now() - input.startMs;
     const budgetUsage = computeBudgetUsage(childRuns, durationMs);
     const budgetFailure = findBudgetFailure(input.spec, budgetUsage, childRuns);
-    const review = evaluateReviewedLoop(workerRun.childRun, verifierRun.childRun);
-    const timedOut = workerRun.timedOut || verifierRun.timedOut;
+    const review = evaluateReviewedLoop(workerRun.childRun, reviewerRun.childRun);
+    const timedOut = workerRun.timedOut || reviewerRun.timedOut;
     const exitReason = timedOut
       ? "timeout"
       : budgetFailure?.exitReason
         ?? (workerRun.childRun.result.exitReason !== "success"
           ? mapChildExit(workerRun.childRun.result.exitReason, input.spec, review.passed)
-          : verifierRun.childRun.result.exitReason !== "success"
-            ? mapChildExit(verifierRun.childRun.result.exitReason, input.spec, review.passed)
+          : reviewerRun.childRun.result.exitReason !== "success"
+            ? mapChildExit(reviewerRun.childRun.result.exitReason, input.spec, review.passed)
             : review.passed ? "success" : "verified_failure");
     const budgetEvidenceItem = budgetFailure ? budgetEvidence(budgetFailure.message, budgetFailure.sourceChildRunId) : undefined;
     const workflowEvidence = [...review.evidence, ...(budgetEvidenceItem ? [budgetEvidenceItem] : [])];
@@ -162,7 +174,7 @@ export class WorkflowRunner {
       startedAt: input.startedAt,
       durationMs,
       exitReason,
-      finalResponse: `${workerRun.childRun.result.finalResponse}\n\n[review]\n${verifierRun.childRun.result.finalResponse}`,
+      finalResponse: `${workerRun.childRun.result.finalResponse}\n\n[review]\n${reviewerRun.childRun.result.finalResponse}`,
       childRuns,
       evidence: workflowEvidence,
       events: input.events,
@@ -185,6 +197,11 @@ export class WorkflowRunner {
       childResult = await withTimeout(
         this.childRunner.runChild(child, {
           maxIterations: spec.budget.maxIterationsPerRun,
+          maxToolCalls: spec.budget.maxToolCallsPerRun ?? spec.budget.maxAggregateToolCalls,
+          maxTokenEstimate: spec.budget.maxTokenEstimatePerRun ?? spec.budget.maxAggregateTokenEstimate,
+          maxProviderCostUsd: spec.budget.maxProviderCostUsdPerRun ?? spec.budget.maxAggregateProviderCostUsd,
+          maxWallTimeMs: spec.budget.timeoutMs,
+          maxRecoveryAttempts: spec.budget.maxRecoveryAttemptsPerRun,
           signal: abortController.signal,
           onProgress: (event) => emit({ kind: "child_event", workflowId: spec.id, childRunId: child.id, event }),
         }),
@@ -377,6 +394,8 @@ function mapChildExit(
       return "child_error";
     case "max_iterations":
       return "max_iterations";
+    case "budget_exceeded":
+      return "budget_exceeded";
     case "escalated":
       return "child_escalated";
   }
@@ -387,13 +406,27 @@ function computeBudgetUsage(childRuns: ChildRunResult[], durationMs: number): Wo
     childRuns: childRuns.length,
     iterations: childRuns.reduce((sum, child) => sum + child.result.iterations, 0),
     toolCalls: childRuns.reduce((sum, child) => sum + countNormalToolCalls(child.result), 0),
+    tokenEstimate: childRuns.reduce((sum, child) => sum + (child.result.estimatedTokens ?? child.trajectory?.estimatedTokens ?? 0), 0),
+    providerUsage: aggregateProviderUsage(childRuns),
+    recoveryAttempts: childRuns.reduce((sum, child) => sum + countRecoveryAttempts(child.result), 0),
     checkpointsPassed: childRuns.reduce((sum, child) => sum + child.result.checkpointsPassed, 0),
     durationMs,
   };
 }
 
+function aggregateProviderUsage(childRuns: ChildRunResult[]): ProviderUsageSummary | undefined {
+  return childRuns.reduce<ProviderUsageSummary | undefined>(
+    (sum, child) => addProviderUsage(sum, child.result.providerUsage ?? child.trajectory?.providerUsage),
+    undefined,
+  );
+}
+
 function countNormalToolCalls(result: LoopResult): number {
   return result.trajectory?.steps.filter((step) => step.kind === "tool_call").length ?? result.totalToolCalls;
+}
+
+function countRecoveryAttempts(result: LoopResult): number {
+  return result.trajectory?.steps.filter((step) => step.kind === "recovery").length ?? 0;
 }
 
 function findBudgetFailure(
@@ -415,8 +448,58 @@ function findBudgetFailure(
   if (usage.iterations > (spec.budget.maxAggregateIterations ?? Number.POSITIVE_INFINITY)) {
     return { exitReason: "budget_exceeded", message: "budget exceeded: maxAggregateIterations" };
   }
+  const overToolChild = childRuns.find(
+    (child) => countNormalToolCalls(child.result) > (spec.budget.maxToolCallsPerRun ?? Number.POSITIVE_INFINITY),
+  );
+  if (overToolChild) {
+    return {
+      exitReason: "budget_exceeded",
+      message: `budget exceeded: maxToolCallsPerRun (${countNormalToolCalls(overToolChild.result)} > ${spec.budget.maxToolCallsPerRun})`,
+      sourceChildRunId: overToolChild.id,
+    };
+  }
   if (usage.toolCalls > (spec.budget.maxAggregateToolCalls ?? Number.POSITIVE_INFINITY)) {
     return { exitReason: "budget_exceeded", message: "budget exceeded: maxAggregateToolCalls" };
+  }
+  const overTokenChild = childRuns.find(
+    (child) => (child.result.estimatedTokens ?? child.trajectory?.estimatedTokens ?? 0) > (spec.budget.maxTokenEstimatePerRun ?? Number.POSITIVE_INFINITY),
+  );
+  if (overTokenChild) {
+    const childTokens = overTokenChild.result.estimatedTokens ?? overTokenChild.trajectory?.estimatedTokens ?? 0;
+    return {
+      exitReason: "budget_exceeded",
+      message: `budget exceeded: maxTokenEstimatePerRun (${childTokens} > ${spec.budget.maxTokenEstimatePerRun})`,
+      sourceChildRunId: overTokenChild.id,
+    };
+  }
+  if ((usage.tokenEstimate ?? 0) > (spec.budget.maxAggregateTokenEstimate ?? Number.POSITIVE_INFINITY)) {
+    return { exitReason: "budget_exceeded", message: "budget exceeded: maxAggregateTokenEstimate" };
+  }
+  const overCostChild = childRuns.find(
+    (child) =>
+      (child.result.providerUsage ?? child.trajectory?.providerUsage)?.costStatus === "priced"
+      && ((child.result.providerUsage ?? child.trajectory?.providerUsage)?.costUsd ?? 0) > (spec.budget.maxProviderCostUsdPerRun ?? Number.POSITIVE_INFINITY),
+  );
+  if (overCostChild) {
+    const childCost = (overCostChild.result.providerUsage ?? overCostChild.trajectory?.providerUsage)?.costUsd ?? 0;
+    return {
+      exitReason: "budget_exceeded",
+      message: `budget exceeded: maxProviderCostUsdPerRun (${childCost} > ${spec.budget.maxProviderCostUsdPerRun})`,
+      sourceChildRunId: overCostChild.id,
+    };
+  }
+  if (usage.providerUsage?.costStatus === "priced" && usage.providerUsage.costUsd > (spec.budget.maxAggregateProviderCostUsd ?? Number.POSITIVE_INFINITY)) {
+    return { exitReason: "budget_exceeded", message: "budget exceeded: maxAggregateProviderCostUsd" };
+  }
+  const overRecoveryChild = childRuns.find(
+    (child) => countRecoveryAttempts(child.result) > (spec.budget.maxRecoveryAttemptsPerRun ?? Number.POSITIVE_INFINITY),
+  );
+  if (overRecoveryChild) {
+    return {
+      exitReason: "budget_exceeded",
+      message: `budget exceeded: maxRecoveryAttemptsPerRun (${countRecoveryAttempts(overRecoveryChild.result)} > ${spec.budget.maxRecoveryAttemptsPerRun})`,
+      sourceChildRunId: overRecoveryChild.id,
+    };
   }
   if (usage.durationMs > (spec.budget.timeoutMs ?? Number.POSITIVE_INFINITY)) {
     return { exitReason: "timeout", message: "budget exceeded: timeoutMs" };

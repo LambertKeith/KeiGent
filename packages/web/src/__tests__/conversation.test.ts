@@ -260,9 +260,15 @@ describe("normalizeConversationRun", () => {
 
 describe("redactObject", () => {
   it("redacts nested secret-like fields before web display", () => {
-    const redacted = redactObject({ apiKey: "sk-abcdef1234", nested: { authorization: "Bearer xyz" }, safe: "visible" });
+    const redacted = redactObject({
+      apiKey: "sk-abcdef1234",
+      nested: { authorization: "Bearer xyz" },
+      array: ["token=sk-array-secret-123456"],
+      safe: "visible",
+    });
     expect(JSON.stringify(redacted)).not.toContain("sk-abcdef1234");
     expect(JSON.stringify(redacted)).not.toContain("Bearer xyz");
+    expect(JSON.stringify(redacted)).not.toContain("sk-array-secret-123456");
     expect(redacted).toMatchObject({ apiKey: "[REDACTED:...1234]", nested: { authorization: "[REDACTED:... xyz]" } });
     expect(redacted.safe).toBe("visible");
   });

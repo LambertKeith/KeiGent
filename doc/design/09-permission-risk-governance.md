@@ -26,6 +26,20 @@
 }
 ```
 
+Readonly connector baseline：
+
+| Tool | 权限 | 风险 | 副作用 | 边界 |
+|---|---|---|---|---|
+| `file_read` / `file_list` / `grep` | readonly | R0 | none | workspace 沙箱内 |
+| `web_fetch` | readonly | R0 | none | 只抓取网页文本 |
+| `http_get` | readonly | R0 | none | 只允许 GET；不接受 headers/body/method override；结果包含 source URL |
+| `github_repo_read` | readonly | R0 | none | 只读 public repo metadata；不接受 token/header/body/method |
+| `browser_snapshot` / `browser_get_text` / `browser_screenshot` | readonly | R0 | none | 只观察当前 browser state |
+| `git_status` | readonly | R0 | none | 只运行 `git status --short --branch`，不接受任意 git 命令 |
+
+Readonly connector 失败必须返回 structured error，例如 `connector_failure=git_status_unavailable`，不能把失败当作空结果。
+写路径必须显式 unsupported，例如 `write_unsupported=http_get_readonly`。
+
 ## 3. 审批 Prompt 要求
 
 审批提示必须包含：

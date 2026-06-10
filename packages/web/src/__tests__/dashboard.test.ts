@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_REAL_WORLD_L2_CASES,
+  createRealWorldFixtureExecutor,
+  runRealWorldEvalCases,
+} from "@keigent/engine";
+import {
   casesWithFailureCode,
   filterDashboardCases,
+  normalizeRealWorldEvalReport,
   summarizeEvalReport,
   type EvalReportView,
 } from "../dashboard/report-model.js";
@@ -125,5 +131,36 @@ describe("dashboard report model", () => {
     };
 
     expect(summarizeEvalReport(report)).toMatchObject({ authoritative: false, passRate: null });
+  });
+
+  it("normalizes real-world L2 reports into case-to-run detail links without health claims", async () => {
+    const report = await runRealWorldEvalCases(DEFAULT_REAL_WORLD_L2_CASES, createRealWorldFixtureExecutor());
+
+    const view = normalizeRealWorldEvalReport(report);
+
+    expect(view).toMatchObject({
+      level: "L2",
+      datasetId: "local-real-task-v1",
+      healthClaim: "Fixture-level regression, not product health",
+      metrics: {
+        routeAccuracy: { value: 1, label: "100.0%" },
+        taskSuccessRate: { value: 4 / 17, label: "23.5%" },
+        evidenceQuality: { label: expect.stringMatching(/%$/) },
+      },
+    });
+    expect(view.cases.find((testCase) => testCase.id === "no-op-automation")).toMatchObject({
+      runId: "run_no-op-automation",
+      runDetailHref: "#runs/run_no-op-automation",
+      result: "no_op",
+      replayFreshExecution: true,
+    });
+    expect(view.cases.find((testCase) => testCase.id === "replay-report")).toMatchObject({
+      runId: "run_replay-report",
+      runDetailHref: "#runs/run_replay-report",
+      replayFreshExecution: false,
+    });
+    expect(view.falseConfidenceFindings).toEqual([
+      expect.objectContaining({ code: "fixture_level", severity: "info" }),
+    ]);
   });
 });

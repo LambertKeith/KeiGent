@@ -115,6 +115,7 @@ interface RunRecord {
 - exit reason
 - final response 摘要
 - event counts by type
+- provider usage/cost summary（仅来自模型响应 usage；自定义 endpoint 可通过本地 `modelPricing` 产生成本；无价格配置时标记 `pricing_not_configured`）
 
 ### 4.4 Evidence summary
 

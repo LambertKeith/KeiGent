@@ -21,6 +21,10 @@ describe("failure semantics", () => {
       code: "timeout",
       layer: "budget",
     });
+    expect(failureSummaryForWorkflowExit("budget_exceeded")).toMatchObject({
+      code: "budget_exceeded",
+      layer: "budget",
+    });
     expect(recommendedNextActionFor("verified_failure")).toContain("补充或检查证据");
   });
 

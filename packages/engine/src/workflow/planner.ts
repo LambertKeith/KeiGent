@@ -5,7 +5,11 @@ export const DEFAULT_WORKFLOW_BUDGET: WorkflowBudget = {
   maxChildRuns: 1,
   maxIterationsPerRun: 10,
   maxAggregateIterations: 10,
+  maxToolCallsPerRun: 20,
   maxAggregateToolCalls: 20,
+  maxTokenEstimatePerRun: 64_000,
+  maxAggregateTokenEstimate: 64_000,
+  maxRecoveryAttemptsPerRun: 3,
   timeoutMs: 120_000,
 };
 

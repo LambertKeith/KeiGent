@@ -56,12 +56,19 @@ Workflow 不是“更高级的 loop”，而是 parent envelope。每个 child �
   maxChildRuns: number;
   maxIterationsPerRun: number;
   maxAggregateIterations?: number;
+  maxToolCallsPerRun?: number;
   maxAggregateToolCalls?: number;
+  maxTokenEstimatePerRun?: number;
+  maxAggregateTokenEstimate?: number;
+  maxProviderCostUsdPerRun?: number;
+  maxAggregateProviderCostUsd?: number;
+  maxRecoveryAttemptsPerRun?: number;
   timeoutMs?: number;
 }
 ```
 
 超过预算的结果是 workflow failure，不是 child failure。
+`maxIterationsPerRun`、`maxToolCallsPerRun`、`maxTokenEstimatePerRun`、`maxProviderCostUsdPerRun`、`maxRecoveryAttemptsPerRun` 是 child 预算；aggregate 字段和 `timeoutMs` 是 parent envelope 预算。`maxTokenEstimate*` 是请求前估算，不是供应商 billing token。provider usage/cost 只使用模型响应里的 usage，进入 `budgetUsage.providerUsage`；自定义 endpoint 可通过本地 `modelPricing`（USD per million tokens）让 pi-ai 产生成本。当模型价格为 0 或未配置时显示 `pricing_not_configured`，不得把它解释为免费。`maxProviderCostUsd*` 只在 `costStatus: "priced"` 时强制执行。
 
 ## 6. Failure Semantics
 

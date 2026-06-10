@@ -11,3 +11,4 @@
 | 产品旅程 | [07 Local Operator User Journeys](07-local-operator-user-journeys.md) | 下一阶段 P1：安装、执行、审批、复盘、skill 晋升与真实世界 eval 的用户旅程 |
 | 开发要求 | [08 Loop Engineering Development Requirements](08-loop-engineering-development-requirements.md) | 从 Loop Engineering 提炼的 automation、worktree、skill、connector、sub-agent、memory 产品约束 |
 | 成熟路线图 | [09 Agent Operations Maturity Roadmap](09-agent-operations-maturity-roadmap.md) | 下一阶段：Run 可审计、Eval 可复盘、Loop 可治理、Ops 可扩展的任务清单与验收标准 |
+| 发布入口 | [10 Release and Upgrade Path](10-release-and-upgrade.md) | first-run guide、config upgrade policy、release checklist、changelog 与版本兼容边界 |

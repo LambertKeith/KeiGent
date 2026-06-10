@@ -13,7 +13,7 @@
 | Tool unavailable | 浏览器、shell、网络不可用 | tool_unavailable | doctor / retry later |
 | External failure | 外部系统失败 | network_error/auth_failed | retry/backoff/escalate |
 | Verification failure | 操作完成但证据不足 | checkpoint_missing/verified_failure | collect evidence / manual review |
-| Budget failure | 轮次、工具、child、超时 | max_iterations/timeout | summarize partial state |
+| Budget failure | 轮次、工具、child、token estimate、recovery、超时 | budget_exceeded/max_iterations/timeout | summarize partial state |
 | Model noncompliance | 模型未按协议行动 | malformed_tool/final_missing | retry once / escalate |
 | Internal bug | 代码异常 | executor_error/child_error | save trajectory + bug report |
 

@@ -1,10 +1,11 @@
-#!/usr/bin/env -S npx tsx
 import { runRepl } from "./repl.js";
 import { runOnce } from "./run-once.js";
 import { printError } from "./renderer.js";
 import { runConfigCommand, runDoctor } from "./config-commands.js";
 import { parseCliArgs } from "./args.js";
 import { runEvalCommand, runReplayCommand } from "./eval-commands.js";
+import { runRunsCommand } from "./runs-commands.js";
+import { runAutomationCommand } from "./automation-commands.js";
 import { runWebCommand } from "./web-command.js";
 
 async function main() {
@@ -22,6 +23,12 @@ async function main() {
       return;
     case "replay":
       await runReplayCommand(invocation.args);
+      return;
+    case "runs":
+      await runRunsCommand(invocation.args);
+      return;
+    case "automation":
+      await runAutomationCommand(invocation.args);
       return;
     case "web":
       await runWebCommand(invocation.args);

@@ -2,6 +2,7 @@
   "name": "@keigent/engine",
   "version": "0.0.1",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./src/lib.ts",
   "types": "./src/lib.ts",
@@ -17,6 +18,7 @@
     "eval:replay": "tsx src/evals/cli.ts --mode replay",
     "eval:orchestrator": "tsx src/evals/orchestrator-cli.ts",
     "eval:real-world": "tsx src/evals/real-world-cli.ts",
+    "eval:operator": "tsx src/evals/operator-scenarios-cli.ts",
     "check": "tsc --noEmit",
     "test": "vitest run"
   },

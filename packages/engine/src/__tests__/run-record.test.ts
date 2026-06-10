@@ -1,12 +1,16 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import {
+  buildNoOpRunRecord,
   buildRunRecordFromWorkflowResult,
+  readRunRecord,
+  readRunStore,
   saveRunRecord,
   summarizeRunRecord,
   type LoopResult,
+  type RunRecord,
   type WorkflowResult,
 } from "../lib.js";
 
@@ -99,8 +103,18 @@ function workflowResult(exitReason: WorkflowResult["exitReason"] = "success"): W
     evidence: [
       { kind: "checkpoint", passed: true, message: "file exists", sourceChildRunId: "wf-run-record:worker-1" },
     ],
-    budget: { maxChildRuns: 1, maxIterationsPerRun: 3, maxAggregateIterations: 3, maxAggregateToolCalls: 5 },
-    budgetUsage: { childRuns: 1, iterations: 2, toolCalls: 1, checkpointsPassed: 1, durationMs: 20 },
+    budget: {
+      maxChildRuns: 1,
+      maxIterationsPerRun: 3,
+      maxAggregateIterations: 3,
+      maxToolCallsPerRun: 5,
+      maxAggregateToolCalls: 5,
+      maxTokenEstimatePerRun: 8_000,
+      maxAggregateTokenEstimate: 8_000,
+      maxRecoveryAttemptsPerRun: 2,
+      timeoutMs: 120_000,
+    },
+    budgetUsage: { childRuns: 1, iterations: 2, toolCalls: 1, tokenEstimate: 120, recoveryAttempts: 0, checkpointsPassed: 1, durationMs: 20 },
     durationMs: 20,
     trajectory: {
       schemaVersion: 1,
@@ -112,8 +126,18 @@ function workflowResult(exitReason: WorkflowResult["exitReason"] = "success"): W
       durationMs: 20,
       exitReason,
       finalResponse: child.finalResponse,
-      budget: { maxChildRuns: 1, maxIterationsPerRun: 3, maxAggregateIterations: 3, maxAggregateToolCalls: 5 },
-      budgetUsage: { childRuns: 1, iterations: 2, toolCalls: 1, checkpointsPassed: 1, durationMs: 20 },
+      budget: {
+        maxChildRuns: 1,
+        maxIterationsPerRun: 3,
+        maxAggregateIterations: 3,
+        maxToolCallsPerRun: 5,
+        maxAggregateToolCalls: 5,
+        maxTokenEstimatePerRun: 8_000,
+        maxAggregateTokenEstimate: 8_000,
+        maxRecoveryAttemptsPerRun: 2,
+        timeoutMs: 120_000,
+      },
+      budgetUsage: { childRuns: 1, iterations: 2, toolCalls: 1, tokenEstimate: 120, recoveryAttempts: 0, checkpointsPassed: 1, durationMs: 20 },
       evidence: [
         { kind: "checkpoint", passed: true, message: "file exists", sourceChildRunId: "wf-run-record:worker-1" },
       ],
@@ -165,6 +189,21 @@ describe("RunRecord", () => {
         rationale: "matched file-write",
         matchedSkillIds: ["file-write"],
       },
+      workflow: {
+        budget: {
+          maxIterationsPerRun: 3,
+          maxToolCallsPerRun: 5,
+          maxTokenEstimatePerRun: 8_000,
+          maxRecoveryAttemptsPerRun: 2,
+        },
+        budgetUsage: {
+          iterations: 2,
+          toolCalls: 1,
+          tokenEstimate: 120,
+          recoveryAttempts: 0,
+        },
+        budgetExceeded: false,
+      },
       execution: {
         iterations: 2,
         totalToolCalls: 1,
@@ -194,6 +233,28 @@ describe("RunRecord", () => {
     });
     expect(record.approvals).toHaveLength(1);
     expect(record.artifacts).toContainEqual({ kind: "workflow_trajectory", path: "/tmp/workflow.json" });
+    expect(record.childRunIds).toEqual(["wf-run-record:worker-1"]);
+    expect(record.childRuns).toEqual([expect.objectContaining({
+      id: "wf-run-record:worker-1",
+      role: "worker",
+      profile: "convergent-exec",
+      exitReason: "success",
+    })]);
+    expect(record.skills).toEqual([expect.objectContaining({
+      name: "file-write",
+      status: "verified",
+      reason: "tag:file",
+      injected: true,
+      evalCoverage: ["file-write-success"],
+    })]);
+    expect(record.tools).toEqual([expect.objectContaining({
+      name: "file_write",
+      attempted: true,
+      succeeded: true,
+      permission: "write",
+      riskLevel: "R3",
+      sideEffect: "local",
+    })]);
   });
 
   it("does not treat empty evidence as verified success", () => {
@@ -217,6 +278,34 @@ describe("RunRecord", () => {
 
     expect(record.status).toBe("cancelled");
     expect(record.replay).toMatchObject({ supported: true, freshExecution: false, latestReplayReportId: "rw-l2-001" });
+    expect(record.nextAction).toContain("timeout");
+  });
+
+  it("creates auditable no-op automation records without pretending system health", () => {
+    const record = buildNoOpRunRecord({
+      id: "run_noop",
+      createdAt: "2026-06-10T00:00:00.000Z",
+      goal: "Triage recent failed runs",
+      trigger: "manual",
+      scope: "last 20 runs",
+      noOpReason: "No triage candidates found.",
+      doesNotProve: ["No hidden failures outside this scope."],
+    });
+
+    expect(record).toMatchObject({
+      id: "run_noop",
+      status: "no_op",
+      task: { source: "automation", goal: "Triage recent failed runs" },
+      evidence: { status: "not_checked", total: 0 },
+      automation: {
+        trigger: "manual",
+        scope: "last 20 runs",
+        noOpReason: "No triage candidates found.",
+        doesNotProve: ["No hidden failures outside this scope."],
+      },
+      replay: { supported: false, freshExecution: true },
+    });
+    expect(summarizeRunRecord(record)).toContain("Status: no_op");
   });
 
   it("persists record.json under the run id directory and renders a CLI summary", async () => {
@@ -232,6 +321,86 @@ describe("RunRecord", () => {
     expect(summary).toContain("Run: run_test");
     expect(summary).toContain("Status: succeeded");
     expect(summary).toContain("Evidence: 1 passed / 0 failed");
+    expect(summary).toContain("Budget: 2/3 iterations, 1/5 tools, 120/8000 estimated tokens, 0/2 recoveries");
     expect(summary).toContain("Risk: R3");
+  });
+
+  it("preserves provider usage in run records and summaries", () => {
+    const result = workflowResult();
+    result.budgetUsage.providerUsage = {
+      inputTokens: 100,
+      outputTokens: 25,
+      cacheReadTokens: 10,
+      cacheWriteTokens: 5,
+      totalTokens: 140,
+      costUsd: 0.075,
+      costStatus: "priced",
+    };
+    result.trajectory.budgetUsage.providerUsage = result.budgetUsage.providerUsage;
+    result.childRuns[0]!.result.providerUsage = result.budgetUsage.providerUsage;
+    result.childRuns[0]!.trajectory!.providerUsage = result.budgetUsage.providerUsage;
+
+    const record = buildRunRecordFromWorkflowResult(result, { id: "run_usage" });
+
+    expect(record.workflow?.budgetUsage.providerUsage).toEqual({
+      inputTokens: 100,
+      outputTokens: 25,
+      cacheReadTokens: 10,
+      cacheWriteTokens: 5,
+      totalTokens: 140,
+      costUsd: 0.075,
+      costStatus: "priced",
+    });
+    expect(summarizeRunRecord(record)).toContain("provider tokens 140");
+    expect(summarizeRunRecord(record)).toContain("provider cost $0.075000");
+  });
+
+  it("reads run store records newest first while tolerating malformed files", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "keigent-run-store-"));
+    const older = buildRunRecordFromWorkflowResult(workflowResult(), {
+      id: "run_older",
+      createdAt: "2026-06-09T00:00:00.000Z",
+    });
+    const newer = buildRunRecordFromWorkflowResult(workflowResult(), {
+      id: "run_newer",
+      createdAt: "2026-06-10T00:00:00.000Z",
+    });
+    await saveRunRecord(older, { runsDir: dir });
+    await saveRunRecord(newer, { runsDir: dir });
+    await import("node:fs/promises").then(({ mkdir, writeFile }) =>
+      mkdir(join(dir, "bad"), { recursive: true }).then(() => writeFile(join(dir, "bad", "record.json"), "{bad json", "utf8")));
+
+    const store = await readRunStore({ runsDir: dir });
+
+    expect(store.records.map((record: RunRecord) => record.id)).toEqual(["run_newer", "run_older"]);
+    expect(store.errors).toEqual([expect.objectContaining({ runId: "bad", code: "invalid_json" })]);
+    await expect(readRunRecord(join(dir, "run_newer", "record.json"))).resolves.toMatchObject({ id: "run_newer" });
+  });
+
+  it("normalizes legacy records without upgrading unknown status or leaking unknown secret fields", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "keigent-legacy-run-"));
+    const recordPath = join(dir, "legacy", "record.json");
+    await mkdir(join(dir, "legacy"), { recursive: true });
+    await writeFile(recordPath, JSON.stringify({
+      id: "legacy",
+      createdAt: "2026-06-10T00:00:00.000Z",
+      status: "mystery",
+      task: { goal: "Legacy run" },
+      evidence: {},
+      replay: { freshExecution: false },
+      apiKey: "sk-legacy-secret-123456",
+    }), "utf8");
+
+    const record = await readRunRecord(recordPath);
+
+    expect(record).toMatchObject({
+      id: "legacy",
+      status: "unknown",
+      task: { goal: "Legacy run", source: "unknown" },
+      evidence: { status: "not_checked", total: 0, passed: 0, failed: 0 },
+      replay: { supported: false, freshExecution: false },
+      redaction: { applied: true, rawPayloadStored: false },
+    });
+    expect(JSON.stringify(record)).not.toContain("sk-legacy-secret-123456");
   });
 });

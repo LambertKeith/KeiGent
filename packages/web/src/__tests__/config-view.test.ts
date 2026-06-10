@@ -45,4 +45,19 @@ describe("config page view model", () => {
 
     expect(view.onlineDoctor).toMatchObject({ enabled: true, requiresExplicitAction: false });
   });
+
+  it("renders object config fields as JSON instead of object placeholders", () => {
+    const view = normalizeConfigPageView({
+      fields: [
+        {
+          label: "modelPricing",
+          effectiveValue: { input: 2.5, output: 10, cacheRead: 0.25, cacheWrite: 3 },
+          source: "file",
+        },
+      ],
+      doctorIssues: [],
+    });
+
+    expect(view.fields[0]?.effectiveValue).toBe("{\"input\":2.5,\"output\":10,\"cacheRead\":0.25,\"cacheWrite\":3}");
+  });
 });

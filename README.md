@@ -266,6 +266,7 @@ git diff --check
 - [产品旅程] [`doc/product/07-local-operator-user-journeys.md`](doc/product/07-local-operator-user-journeys.md) —— operator 安装、执行、审批、复盘、skill 晋升与 eval 旅程
 - [开发要求] [`doc/product/08-loop-engineering-development-requirements.md`](doc/product/08-loop-engineering-development-requirements.md) —— Loop Engineering 对 automation、worktree、skill、connector、sub-agent、memory 的产品约束
 - [成熟路线图] [`doc/product/09-agent-operations-maturity-roadmap.md`](doc/product/09-agent-operations-maturity-roadmap.md) —— Run 可审计、Eval 可复盘、Loop 可治理、Ops 可扩展的下一阶段任务与验收标准
+- [发布入口] [`doc/product/10-release-and-upgrade.md`](doc/product/10-release-and-upgrade.md) —— first-run guide、config upgrade policy、release checklist、changelog 与版本兼容边界
 - [设计蓝图] [`doc/evals/01-real-world-eval-suite.md`](doc/evals/01-real-world-eval-suite.md) —— 真实世界 Eval Suite 蓝图
 - [验收报告] [`doc/evals/02-main-acceptance-report.md`](doc/evals/02-main-acceptance-report.md) —— main 分支产品/架构验收意见
 - [Eval 路线图] [`doc/evals/03-real-world-eval-roadmap.md`](doc/evals/03-real-world-eval-roadmap.md) —— L1/L2/L3 分层 eval 与 false confidence 防线
@@ -277,7 +278,7 @@ git diff --check
 
 - **REPL 跨轮无对话历史**：每轮输入是独立的一次 `engine.run`。
 - **单次模式非交互**：`ask_user` 无人可答时会降级。
-- **Web 仍是设计/视图模型阶段**：完整可视化 UI 尚未实现。
+- **Web 已有前端内存事件流 Live Run Console、Web Run Launcher、Run Detail v1、Skill Workbench、Eval Dashboard 与本地 API/SSE foundation**：可展示 live/replay event timeline、pending tool/checkpoint/approval、RunRecord 审计、skill 状态/注入原因/eval coverage，以及 eval case 到 run detail 的链接与 false-confidence findings；`keigent web --api` 可启动本地 API，前端通过 `VITE_KEIGENT_API_URL` 读取 run store、发起 web-sourced run，并订阅 run session event stream。完整交互式 Workbench 尚未实现。
 - **Workflow P0 是保守 envelope**：不声明 fanout/tournament/dynamic planner 已可用。
 - **pi-ai gpt-5.5 并发工具调用 bug**：`utils.ts` 的 `deduplicateToolCalls` 统一合并互补 tool-call block。
 
@@ -285,4 +286,4 @@ git diff --check
 
 ## License
 
-当前仓库未声明公开许可证；发布前需要补充许可证与贡献规则。
+Apache-2.0。贡献规则见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。

@@ -27,7 +27,7 @@
 - 不实现动态 LLM workflow planner。
 - 不实现 recursive workflows。
 - 不实现 full quarantine，只保留后续扩展位置；如果暴露 policy 字段，必须有 enforcement test。
-- 不实现 token/cost budget；P0 budget 仅支持 child count / iterations / tool calls / timeout。
+- 不实现远程自动价格表同步；P0 budget 支持 child count / iterations / tool calls / token estimate / provider cost ceiling / recovery attempts / timeout。token estimate 是请求前的保守上下文估算，不等同 provider billing tokens。真实供应商 usage/cost 只从 pi-ai response `usage` 归集到 result / trajectory / workflow usage / RunRecord / debug bundle / Web view model；自定义 endpoint 可通过本地 `modelPricing`（USD per million tokens）让 pi-ai 产生成本。`maxProviderCostUsd*` 只在 usage `costStatus` 为 `priced` 时强制执行；`pricing_not_configured` 不能被解释为免费。
 - 不声明任务质量提升；只声明 observability / replay / failure mapping 基础能力。
 
 ---
@@ -119,13 +119,19 @@ export type WorkflowExitReason =
   | "child_escalated"
   | "max_iterations";
 
-export type WorkflowChildRole = "worker" | "verifier";
+export type WorkflowChildRole = "worker" | "reviewer" | "verifier";
 
 export interface WorkflowBudget {
   maxChildRuns: number;
   maxIterationsPerRun: number;
   maxAggregateIterations?: number;
+  maxToolCallsPerRun?: number;
   maxAggregateToolCalls?: number;
+  maxTokenEstimatePerRun?: number;
+  maxAggregateTokenEstimate?: number;
+  maxProviderCostUsdPerRun?: number;
+  maxAggregateProviderCostUsd?: number;
+  maxRecoveryAttemptsPerRun?: number;
   timeoutMs?: number;
 }
 
@@ -163,6 +169,17 @@ export interface WorkflowBudgetUsage {
   childRuns: number;
   iterations: number;
   toolCalls: number;
+  tokenEstimate?: number;
+  providerUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    totalTokens: number;
+    costUsd: number;
+    costStatus: "priced" | "pricing_not_configured";
+  };
+  recoveryAttempts: number;
   checkpointsPassed: number;
   durationMs: number;
 }
@@ -248,7 +265,11 @@ export const DEFAULT_WORKFLOW_BUDGET: WorkflowBudget = {
   maxChildRuns: 1,
   maxIterationsPerRun: 10,
   maxAggregateIterations: 10,
+  maxToolCallsPerRun: 20,
   maxAggregateToolCalls: 20,
+  maxTokenEstimatePerRun: 64_000,
+  maxAggregateTokenEstimate: 64_000,
+  maxRecoveryAttemptsPerRun: 3,
   timeoutMs: 120_000,
 };
 
@@ -290,7 +311,16 @@ export function createWorkflowSpec(input: {
 export interface WorkflowChildRunner {
   runChild(
     child: ChildRunSpec,
-    options?: { onProgress?: (event: ProgressEvent) => void; maxIterations?: number }
+    options?: {
+      onProgress?: (event: ProgressEvent) => void;
+      maxIterations?: number;
+      maxToolCalls?: number;
+      maxTokenEstimate?: number;
+      maxProviderCostUsd?: number;
+      maxWallTimeMs?: number;
+      maxRecoveryAttempts?: number;
+      signal?: AbortSignal;
+    }
   ): Promise<LoopResult>;
 }
 ```

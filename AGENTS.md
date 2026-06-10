@@ -148,7 +148,7 @@ doc/references/          # 外部参考项目研读
 - Evidence：SuccessDef、Assertion、EvidenceBundle、checkpoint、verdict、failure code。
 - Workflow：`single-loop`、`verified-loop`、`reviewed-loop` envelope，包含 budget、policy、child evidence、workflow trajectory。
 - CLI：REPL、单次执行、config、doctor、eval/replay、web print；机器可读命令支持 `--json` 和 `--compact`。
-- Web：当前是 Workbench view model 与静态 shell 阶段，不宣称完整交互式产品已完成。
+- Web：当前已有 Workbench view model、前端内存事件流 Live Run Console、Web Run Launcher、Run Detail v1、Skill Workbench、Eval Dashboard 静态审计 surface 与本地 Web API/SSE foundation；不宣称完整交互式产品已完成。
 - Eval：smoke、orchestrator、replay fixture 与 real-world L2 fixture 作为确定性主干回归门。
 
 ---
@@ -161,7 +161,7 @@ doc/references/          # 外部参考项目研读
 - **Workflow 是 parent envelope**：child run 仍通过 `LoopEngine.run()`。
 - **执行 loop 默认不写知识库**：学习结果走 learner 和 skill governance。
 - **危险副作用默认受控**：不要绕过 ToolRegistry、approval gate 或 workflow policy。
-- **Web 当前不是完整产品**：文档和 UI 只能描述已实现 view model 能力。
+- **Web 当前不是完整产品**：文档和 UI 只能描述已实现 view model、前端内存事件流 Live Run Console、Web Run Launcher、Run Detail v1、Skill Workbench、Eval Dashboard 静态审计能力与本地 Web API/SSE foundation。
 
 ---
 

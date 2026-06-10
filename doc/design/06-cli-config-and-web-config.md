@@ -29,6 +29,12 @@ The configured provider is therefore represented as:
   baseUrl: string;
   modelId: string;
   apiKey: string;
+  modelPricing: null | {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+  };
 }
 ```
 
@@ -40,6 +46,7 @@ Rules:
   - Anthropic protocol: `https://api.anthropic.com`
 - Third-party relay URLs are just custom `baseUrl` values; they must not get dedicated product entry points, names, or hidden defaults.
 - UI copy should say “OpenAI-compatible” / “Anthropic-compatible”, not the name of a relay provider.
+- `modelPricing` is an explicit local price table in USD per million tokens, matching pi-ai `Model.cost` fields. KeiGent does not fetch or guess provider prices.
 
 ## 3. Canonical config file
 
@@ -53,6 +60,7 @@ Supported fields:
 
 | Field | Type | Required | Secret | Default |
 | --- | --- | --- | --- | --- |
+| `configVersion` | `1` | yes | no | `1` |
 | `apiKey` | string | yes | yes | none |
 | `apiProtocol` | `openai` \| `anthropic` | yes | no | `openai` |
 | `baseUrl` | URL | yes | no | protocol default |
@@ -62,6 +70,13 @@ Supported fields:
 | `memoryDir` | path | yes | no | `~/.keigent/memory` |
 | `headless` | boolean | yes | no | `false` |
 | `maxIterations` | integer | yes | no | `12` |
+| `maxChildRuns` | integer | yes | no | `1` |
+| `maxToolCalls` | integer | yes | no | `20` |
+| `maxTokenEstimate` | integer | yes | no | `64000` |
+| `maxProviderCostUsd` | number \| `null` | yes | no | `null` |
+| `modelPricing` | object \| `null` | yes | no | `null` |
+| `maxWallTimeMs` | integer | yes | no | `120000` |
+| `maxRecoveryAttempts` | integer | yes | no | `3` |
 
 ## 4. Precedence
 
@@ -88,6 +103,12 @@ runtime secret override > KEIGENT_API_KEY > config.json apiKey > missing error
 ```
 
 Empty environment variables are treated as absent so they do not shadow a valid config file value.
+
+Version compatibility:
+
+- Current config schema version is `1`.
+- Legacy config files without `configVersion` are resolved as version `1`.
+- Future or unknown versions are reported by doctor as `configVersion.unsupported`; the loader does not silently reinterpret newer schemas.
 
 ## 5. Source-aware model
 
@@ -146,7 +167,7 @@ Opens editor, validates after exit, offers rollback if invalid.
 
 Modes: default/offline, `--online`, `--json`, `--fix`.
 
-Checks config existence, parse, effective key, protocol validity, precedence, paths, permissions, URL validity, model ID, max iterations, browser availability, and optional network/auth/model probe.
+Checks config existence, parse, effective key, protocol validity, precedence, paths, permissions, URL validity, model ID, runtime budgets, provider cost ceiling, browser availability, and optional network/auth/model probe.
 
 ### `keigent config web`
 
@@ -158,7 +179,7 @@ Launches localhost config page with one-time token. Dangerous public bind requir
 2. API credentials: missing/saved/env override/auth-failed states.
 3. Protocol and endpoint: `apiProtocol`, `baseUrl`, `modelId`, endpoint warnings.
 4. Paths: `workspace`, `skillsDir`, `memoryDir`, create/fix controls.
-5. Runtime behavior: `headless`, `maxIterations`.
+5. Runtime behavior: `headless`, `maxIterations`, `maxChildRuns`, `maxToolCalls`, `maxTokenEstimate`, `maxProviderCostUsd`, `modelPricing`, `maxWallTimeMs`, `maxRecoveryAttempts`.
 6. Effective config/source table.
 7. Doctor panel with offline/online/fix states.
 
@@ -181,6 +202,7 @@ Important codes:
 config.file.missing
 config.file.invalid_json
 config.file.permissions_open
+configVersion.unsupported
 apiKey.missing
 apiKey.env_overrides_file
 apiProtocol.invalid
@@ -193,6 +215,19 @@ workspace.not_writable
 workspace.too_broad
 maxIterations.invalid
 maxIterations.high
+maxChildRuns.invalid
+maxChildRuns.high
+maxToolCalls.invalid
+maxToolCalls.high
+maxTokenEstimate.invalid
+maxTokenEstimate.high
+maxProviderCostUsd.invalid
+modelPricing.invalid
+modelPricing.missing_for_cost_budget
+maxWallTimeMs.invalid
+maxWallTimeMs.high
+maxRecoveryAttempts.invalid
+maxRecoveryAttempts.high
 network.unreachable
 auth.failed
 model.unavailable
@@ -231,12 +266,16 @@ browser.unavailable
 ### Validation
 
 - Defaults allowed only for non-secret fields.
+- `configVersion` must be `1`; missing legacy version is upgraded to `1` at resolution time.
 - `apiKey` is effectively required.
 - `apiProtocol` must be `openai` or `anthropic`.
 - `baseUrl` must be valid URL.
 - `modelId` non-empty.
 - `headless` boolean.
 - `maxIterations` bounded integer.
+- `maxProviderCostUsd` must be `null` or a positive number; `null` means no provider cost ceiling.
+- `modelPricing` must be `null` or non-negative `input`, `output`, `cacheRead`, and `cacheWrite` numbers in USD per million tokens.
+- If `maxProviderCostUsd` is set while `modelPricing` is `null`, doctor warns with `modelPricing.missing_for_cost_budget`; provider cost ceilings only enforce priced usage.
 - Paths valid, expanded, writable or fixable.
 
 ## 11. First implementation scope
@@ -259,3 +298,4 @@ P2:
 - Online doctor.
 - Full web config editor.
 - Public-bind danger gate.
+- Clean CLI bin shim at `packages/cli/bin/keigent.mjs`; it starts package-local `tsx` without `pnpm` / `npx` wrapper output, so machine-readable commands can emit pure JSON.

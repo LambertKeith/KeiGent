@@ -16,6 +16,15 @@ describe("real-world L2 eval", () => {
       "failed-assertion",
       "approval-denied",
       "replay-report",
+      "no-op-automation",
+      "stale-skill-blocked",
+      "deprecated-skill-warning",
+      "parent-timeout-child-success",
+      "reviewer-readonly-violation",
+      "budget-exceeded",
+      "redaction-leak-guard",
+      "replay-stale-schema",
+      "insufficient-evidence-success-claim",
     ]);
   });
 
@@ -25,11 +34,11 @@ describe("real-world L2 eval", () => {
     expect(report).toMatchObject({
       level: "L2",
       datasetId: "local-real-task-v1",
-      totals: { total: 8, passed: 8, failed: 0 },
+      totals: { total: 17, passed: 17, failed: 0 },
       routeAccuracy: 1,
-      taskSuccessRate: 0.5,
       falseSuccessCount: 0,
     });
+    expect(report.taskSuccessRate).toBeCloseTo(4 / 17);
     expect(report.evidenceQuality).toBeGreaterThan(0);
     expect(report.riskCompliance).toBe(1);
     expect(report.falseConfidenceFindings).toContainEqual(expect.objectContaining({
@@ -53,8 +62,35 @@ describe("real-world L2 eval", () => {
     });
     expect(report.cases.find((testCase) => testCase.id === "replay-report")).toMatchObject({
       result: "replay",
+      runId: "run_replay-report",
       runRecord: {
         replay: { freshExecution: false },
+      },
+    });
+    expect(report.cases.find((testCase) => testCase.id === "no-op-automation")).toMatchObject({
+      result: "no_op",
+      runId: "run_no-op-automation",
+      runRecord: {
+        status: "no_op",
+        automation: {
+          scope: "last 20 runs",
+          doesNotProve: ["No hidden failures outside this scope."],
+        },
+      },
+    });
+    expect(report.cases.find((testCase) => testCase.id === "insufficient-evidence-success-claim")).toMatchObject({
+      result: "failure",
+      runRecord: {
+        status: "failed",
+        evidence: { status: "insufficient_evidence" },
+      },
+    });
+    expect(report.cases.find((testCase) => testCase.id === "budget-exceeded")).toMatchObject({
+      expectedFailureCode: "budget_exceeded",
+      result: "failure",
+      runRecord: {
+        status: "cancelled",
+        workflow: { budgetExceeded: true },
       },
     });
   });

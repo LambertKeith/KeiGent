@@ -24,6 +24,7 @@ export type FailureCode =
   | "auth_failed"
   | "checkpoint_missing"
   | "verified_failure"
+  | "budget_exceeded"
   | "max_iterations"
   | "timeout"
   | "malformed_tool"
@@ -61,6 +62,8 @@ export function recommendedNextActionFor(code: FailureCode): string {
       return "补充 checkpoint/verdict 证据后重新运行 verified 流程。";
     case "verified_failure":
       return "补充或检查证据，必要时人工复核操作是否实际完成。";
+    case "budget_exceeded":
+      return "缩小任务范围、提高预算，或检查是否存在失控的工具/模型循环。";
     case "max_iterations":
       return "提高预算、缩小任务范围，或补充更具体的 skill/successDef。";
     case "timeout":
@@ -81,6 +84,7 @@ export function recommendedNextActionFor(code: FailureCode): string {
 export function failureSummaryForLoopExit(exitReason: ExitReason, finalResponse: string): FailureSummary | undefined {
   if (exitReason === "success") return undefined;
   if (exitReason === "max_iterations") return summary("max_iterations", "budget", "达到最大迭代次数，任务未在预算内完成。");
+  if (exitReason === "budget_exceeded") return summary("budget_exceeded", "budget", "运行预算耗尽，任务未完成。");
   if (exitReason === "escalated") return summary("human_escalation", "input", "运行已升级为需要人类决策。");
 
   const text = finalResponse.toLowerCase();
@@ -109,7 +113,7 @@ export function failureSummaryForWorkflowExit(exitReason: WorkflowExitReason): F
     case "verified_failure":
       return summary("verified_failure", "verification", "子运行完成但证据不足或断言未通过。");
     case "budget_exceeded":
-      return summary("max_iterations", "budget", "workflow 预算耗尽。");
+      return summary("budget_exceeded", "budget", "workflow 预算耗尽。");
     case "timeout":
       return summary("timeout", "budget", "workflow 父级超时。");
     case "child_error":

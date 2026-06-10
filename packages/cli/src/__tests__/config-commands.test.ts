@@ -39,12 +39,20 @@ describe("config commands", () => {
     const mode = (await stat(configPath)).mode & 0o777;
 
     expect(JSON.parse(initial)).toMatchObject({
+      configVersion: 1,
       apiKey: "",
       apiProtocol: "openai",
       baseUrl: "https://api.openai.com/v1",
       modelId: "gpt-4o-mini",
       headless: false,
       maxIterations: 12,
+      maxChildRuns: 1,
+      maxToolCalls: 20,
+      maxTokenEstimate: 64000,
+      maxProviderCostUsd: null,
+      modelPricing: null,
+      maxWallTimeMs: 120000,
+      maxRecoveryAttempts: 3,
     });
     expect(mode & 0o077).toBe(0);
     await expect(run(["init"], configPath)).rejects.toThrow("already exists");
@@ -59,11 +67,33 @@ describe("config commands", () => {
 
     await run(["set", "modelId", "gpt-test"], configPath);
     await run(["set", "headless", "true"], configPath);
+    await run(["set", "maxChildRuns", "2"], configPath);
+    await run(["set", "maxToolCalls", "7"], configPath);
+    await run(["set", "maxTokenEstimate", "8000"], configPath);
+    await run(["set", "maxProviderCostUsd", "0.25"], configPath);
+    await run(["set", "modelPricing", "{\"input\":2.5,\"output\":10,\"cacheRead\":0.25,\"cacheWrite\":3}"], configPath);
+    await run(["set", "maxWallTimeMs", "9000"], configPath);
+    await run(["set", "maxRecoveryAttempts", "1"], configPath);
     await run(["unset", "modelId"], configPath);
 
     const saved = JSON.parse(await readFile(configPath, "utf8"));
     expect(saved.modelId).toBeUndefined();
     expect(saved.headless).toBe(true);
+    expect(saved.maxChildRuns).toBe(2);
+    expect(saved.maxToolCalls).toBe(7);
+    expect(saved.maxTokenEstimate).toBe(8000);
+    expect(saved.maxProviderCostUsd).toBe(0.25);
+    expect(saved.modelPricing).toEqual({ input: 2.5, output: 10, cacheRead: 0.25, cacheWrite: 3 });
+    expect(saved.maxWallTimeMs).toBe(9000);
+    expect(saved.maxRecoveryAttempts).toBe(1);
+  });
+
+  it("rejects malformed modelPricing values in config set", async () => {
+    const configPath = await tempConfigPath();
+    await run(["init"], configPath);
+
+    await expect(run(["set", "modelPricing", "{\"input\":-1,\"output\":10,\"cacheRead\":0,\"cacheWrite\":0}"], configPath))
+      .rejects.toThrow("modelPricing must be null or JSON with non-negative input/output/cacheRead/cacheWrite numbers");
   });
 
   it("shows effective source-aware config without raw secrets", async () => {

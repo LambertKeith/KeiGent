@@ -17,15 +17,47 @@ describe("CLI config", () => {
     const config = resolveConfig({ apiKey: "file-key" }, {}, "/tmp/keigent-home");
 
     expect(config.apiProtocol).toBe("openai");
+    expect(config.configVersion).toBe(1);
     expect(config.baseUrl).toBe("https://api.openai.com/v1");
     expect(config.modelId).toBe("gpt-4o-mini");
     expect(config.headless).toBe(false);
     expect(config.maxIterations).toBe(12);
+    expect(config.maxChildRuns).toBe(1);
+    expect(config.maxToolCalls).toBe(20);
+    expect(config.maxTokenEstimate).toBe(64_000);
+    expect(config.maxProviderCostUsd).toBeNull();
+    expect(config.modelPricing).toBeNull();
+    expect(config.maxWallTimeMs).toBe(120_000);
+    expect(config.maxRecoveryAttempts).toBe(3);
+  });
+
+  it("accepts an optional provider cost ceiling from config files", () => {
+    const config = resolveConfig({ apiKey: "file-key", maxProviderCostUsd: 0.25 }, {}, "/tmp/keigent-home");
+
+    expect(config.maxProviderCostUsd).toBe(0.25);
+  });
+
+  it("uses explicit local model pricing for pi-ai cost calculation", () => {
+    const modelPricing = { input: 2.5, output: 10, cacheRead: 0.25, cacheWrite: 3 };
+    const config = resolveConfig({ apiKey: "file-key", modelPricing }, {}, "/tmp/keigent-home");
+
+    expect(config.modelPricing).toEqual(modelPricing);
+    expect(buildModel(config).cost).toEqual(modelPricing);
   });
 
   it("does not let an empty KEIGENT_API_KEY shadow a file API key", () => {
     const config = resolveConfig({ apiKey: "file-key" }, { KEIGENT_API_KEY: "   " }, "/tmp/keigent-home");
     expect(config.apiKey).toBe("file-key");
+  });
+
+  it("upgrades legacy config files without a version to configVersion 1", () => {
+    const config = resolveConfig({ apiKey: "file-key", modelId: "legacy-model" }, {}, "/tmp/keigent-home");
+
+    expect(config).toMatchObject({
+      configVersion: 1,
+      apiKey: "file-key",
+      modelId: "legacy-model",
+    });
   });
 
   it("resolves OpenAI-compatible protocol with a custom URL", () => {
@@ -100,8 +132,14 @@ describe("CLI config", () => {
 
     expect(configExample).not.toContain("sk-xxx");
     expect(configExample).toContain('"apiKey": ""');
+    expect(configExample).toContain('"configVersion": 1');
     expect(configExample).toContain('"apiProtocol": "openai"');
     expect(configExample).toContain('"baseUrl": "https://api.openai.com/v1"');
+    expect(configExample).toContain('"maxToolCalls": 20');
+    expect(configExample).toContain('"maxTokenEstimate": 64000');
+    expect(configExample).toContain('"maxProviderCostUsd": null');
+    expect(configExample).toContain('"modelPricing": null');
+    expect(configExample).toContain('"maxWallTimeMs": 120000');
     expect(envExample).not.toContain("sk-");
     expect(envExample).toContain("KEIGENT_API_KEY=");
     expect(envExample).toContain("KEIGENT_API_PROTOCOL=");

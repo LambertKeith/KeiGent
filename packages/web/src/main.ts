@@ -1,11 +1,22 @@
 import { NAV_ITEMS, type AppSection } from "./app/nav.js";
-import { normalizeConversationRun, type ProgressEvent } from "./conversation/normalize.js";
-import { summarizeEvalReport, type EvalReportView } from "./dashboard/report-model.js";
+import { hashForSection, parseHashRoute, type WorkbenchRoute } from "./app/hash-route.js";
+import { apiBaseUrlFromEnv, createKeigentApiClient } from "./api/client.js";
+import { appendProgressEvents } from "./conversation/live-console.js";
+import type { NormalizeRunOptions, ProgressEvent } from "./conversation/normalize.js";
+import { progressEventsFromStreamEvent, renderWebRunLauncher, type WebRunStreamEvent } from "./conversation/web-run.js";
+import { renderRealWorldEvalDashboard, sampleRealWorldEvalDashboardView } from "./dashboard/workbench.js";
 import { SAMPLE_CONFIG_VIEW, deriveConfigStatus } from "./config/config-view.js";
-import { normalizeRunRecord } from "./runs/model.js";
+import { buildRunWorkbenchView, renderRunWorkbench } from "./runs/workbench.js";
+import { buildSkillWorkbenchView, renderSkillWorkbench, sampleSkillInputs } from "./skills/workbench.js";
 import { escapeHtml } from "./ui/html.js";
 import "./styles.css";
 import type { RunRecord } from "@keigent/engine";
+import type { SkillLibraryInput } from "./skills/model.js";
+
+const apiBaseUrl = apiBaseUrlFromEnv(import.meta.env as Record<string, unknown>);
+const apiClient = apiBaseUrl ? createKeigentApiClient({ baseUrl: apiBaseUrl }) : undefined;
+let activeRunSource: EventSource | undefined;
+let launcherError: string | undefined;
 
 const demoEvents: ProgressEvent[] = [
   { kind: "profile_selected", profile: "convergent-exec", via: "rule", ruleId: "skill_match", rationale: "任务匹配执行 skill file-write", signals: ["skill:file-write", "score:17"] },
@@ -18,7 +29,13 @@ const demoEvents: ProgressEvent[] = [
   { kind: "done", exitReason: "success", finalResponse: "hello.txt created" },
 ];
 
-const demoRun = normalizeConversationRun({ id: "demo", mode: "replay", task: { goal: "Create hello.txt and verify it" }, events: demoEvents });
+const demoTask = { goal: "Create hello.txt and verify it" };
+let conversationRun: NormalizeRunOptions = {
+  id: "demo",
+  mode: "replay",
+  task: demoTask,
+  events: demoEvents,
+};
 
 const demoRunRecord: RunRecord = {
   schemaVersion: 1,
@@ -46,7 +63,36 @@ const demoRunRecord: RunRecord = {
     mode: "verified-loop",
     exitReason: "success",
     childRuns: 1,
-    budgetUsage: { childRuns: 1, iterations: 2, toolCalls: 1, checkpointsPassed: 1, durationMs: 20 },
+    budget: {
+      maxChildRuns: 1,
+      maxIterationsPerRun: 3,
+      maxAggregateIterations: 3,
+      maxToolCallsPerRun: 5,
+      maxAggregateToolCalls: 5,
+      maxTokenEstimatePerRun: 8_000,
+      maxAggregateTokenEstimate: 8_000,
+      maxRecoveryAttemptsPerRun: 2,
+      timeoutMs: 120_000,
+    },
+    budgetUsage: {
+      childRuns: 1,
+      iterations: 2,
+      toolCalls: 1,
+      tokenEstimate: 120,
+      providerUsage: {
+        inputTokens: 100,
+        outputTokens: 25,
+        cacheReadTokens: 10,
+        cacheWriteTokens: 5,
+        totalTokens: 140,
+        costUsd: 0.075,
+        costStatus: "priced",
+      },
+      recoveryAttempts: 0,
+      checkpointsPassed: 1,
+      durationMs: 20,
+    },
+    budgetExceeded: false,
   },
   execution: {
     iterations: 2,
@@ -91,18 +137,48 @@ const demoRunRecord: RunRecord = {
   redaction: { applied: true, rawPayloadStored: false },
 };
 
-const demoReport: EvalReportView = {
-  startedAt: "2026-06-04T08:00:00.000Z",
-  durationMs: 42,
-  total: 4,
-  passed: 4,
-  failed: 0,
-  profileAccuracy: 1,
-  failuresByCode: {},
-  cases: [],
+const demoSkillLibrary: SkillLibraryInput = {
+  skills: sampleSkillInputs(),
+  matchExplanations: [
+    {
+      name: "file-write",
+      status: "verified",
+      score: 12,
+      signals: ["tag:file", "requires:file_write"],
+      matched: true,
+      injected: true,
+      riskDelta: "declared R2",
+      evalCoverage: ["file-write-positive"],
+    },
+    {
+      name: "browser-review",
+      status: "candidate",
+      score: 8,
+      signals: ["tag:browser"],
+      matched: true,
+      injected: false,
+      exclusionReason: "candidate_not_enabled",
+      evalCoverage: ["browser-review-positive"],
+    },
+    {
+      name: "legacy-shell",
+      status: "deprecated",
+      score: 4,
+      signals: ["tag:shell"],
+      matched: false,
+      injected: false,
+      exclusionReason: "status_not_executable",
+    },
+  ],
+  recentMatches: [
+    { skillName: "file-write", score: 12, matched: true, injected: true, reason: "tag:file" },
+  ],
+  learningNotes: {
+    "file-write": ["Prefer deterministic file paths before writing."],
+  },
 };
 
-function renderShell(section: AppSection): string {
+function renderShell(section: AppSection, content: string): string {
   return `
     <div class="ambient"></div>
     <aside class="sidebar" aria-label="KeiGent sections">
@@ -110,47 +186,47 @@ function renderShell(section: AppSection): string {
       <div class="subtitle">Loop clarity, not AI magic.</div>
       <nav>${NAV_ITEMS.map((item) => `<button class="nav-item ${item.id === section ? "active" : ""}" data-section="${item.id}"><span>${item.label}</span><small>${item.description}</small></button>`).join("")}</nav>
     </aside>
-    <main class="main">${section === "runs" ? renderRuns() : section === "conversation" ? renderConversation() : section === "dashboard" ? renderDashboard() : renderConfig()}</main>
+    <main class="main">${content}</main>
   `;
 }
 
-function renderRuns(): string {
-  const record = normalizeRunRecord(demoRunRecord);
-  const facts = record.timelineFacts.map((fact) => `<div><strong>${escapeHtml(fact.label)}</strong><span>${escapeHtml(fact.value)}</span></div>`).join("");
-  return `
-    <section class="hero"><p class="eyebrow">Runs</p><h1>RunRecord is the product contract.</h1><p>Every run exposes route, evidence, risk, approvals, artifacts, and replay status without relying on final text.</p></section>
-    <section class="grid three">
-      <div class="panel"><h2>Run summary</h2><dl><dt>Status</dt><dd>${record.summary.status}</dd><dt>Profile</dt><dd>${record.summary.profile}</dd><dt>Workflow</dt><dd>${record.summary.workflowMode}</dd><dt>Evidence</dt><dd>${record.summary.evidenceLabel}</dd><dt>Risk</dt><dd>${record.summary.riskLabel}</dd></dl></div>
-      <div class="panel"><h2>Evidence and risk</h2><dl><dt>Evidence status</dt><dd>${record.evidence.status}</dd><dt>Blocking</dt><dd>${record.evidence.blocking.length}</dd><dt>Approvals</dt><dd>${record.approvals.length}</dd><dt>Side effects</dt><dd>${record.risk.sideEffectsSucceeded}/${record.risk.sideEffectsAttempted}</dd></dl></div>
-      <div class="panel"><h2>Replay</h2><p>${escapeHtml(record.replay.label)}</p><div class="config-table">${facts}</div></div>
-    </section>
-  `;
+async function renderSection(route: WorkbenchRoute): Promise<string> {
+  if (route.section === "runs") return renderRuns(route.selectedRunId);
+  if (route.section === "conversation") return renderConversation();
+  if (route.section === "dashboard") return renderDashboard(route.evalDatasetId);
+  if (route.section === "skills") return renderSkills();
+  return renderConfig();
+}
+
+async function renderRuns(selectedRunId?: string): Promise<string> {
+  if (apiClient) {
+    try {
+      const store = await apiClient.fetchRunStore();
+      return renderRunWorkbench(buildRunWorkbenchView(store.records, selectedRunId));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return `${renderRunWorkbench(buildRunWorkbenchView([demoRunRecord], selectedRunId))}<section class="panel warning"><h2>Local API unavailable</h2><p>${escapeHtml(message)}</p></section>`;
+    }
+  }
+  return renderRunWorkbench(buildRunWorkbenchView([demoRunRecord], selectedRunId));
 }
 
 function renderConversation(): string {
-  const timeline = demoRun.timeline.map((item) => `<article class="timeline-card ${item.kind}"><strong>${escapeHtml(item.kind)}</strong><pre>${escapeHtml(JSON.stringify(item, null, 2))}</pre></article>`).join("");
-  return `
-    <section class="hero"><p class="eyebrow">Conversation Panel</p><h1>One run, fully inspectable.</h1><p>Profile, skills, tools, checkpoints, and final outcome stay visually separate.</p></section>
-    <section class="grid three">
-      <div class="panel"><h2>Run summary</h2><dl><dt>Status</dt><dd>${demoRun.status}</dd><dt>Profile</dt><dd>${demoRun.selectedProfile}</dd><dt>Tools</dt><dd>${demoRun.metrics.toolCalls}</dd><dt>Checkpoints</dt><dd>${demoRun.metrics.checkpointsPassed}/${demoRun.metrics.checkpoints}</dd></dl></div>
-      <div class="panel timeline"><h2>Timeline</h2>${timeline}</div>
-      <div class="panel"><h2>Inspector</h2><p>Select a card in the real version to inspect redacted payloads and evidence. Raw JSON is audit support, not the primary story.</p></div>
-    </section>
-  `;
+  return renderWebRunLauncher({
+    apiEnabled: Boolean(apiClient),
+    run: conversationRun,
+    ...(launcherError ? { error: launcherError } : {}),
+  });
 }
 
-function renderDashboard(): string {
-  const summary = summarizeEvalReport(demoReport);
-  return `
-    <section class="hero"><p class="eyebrow">Dashboard</p><h1>Eval health without false confidence.</h1><p>Pass rate, profile accuracy, and failure taxonomy are separate by design.</p></section>
-    <section class="grid kpis">
-      <div class="kpi"><span>Pass rate</span><strong>${summary.passRate === null ? "No cases" : `${(summary.passRate * 100).toFixed(1)}%`}</strong></div>
-      <div class="kpi"><span>Profile accuracy</span><strong>${summary.profileAccuracy === null ? "Not checked" : `${(summary.profileAccuracy * 100).toFixed(1)}%`}</strong></div>
-      <div class="kpi"><span>Failures</span><strong>${demoReport.failed}</strong></div>
-      <div class="kpi"><span>Failure-code count</span><strong>${summary.failureCodeCount}</strong></div>
-    </section>
-    <section class="panel"><h2>Product rules</h2><ul><li>Failure code count may exceed failed case count.</li><li>Tool attempted is not tool succeeded.</li><li>Replay result is not fresh engine execution.</li></ul></section>
-  `;
+function renderDashboard(evalDatasetId?: string): string {
+  const dashboard = renderRealWorldEvalDashboard(sampleRealWorldEvalDashboardView());
+  if (!evalDatasetId) return dashboard;
+  return `<section class="panel"><h2>Selected eval dataset</h2><p>${escapeHtml(evalDatasetId)}</p></section>${dashboard}`;
+}
+
+function renderSkills(): string {
+  return renderSkillWorkbench(buildSkillWorkbenchView(demoSkillLibrary));
 }
 
 function renderConfig(): string {
@@ -162,13 +238,67 @@ function renderConfig(): string {
   `;
 }
 
-function mount(section: AppSection = "conversation") {
+async function mount(route: WorkbenchRoute = parseHashRoute(window.location.hash)) {
   const app = document.querySelector<HTMLDivElement>("#app");
   if (!app) throw new Error("missing #app");
-  app.innerHTML = renderShell(section);
+  app.innerHTML = renderShell(route.section, `<section class="hero compact"><p class="eyebrow">Loading</p><h1>Loading Workbench.</h1></section>`);
+  app.innerHTML = renderShell(route.section, await renderSection(route));
   for (const button of app.querySelectorAll<HTMLButtonElement>("[data-section]")) {
-    button.addEventListener("click", () => mount(button.dataset.section as AppSection));
+    button.addEventListener("click", () => {
+      window.location.hash = hashForSection(button.dataset.section as AppSection);
+    });
   }
+  if (route.section === "conversation") wireWebRunLauncher(app);
 }
 
-mount("runs");
+window.addEventListener("hashchange", () => {
+  void mount();
+});
+
+if (!window.location.hash) window.location.hash = hashForSection("runs");
+else void mount();
+
+function wireWebRunLauncher(app: HTMLDivElement): void {
+  const form = app.querySelector<HTMLFormElement>("[data-web-run-form]");
+  if (!form || !apiClient) return;
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = new FormData(form);
+    const goal = String(data.get("goal") ?? "").trim();
+    if (!goal) return;
+    void startWebRun(goal);
+  });
+}
+
+async function startWebRun(goal: string): Promise<void> {
+  activeRunSource?.close();
+  launcherError = undefined;
+  conversationRun = { id: "starting", mode: "live", task: { goal }, events: [] };
+  void mount({ section: "conversation" });
+
+  try {
+    if (!apiClient) throw new Error("Local API is not connected");
+    const session = await apiClient.startRun(goal);
+    conversationRun = { ...conversationRun, id: session.id };
+    const source = apiClient.openRunEvents(session.id);
+    activeRunSource = source;
+
+    for (const eventName of ["workflow_event", "run_finished", "run_error"]) {
+      source.addEventListener(eventName, (message) => {
+        const streamEvent = JSON.parse((message as MessageEvent).data) as WebRunStreamEvent;
+        const events = progressEventsFromStreamEvent(streamEvent);
+        if (events.length > 0) {
+          conversationRun = appendProgressEvents(conversationRun, events);
+          void mount({ section: "conversation" });
+        }
+        if (streamEvent.kind === "run_finished" || streamEvent.kind === "run_error") source.close();
+      });
+    }
+    void mount({ section: "conversation" });
+  } catch (error) {
+    launcherError = error instanceof Error ? error.message : String(error);
+    conversationRun = appendProgressEvents(conversationRun, [{ kind: "done", exitReason: "error", finalResponse: launcherError }]);
+    void mount({ section: "conversation" });
+  }
+}

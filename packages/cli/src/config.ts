@@ -6,7 +6,15 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 
 export type ModelApiProtocol = "openai" | "anthropic";
 
+export interface ModelPricing {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
 export interface KeigentConfig {
+  configVersion: 1;
   apiKey: string;
   apiProtocol: ModelApiProtocol;
   baseUrl: string;
@@ -16,6 +24,13 @@ export interface KeigentConfig {
   memoryDir: string;     // 记忆存储
   headless: boolean;
   maxIterations: number;
+  maxChildRuns: number;
+  maxToolCalls: number;
+  maxTokenEstimate: number;
+  maxProviderCostUsd: number | null;
+  modelPricing: ModelPricing | null;
+  maxWallTimeMs: number;
+  maxRecoveryAttempts: number;
 }
 
 export type KeigentConfigInput = Partial<KeigentConfig>;
@@ -28,11 +43,21 @@ const PROTOCOL_DEFAULT_BASE_URLS: Record<ModelApiProtocol, string> = {
 };
 
 const DEFAULTS = {
+  configVersion: 1,
   apiProtocol: "openai",
   modelId: "gpt-4o-mini",
   headless: false,
   maxIterations: 12,
+  maxChildRuns: 1,
+  maxToolCalls: 20,
+  maxTokenEstimate: 64_000,
+  maxProviderCostUsd: null,
+  modelPricing: null,
+  maxWallTimeMs: 120_000,
+  maxRecoveryAttempts: 3,
 } satisfies Omit<KeigentConfig, "apiKey" | "baseUrl" | "workspace" | "skillsDir" | "memoryDir">;
+
+const ZERO_MODEL_PRICING: ModelPricing = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
 function defaultPaths(home: string): Pick<KeigentConfig, "workspace" | "skillsDir" | "memoryDir"> {
   return {
@@ -49,6 +74,25 @@ function optionalEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
 
 export function isModelApiProtocol(value: unknown): value is ModelApiProtocol {
   return value === "openai" || value === "anthropic";
+}
+
+export function isModelPricing(value: unknown): value is ModelPricing {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Partial<Record<keyof ModelPricing, unknown>>;
+  return (
+    typeof candidate.input === "number" &&
+    Number.isFinite(candidate.input) &&
+    candidate.input >= 0 &&
+    typeof candidate.output === "number" &&
+    Number.isFinite(candidate.output) &&
+    candidate.output >= 0 &&
+    typeof candidate.cacheRead === "number" &&
+    Number.isFinite(candidate.cacheRead) &&
+    candidate.cacheRead >= 0 &&
+    typeof candidate.cacheWrite === "number" &&
+    Number.isFinite(candidate.cacheWrite) &&
+    candidate.cacheWrite >= 0
+  );
 }
 
 export function resolveConfig(
@@ -138,6 +182,7 @@ function normalizeBaseUrlForProtocol(baseUrl: string, protocol: ModelApiProtocol
 
 /** 构建 pi-ai Model 对象 */
 export function buildModel(config: KeigentConfig): Model<Api> {
+  const cost = config.modelPricing ?? ZERO_MODEL_PRICING;
   return {
     id: config.modelId,
     name: `${config.modelId} (${config.apiProtocol}-compatible)` ,
@@ -146,7 +191,7 @@ export function buildModel(config: KeigentConfig): Model<Api> {
     baseUrl: normalizeBaseUrlForProtocol(config.baseUrl, config.apiProtocol),
     reasoning: false,
     input: ["text", "image"],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    cost: { input: cost.input, output: cost.output, cacheRead: cost.cacheRead, cacheWrite: cost.cacheWrite },
     contextWindow: 128000,
     maxTokens: 16384,
   };

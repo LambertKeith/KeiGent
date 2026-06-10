@@ -1,9 +1,10 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { FailureSummary } from "./failures.js";
+import { failureSummaryForWorkflowExit, type FailureSummary } from "./failures.js";
+import { redactObject, redactText } from "./redaction.js";
 import type { ApprovalDecision, PermissionLevel, RiskLevel, SideEffect } from "./tools/types.js";
 import type { SkillMatchExplanation, Task, Trajectory, TrajectoryStep } from "./types.js";
-import type { WorkflowEvidence, WorkflowEvent, WorkflowExitReason, WorkflowResult } from "./workflow/types.js";
+import type { WorkflowChildRole, WorkflowEvidence, WorkflowEvent, WorkflowExitReason, WorkflowResult } from "./workflow/types.js";
 
 export type RunStatus =
   | "created"
@@ -14,9 +15,11 @@ export type RunStatus =
   | "succeeded"
   | "failed"
   | "degraded"
-  | "cancelled";
+  | "cancelled"
+  | "no_op"
+  | "unknown";
 
-export type RunTaskSource = "cli" | "web" | "eval" | "replay" | "unknown";
+export type RunTaskSource = "cli" | "web" | "eval" | "replay" | "automation" | "unknown";
 export type RunEvidenceStatus = "passed" | "failed" | "not_checked" | "insufficient_evidence";
 
 export interface RunTaskSnapshot {
@@ -47,7 +50,9 @@ export interface WorkflowSnapshot {
   mode: string;
   exitReason: WorkflowExitReason;
   childRuns: number;
+  budget: WorkflowResult["budget"];
   budgetUsage: WorkflowResult["budgetUsage"];
+  budgetExceeded: boolean;
 }
 
 export interface ExecutionSummary {
@@ -93,9 +98,45 @@ export interface ApprovalSummary {
   targetResource: string;
 }
 
+export interface ChildRunSummary {
+  id: string;
+  role: WorkflowChildRole | "judge";
+  profile?: string;
+  exitReason: string;
+  iterations: number;
+  toolCalls: number;
+  checkpointsPassed: number;
+}
+
+export interface SkillRunSummary {
+  name: string;
+  status?: string;
+  reason: string;
+  injected: boolean;
+  riskDelta: RiskLevel | "R0";
+  evalCoverage: string[];
+}
+
+export interface ToolRunSummary {
+  name: string;
+  attempted: boolean;
+  succeeded: boolean;
+  permission?: PermissionLevel;
+  riskLevel?: RiskLevel;
+  sideEffect?: SideEffect;
+  targetResource?: string;
+}
+
 export interface RunArtifact {
-  kind: "trajectory" | "workflow_trajectory" | "record" | "replay_report";
+  kind: "trajectory" | "workflow_trajectory" | "record" | "eval_report" | "replay_report" | "generated_file" | "diff" | "log_excerpt";
   path: string;
+}
+
+export interface AutomationSummary {
+  trigger: "schedule" | "event" | "manual" | "goal_condition";
+  scope: string;
+  noOpReason?: string;
+  doesNotProve: string[];
 }
 
 export interface ReplayCapability {
@@ -118,15 +159,23 @@ export interface RunRecord {
   createdAt: string;
   updatedAt: string;
   status: RunStatus;
+  parentRunId?: string;
+  childRunIds?: string[];
+  childRole?: WorkflowChildRole | "judge";
   task: RunTaskSnapshot;
   route: RouteDecisionSnapshot;
   workflow?: WorkflowSnapshot;
+  childRuns?: ChildRunSummary[];
   execution: ExecutionSummary;
+  skills?: SkillRunSummary[];
+  tools?: ToolRunSummary[];
   evidence: EvidenceSummary;
   risk: RiskSummary;
   approvals: ApprovalSummary[];
   failures: FailureSummary[];
   artifacts: RunArtifact[];
+  automation?: AutomationSummary;
+  nextAction?: string;
   replay: ReplayCapability;
   redaction: RedactionSummary;
 }
@@ -135,6 +184,8 @@ export interface BuildRunRecordOptions {
   id?: string;
   createdAt?: string;
   taskSource?: RunTaskSource;
+  parentRunId?: string;
+  childRole?: WorkflowChildRole | "judge";
   trajectoryPath?: string;
   workflowTrajectoryPath?: string;
   replay?: Partial<ReplayCapability>;
@@ -142,6 +193,28 @@ export interface BuildRunRecordOptions {
 
 export interface SaveRunRecordOptions {
   runsDir: string;
+}
+
+export interface BuildNoOpRunRecordOptions {
+  id?: string;
+  createdAt?: string;
+  goal: string;
+  trigger: AutomationSummary["trigger"];
+  scope: string;
+  noOpReason: string;
+  doesNotProve: string[];
+}
+
+export interface RunStoreError {
+  runId: string;
+  path: string;
+  code: "missing_record" | "invalid_json" | "invalid_record";
+  message: string;
+}
+
+export interface RunStoreReadResult {
+  records: RunRecord[];
+  errors: RunStoreError[];
 }
 
 export function buildRunRecordFromWorkflowResult(
@@ -157,6 +230,8 @@ export function buildRunRecordFromWorkflowResult(
   const evidence = summarizeEvidence(result.evidence, result.exitReason);
   const artifacts = buildArtifacts(options);
   const route = summarizeRoute(result.trajectory.events, trajectory);
+  const failures = collectFailures(result);
+  const nextAction = failures[0]?.nextAction ?? failureSummaryForWorkflowExit(result.exitReason)?.nextAction;
 
   return {
     schemaVersion: 1,
@@ -164,6 +239,9 @@ export function buildRunRecordFromWorkflowResult(
     createdAt,
     updatedAt: createdAt,
     status: statusForWorkflowExit(result.exitReason),
+    ...(options.parentRunId ? { parentRunId: options.parentRunId } : {}),
+    childRunIds: result.childRuns.map((child) => child.id),
+    ...(options.childRole ? { childRole: options.childRole } : {}),
     task: summarizeTask(task, result, trajectory, options.taskSource ?? "unknown"),
     route,
     workflow: {
@@ -171,14 +249,20 @@ export function buildRunRecordFromWorkflowResult(
       mode: result.mode,
       exitReason: result.exitReason,
       childRuns: result.childRuns.length,
+      budget: result.budget,
       budgetUsage: result.budgetUsage,
+      budgetExceeded: result.exitReason === "budget_exceeded" || result.evidence.some((item) => item.kind === "budget" && !item.passed),
     },
+    childRuns: summarizeChildRuns(result),
     execution: summarizeExecution(result, trajectory),
+    skills: summarizeSkills(result),
+    tools: summarizeTools(result, approvals),
     evidence,
     risk: summarizeRisk(approvals),
     approvals: approvals.map(summarizeApproval),
-    failures: collectFailures(result),
+    failures,
     artifacts,
+    ...(nextAction ? { nextAction } : {}),
     replay: {
       supported: true,
       trajectoryPath: options.workflowTrajectoryPath ?? options.trajectoryPath,
@@ -186,6 +270,61 @@ export function buildRunRecordFromWorkflowResult(
       freshExecution: true,
       ...options.replay,
     },
+    redaction: { applied: true, rawPayloadStored: false },
+  };
+}
+
+export function buildNoOpRunRecord(options: BuildNoOpRunRecordOptions): RunRecord {
+  const createdAt = options.createdAt ?? new Date().toISOString();
+  const nextAction = "Review automation scope before treating no-op as health.";
+  return {
+    schemaVersion: 1,
+    id: options.id ?? makeRunId(createdAt),
+    createdAt,
+    updatedAt: createdAt,
+    status: "no_op",
+    task: {
+      goal: options.goal,
+      source: "automation",
+      requestedWorkflowMode: "single-loop",
+      resolvedWorkflowMode: "single-loop",
+    },
+    route: { source: "unknown", matchedSkillIds: [] },
+    execution: {
+      iterations: 0,
+      totalToolCalls: 0,
+      successfulToolCalls: 0,
+      failedToolCalls: 0,
+      checkpointCount: 0,
+      passedCheckpoints: 0,
+      durationMs: 0,
+      exitReason: "no_op",
+      finalResponseSummary: options.noOpReason,
+      eventCounts: {},
+    },
+    skills: [],
+    tools: [],
+    evidence: { status: "not_checked", total: 0, passed: 0, failed: 0, sources: [], blocking: [] },
+    risk: {
+      highestRiskLevel: "R0",
+      permissionClassesUsed: [],
+      sideEffectsAttempted: 0,
+      sideEffectsSucceeded: 0,
+      externalSideEffects: 0,
+      irreversibleActions: 0,
+      approvalRequired: false,
+    },
+    approvals: [],
+    failures: [],
+    artifacts: [],
+    automation: {
+      trigger: options.trigger,
+      scope: options.scope,
+      noOpReason: options.noOpReason,
+      doesNotProve: options.doesNotProve,
+    },
+    nextAction,
+    replay: { supported: false, unsupportedReason: "No-op automation produced no trajectory.", freshExecution: true },
     redaction: { applied: true, rawPayloadStored: false },
   };
 }
@@ -201,6 +340,211 @@ export async function saveRunRecord(record: RunRecord, options: SaveRunRecordOpt
   return path;
 }
 
+export async function readRunRecord(path: string): Promise<RunRecord> {
+  return normalizeRunRecordShape(JSON.parse(await readFile(path, "utf8")));
+}
+
+export async function readRunStore(options: SaveRunRecordOptions): Promise<RunStoreReadResult> {
+  const records: RunRecord[] = [];
+  const errors: RunStoreError[] = [];
+  let entries: string[] = [];
+  try {
+    entries = await readdir(options.runsDir);
+  } catch {
+    return { records, errors };
+  }
+
+  for (const runId of entries) {
+    const path = join(options.runsDir, runId, "record.json");
+    try {
+      const record = await readRunRecord(path);
+      if (!record || typeof record.id !== "string" || record.id === "unknown") {
+        errors.push({ runId, path, code: "invalid_record", message: "record.id must be a string" });
+        continue;
+      }
+      records.push(record);
+    } catch (error) {
+      errors.push({
+        runId,
+        path,
+        code: error instanceof SyntaxError ? "invalid_json" : "missing_record",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  records.sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
+  return { records, errors };
+}
+
+function normalizeRunRecordShape(input: unknown): RunRecord {
+  const source = objectValue(input);
+  const task = objectValue(source.task);
+  const route = objectValue(source.route);
+  const execution = objectValue(source.execution);
+  const evidence = objectValue(source.evidence);
+  const risk = objectValue(source.risk);
+  const replay = objectValue(source.replay);
+  const successDef = successDefValue(task.successDef);
+
+  return {
+    schemaVersion: 1,
+    id: stringValue(source.id, "unknown"),
+    createdAt: stringValue(source.createdAt, ""),
+    updatedAt: stringValue(source.updatedAt, stringValue(source.createdAt, "")),
+    status: statusValue(source.status),
+    ...(typeof source.parentRunId === "string" ? { parentRunId: redactText(source.parentRunId) } : {}),
+    ...(stringArray(source.childRunIds).length ? { childRunIds: stringArray(source.childRunIds) } : {}),
+    ...(childRoleValue(source.childRole) ? { childRole: childRoleValue(source.childRole)! } : {}),
+    task: {
+      goal: stringValue(task.goal, "Unknown run"),
+      source: taskSourceValue(task.source),
+      ...(typeof task.requestedProfile === "string" ? { requestedProfile: redactText(task.requestedProfile) } : {}),
+      ...(typeof task.resolvedProfile === "string" ? { resolvedProfile: redactText(task.resolvedProfile) } : {}),
+      ...(typeof task.requestedWorkflowMode === "string" ? { requestedWorkflowMode: redactText(task.requestedWorkflowMode) } : {}),
+      ...(typeof task.resolvedWorkflowMode === "string" ? { resolvedWorkflowMode: redactText(task.resolvedWorkflowMode) } : {}),
+      ...(successDef ? { successDef } : {}),
+    },
+    route: {
+      ...(typeof route.selectedProfile === "string" ? { selectedProfile: redactText(route.selectedProfile) } : {}),
+      source: routeSourceValue(route.source),
+      ...(typeof route.ruleId === "string" ? { ruleId: redactText(route.ruleId) } : {}),
+      ...(typeof route.rationale === "string" ? { rationale: redactText(route.rationale) } : {}),
+      ...(typeof route.guardApplied === "boolean" ? { guardApplied: route.guardApplied } : {}),
+      ...(typeof route.unguardedProfile === "string" ? { unguardedProfile: redactText(route.unguardedProfile) } : {}),
+      matchedSkillIds: stringArray(route.matchedSkillIds),
+    },
+    ...(isObject(source.workflow) ? { workflow: redactObject(source.workflow) as unknown as RunRecord["workflow"] } : {}),
+    ...(Array.isArray(source.childRuns) ? { childRuns: redactObject(source.childRuns) as unknown as NonNullable<RunRecord["childRuns"]> } : {}),
+    execution: {
+      iterations: numberValue(execution.iterations),
+      totalToolCalls: numberValue(execution.totalToolCalls),
+      successfulToolCalls: numberValue(execution.successfulToolCalls),
+      failedToolCalls: numberValue(execution.failedToolCalls),
+      checkpointCount: numberValue(execution.checkpointCount),
+      passedCheckpoints: numberValue(execution.passedCheckpoints),
+      durationMs: numberValue(execution.durationMs),
+      exitReason: stringValue(execution.exitReason, "unknown"),
+      finalResponseSummary: stringValue(execution.finalResponseSummary, ""),
+      eventCounts: recordOfNumbers(execution.eventCounts),
+    },
+    ...(Array.isArray(source.skills) ? { skills: redactObject(source.skills) as SkillRunSummary[] } : {}),
+    ...(Array.isArray(source.tools) ? { tools: redactObject(source.tools) as ToolRunSummary[] } : {}),
+    evidence: {
+      status: evidenceStatusValue(evidence.status),
+      total: numberValue(evidence.total),
+      passed: numberValue(evidence.passed),
+      failed: numberValue(evidence.failed),
+      sources: stringArray(evidence.sources),
+      blocking: stringArray(evidence.blocking),
+    },
+    risk: {
+      highestRiskLevel: riskLevelValue(risk.highestRiskLevel),
+      permissionClassesUsed: stringArray(risk.permissionClassesUsed) as PermissionLevel[],
+      sideEffectsAttempted: numberValue(risk.sideEffectsAttempted),
+      sideEffectsSucceeded: numberValue(risk.sideEffectsSucceeded),
+      externalSideEffects: numberValue(risk.externalSideEffects),
+      irreversibleActions: numberValue(risk.irreversibleActions),
+      approvalRequired: risk.approvalRequired === true,
+    },
+    approvals: Array.isArray(source.approvals) ? redactObject(source.approvals) as ApprovalSummary[] : [],
+    failures: Array.isArray(source.failures) ? redactObject(source.failures) as FailureSummary[] : [],
+    artifacts: Array.isArray(source.artifacts) ? redactObject(source.artifacts) as RunArtifact[] : [],
+    ...(isObject(source.automation) ? { automation: redactObject(source.automation) as unknown as AutomationSummary } : {}),
+    ...(typeof source.nextAction === "string" ? { nextAction: redactText(source.nextAction) } : {}),
+    replay: {
+      supported: replay.supported === true,
+      ...(typeof replay.unsupportedReason === "string" ? { unsupportedReason: redactText(replay.unsupportedReason) } : {}),
+      ...(typeof replay.trajectoryPath === "string" ? { trajectoryPath: redactText(replay.trajectoryPath) } : {}),
+      ...(typeof replay.trajectorySchemaVersion === "number" ? { trajectorySchemaVersion: replay.trajectorySchemaVersion } : {}),
+      ...(typeof replay.latestReplayReportId === "string" ? { latestReplayReportId: redactText(replay.latestReplayReportId) } : {}),
+      freshExecution: replay.freshExecution !== false,
+    },
+    redaction: isObject(source.redaction)
+      ? redactObject(source.redaction) as unknown as RedactionSummary
+      : { applied: true, rawPayloadStored: false },
+  };
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === "string" ? redactText(value) : fallback;
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").map((item) => redactText(item)) : [];
+}
+
+function recordOfNumbers(value: unknown): Record<string, number> {
+  if (!isObject(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === "number"));
+}
+
+function successDefValue(value: unknown): RunRecord["task"]["successDef"] | undefined {
+  const source = objectValue(value);
+  const goal = source.goal;
+  const assertionCount = source.assertionCount;
+  if (typeof goal !== "string" || typeof assertionCount !== "number") return undefined;
+  return { goal: redactText(goal), assertionCount };
+}
+
+function statusValue(value: unknown): RunStatus {
+  const allowed = new Set<RunStatus>([
+    "created",
+    "routed",
+    "running",
+    "awaiting_approval",
+    "verifying",
+    "succeeded",
+    "failed",
+    "degraded",
+    "cancelled",
+    "no_op",
+    "unknown",
+  ]);
+  return typeof value === "string" && allowed.has(value as RunStatus) ? value as RunStatus : "unknown";
+}
+
+function taskSourceValue(value: unknown): RunTaskSource {
+  const allowed = new Set<RunTaskSource>(["cli", "web", "eval", "replay", "automation", "unknown"]);
+  return typeof value === "string" && allowed.has(value as RunTaskSource) ? value as RunTaskSource : "unknown";
+}
+
+function routeSourceValue(value: unknown): RouteDecisionSnapshot["source"] {
+  const allowed = new Set<RouteDecisionSnapshot["source"]>(["explicit", "rule", "skill-match", "llm", "guard", "unknown"]);
+  return typeof value === "string" && allowed.has(value as RouteDecisionSnapshot["source"])
+    ? value as RouteDecisionSnapshot["source"]
+    : "unknown";
+}
+
+function evidenceStatusValue(value: unknown): RunEvidenceStatus {
+  const allowed = new Set<RunEvidenceStatus>(["passed", "failed", "not_checked", "insufficient_evidence"]);
+  return typeof value === "string" && allowed.has(value as RunEvidenceStatus) ? value as RunEvidenceStatus : "not_checked";
+}
+
+function riskLevelValue(value: unknown): RiskLevel | "R0" {
+  const allowed = new Set<RiskLevel | "R0">(["R0", "R1", "R2", "R3", "R4", "R5"]);
+  return typeof value === "string" && allowed.has(value as RiskLevel | "R0") ? value as RiskLevel | "R0" : "R0";
+}
+
+function childRoleValue(value: unknown): WorkflowChildRole | "judge" | undefined {
+  const allowed = new Set<WorkflowChildRole | "judge">(["worker", "reviewer", "verifier", "judge"]);
+  return typeof value === "string" && allowed.has(value as WorkflowChildRole | "judge")
+    ? value as WorkflowChildRole | "judge"
+    : undefined;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return isObject(value) ? value : {};
+}
+
 export function summarizeRunRecord(record: RunRecord): string {
   const skills = record.route.matchedSkillIds.length ? record.route.matchedSkillIds.join(", ") : "none";
   const trajectory = record.replay.trajectoryPath ?? "not saved";
@@ -213,6 +557,7 @@ export function summarizeRunRecord(record: RunRecord): string {
     `Skills: ${skills}`,
     `Tools: ${record.execution.successfulToolCalls} succeeded / ${record.execution.failedToolCalls} failed`,
     `Evidence: ${record.evidence.passed} passed / ${record.evidence.failed} failed`,
+    budgetSummaryLine(record),
     `Risk: ${record.risk.highestRiskLevel}${record.risk.approvalRequired ? " approval-required" : ""}`,
     `Trajectory: ${trajectory}`,
     `Replay: ${replay}`,
@@ -223,6 +568,27 @@ export function summarizeRunRecord(record: RunRecord): string {
     if (record.evidence.blocking[0]) lines.splice(3, 0, `Blocking evidence: ${record.evidence.blocking[0]}`);
   }
   return lines.join("\n");
+}
+
+function budgetSummaryLine(record: RunRecord): string {
+  const budget = record.workflow?.budget;
+  const usage = record.workflow?.budgetUsage;
+  if (!budget || !usage) return "Budget: unknown";
+  const parts = [
+    `Budget: ${usage.iterations}/${budget.maxAggregateIterations ?? budget.maxIterationsPerRun} iterations`,
+    `${usage.toolCalls}/${budget.maxAggregateToolCalls ?? budget.maxToolCallsPerRun ?? "?"} tools`,
+  ];
+  if (usage.tokenEstimate !== undefined || budget.maxAggregateTokenEstimate !== undefined || budget.maxTokenEstimatePerRun !== undefined) {
+    parts.push(`${usage.tokenEstimate ?? 0}/${budget.maxAggregateTokenEstimate ?? budget.maxTokenEstimatePerRun ?? "?"} estimated tokens`);
+  }
+  if (usage.providerUsage) {
+    parts.push(`provider tokens ${usage.providerUsage.totalTokens}`);
+    parts.push(usage.providerUsage.costStatus === "priced"
+      ? `provider cost $${usage.providerUsage.costUsd.toFixed(6)}`
+      : "provider cost pricing_not_configured");
+  }
+  parts.push(`${usage.recoveryAttempts ?? 0}/${budget.maxRecoveryAttemptsPerRun ?? "?"} recoveries`);
+  return parts.join(", ");
 }
 
 function makeRunId(createdAt: string): string {
@@ -281,6 +647,70 @@ function summarizeExecution(result: WorkflowResult, trajectory?: Trajectory): Ex
     finalResponseSummary: oneLine(result.finalResponse, 240),
     eventCounts: countEvents(result.trajectory.events, steps),
   };
+}
+
+function summarizeChildRuns(result: WorkflowResult): ChildRunSummary[] {
+  return result.childRuns.map((child) => ({
+    id: child.id,
+    role: child.role,
+    profile: child.trajectory?.profile ?? child.result.trajectory.profile,
+    exitReason: child.result.exitReason,
+    iterations: child.result.iterations,
+    toolCalls: child.result.totalToolCalls,
+    checkpointsPassed: child.result.checkpointsPassed,
+  }));
+}
+
+function summarizeSkills(result: WorkflowResult): SkillRunSummary[] {
+  const matches = result.childRuns
+    .flatMap((child) => child.trajectory?.steps ?? child.result.trajectory.steps)
+    .flatMap((step) => step.kind === "skill_match" ? step.skillMatches ?? [] : []);
+  const byName = new Map<string, SkillMatchExplanation>();
+  for (const match of matches) {
+    if (!byName.has(match.name)) byName.set(match.name, match);
+  }
+  return [...byName.values()].map((match) => ({
+    name: match.name,
+    status: match.status,
+    reason: match.matchedBy?.join(", ") || match.signals.join(", ") || "matched",
+    injected: match.injected,
+    riskDelta: parseRiskDelta(match.riskDelta),
+    evalCoverage: match.evalCoverage ?? [],
+  }));
+}
+
+function summarizeTools(result: WorkflowResult, approvals: ApprovalDecision[]): ToolRunSummary[] {
+  const approvalByTool = new Map(approvals.map((approval) => [approval.request.toolName, approval]));
+  const steps = result.childRuns.flatMap((child) => child.trajectory?.steps ?? child.result.trajectory.steps);
+  const toolSteps = steps.filter((step) => step.kind === "tool_call" && step.toolName);
+  const summaries: ToolRunSummary[] = toolSteps.map((step) => {
+    const approval = approvalByTool.get(step.toolName!);
+    return {
+      name: step.toolName!,
+      attempted: true,
+      succeeded: step.toolSucceeded === true,
+      ...(approval ? {
+        permission: approval.request.permission,
+        riskLevel: approval.request.riskLevel,
+        sideEffect: approval.request.sideEffect,
+        targetResource: approval.request.targetResource,
+      } : {}),
+    };
+  });
+  for (const approval of approvals) {
+    if (!summaries.some((tool) => tool.name === approval.request.toolName)) {
+      summaries.push({
+        name: approval.request.toolName,
+        attempted: false,
+        succeeded: false,
+        permission: approval.request.permission,
+        riskLevel: approval.request.riskLevel,
+        sideEffect: approval.request.sideEffect,
+        targetResource: approval.request.targetResource,
+      });
+    }
+  }
+  return summaries;
 }
 
 function summarizeEvidence(evidence: WorkflowEvidence[], exitReason: WorkflowExitReason): EvidenceSummary {
@@ -351,6 +781,7 @@ function collectFailures(result: WorkflowResult): FailureSummary[] {
   const failures = [
     ...(result.failure ? [result.failure] : []),
     ...result.childRuns.flatMap((child) => child.result.failure ? [child.result.failure] : []),
+    ...(failureSummaryForWorkflowExit(result.exitReason) ? [failureSummaryForWorkflowExit(result.exitReason)!] : []),
   ];
   const seen = new Set<string>();
   return failures.filter((failure) => {
@@ -407,4 +838,9 @@ function highestRisk(risks: RiskLevel[]): RiskLevel | "R0" {
   const order = ["R0", "R1", "R2", "R3", "R4", "R5"] as const;
   return risks.reduce<RiskLevel | "R0">((highest, risk) =>
     order.indexOf(risk) > order.indexOf(highest) ? risk : highest, "R0");
+}
+
+function parseRiskDelta(value: string | undefined): RiskLevel | "R0" {
+  const match = /\bR[0-5]\b/.exec(value ?? "");
+  return match ? match[0] as RiskLevel | "R0" : "R0";
 }

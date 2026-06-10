@@ -75,6 +75,7 @@ LoopEngine
 | Profile | `packages/engine/src/profiles/*` | 内置 profile 与五个策略旋钮 |
 | 工具治理 | `packages/engine/src/tools/*` | `ToolRegistry`、工具实现、权限/风险元数据 |
 | Workflow | `packages/engine/src/workflow/*` | workflow envelope、policy、budget、trajectory |
+| Worktree Isolation | `packages/engine/src/worktree-isolation.ts` | child workspace manifest、artifact 回收、冲突检测、cleanup foundation |
 | Eval | `packages/engine/src/evals/*` | smoke/replay/orchestrator eval harness |
 | CLI | `packages/cli/src/*` | REPL、单次执行、config、doctor、eval/replay 包装 |
 | Web | `packages/web/src/*` | Workbench 视图模型与静态 shell |
@@ -215,7 +216,10 @@ Orchestrator fixture 当前由 `eval:orchestrator` 覆盖；该结果只能证�
 
 - 浏览器：navigate、snapshot、click、type、select、wait、screenshot 等。
 - 文件：read、write、list、grep，受 workspace 沙箱约束。
-- shell/http：命令执行、HTTP 请求，带超时和输出限制。
+- local git readonly：`git_status`，只读取 workspace 内 git 状态，不执行任意 git 命令。
+- GitHub readonly：`github_repo_read`，只读取 public repo metadata，不接受 token/header/body/method。
+- HTTP：`http_get` 是 readonly GET connector；`http_request` 是 R3 执行型请求。
+- shell：命令执行，带超时和输出限制。
 - memory/ask_user：记忆读取、用户澄清。
 - computer：mouse、keyboard、screenshot，默认不注册，需要显式 include。
 
@@ -223,7 +227,7 @@ Orchestrator fixture 当前由 `eval:orchestrator` 覆盖；该结果只能证�
 
 - `dangerous` 或高风险工具需要审批门。
 - 审批请求与拒绝都进入 progress event 和 trajectory。
-- workflow policy 可以按权限、risk、sideEffect 和 verifier readonly 过滤工具。
+- workflow policy 可以按权限、risk、sideEffect 和 reviewer/verifier readonly 过滤工具。
 - 浏览器交互使用 snapshot + ref 范式，不猜坐标。
 
 详细治理模型见 [`09-permission-risk-governance.md`](09-permission-risk-governance.md)。
@@ -270,12 +274,12 @@ Replay 边界：
 |---|---|
 | `single-loop` | 一个 worker child run，使用 `LoopEngine.run()` |
 | `verified-loop` | 一个 worker child run，要求最少通过 checkpoint/assertion 证据 |
-| `reviewed-loop` | worker + readonly verifier child run，verifier 审阅 worker 结果 |
+| `reviewed-loop` | worker + readonly reviewer child run，reviewer 审阅 worker 结果 |
 
 Workflow 负责：
 
-- `WorkflowBudget`：child runs、每个 child 最大迭代数、总迭代数、总工具数、超时。
-- `WorkflowPolicy`：profile allow-list、最大权限、最大 risk、外部副作用、审批 scope、verifier readonly。
+- `WorkflowBudget`：child runs、每个 child 最大迭代数/工具数/token estimate/recovery 次数、总迭代数、总工具数、总 token estimate、超时。
+- `WorkflowPolicy`：profile allow-list、最大权限、最大 risk、外部副作用、审批 scope、reviewer/verifier readonly。
 - `WorkflowEvidence`：checkpoint、assertion、policy、budget、child_result。
 - `WorkflowTrajectory`：parent events、child trajectories、budget usage、exit reason。
 
@@ -284,13 +288,36 @@ Workflow 不负责：
 - 自动生成无限 child plans。
 - 任意 fanout。
 - tournament。
+- 自动创建真实 git worktree。
 - 自由脚本执行。
 
 产品语义见 [`10-workflow-modes-product-semantics.md`](10-workflow-modes-product-semantics.md)，run envelope 见 [`07-workflow-run-envelope.md`](07-workflow-run-envelope.md)。
 
 ---
 
-## 10. Skill 与学习边界
+## 10. Worktree Isolation Foundation
+
+Worktree isolation 当前是 P1 foundation，不是 fanout 产品化。
+
+当前实现提供：
+
+- `createIsolatedWorkspace()` 创建 child workspace 与 `.keigent-workspace.json` manifest。
+- `collectWorkspaceArtifacts()` 回收 child workspace 产物。
+- `detectWorkspaceConflicts()` 识别多个 child 输出同一路径。
+- `cleanupIsolatedWorkspace()` 支持删除或标记 abandoned。
+- `canWriteWorkspace()` 保证 reviewer/verifier 不写 worker workspace。
+
+当前不提供：
+
+- 真实 `git worktree add` provider。
+- workflow runner 自动创建 child workspace。
+- 自动 merge 或冲突解决。
+
+详见 [`14-worktree-isolation-and-parallel-runs.md`](14-worktree-isolation-and-parallel-runs.md)。
+
+---
+
+## 11. Skill 与学习边界
 
 Skill 是执行知识，不是成功事实源。当前 skill 系统具备：
 
@@ -310,7 +337,7 @@ Skill 是执行知识，不是成功事实源。当前 skill 系统具备：
 
 ---
 
-## 11. Eval Harness
+## 12. Eval Harness
 
 Eval Harness 是回归与验收层，不新增 agent 行为。
 
@@ -359,8 +386,14 @@ CLI 当前是主要用户入口：
 
 单次执行模式通过 `WorkflowRunner` envelope 调用 engine child run；非交互场景默认使用 `DenyByDefaultGate` 拒绝高风险审批。
 
-Web 当前是 Workbench view model 与静态 shell 阶段：
+Web 当前是 Workbench view model、静态审计 surface 与本地 API/SSE foundation 阶段：
 
+- front-end in-memory Live Run Console（progress event timeline / pending work / selected inspector）
+- Web Run Launcher（local API backed task start + SSE progress subscription）
+- Run Detail v1（RunRecord audit surface）
+- Eval Dashboard（eval case -> run detail linkage / false-confidence findings）
+- local Web API（`GET /api/runs`、`POST /api/runs`、`GET /api/runs/:id/events`）
+- run session SSE event stream（workflow progress event replay / live push）
 - conversation normalization
 - dashboard report model
 - replay model

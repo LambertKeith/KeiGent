@@ -60,6 +60,8 @@ export interface LoopState {
   checkpointCount: number;
   lastCheckpointDesc?: string;
   toolCallCount: number;
+  tokenEstimate?: number;
+  providerUsage?: ProviderUsageSummary;
   failed: boolean;
   finalResponse?: string;
 }
@@ -73,6 +75,7 @@ export namespace LoopState {
       snapshots: [],
       checkpointCount: 0,
       toolCallCount: 0,
+      tokenEstimate: 0,
       failed: false,
     };
   }
@@ -84,6 +87,7 @@ export type ExitReason =
   | "success"
   | "escalated"
   | "max_iterations"
+  | "budget_exceeded"
   | "error";
 
 export interface LoopResult {
@@ -92,8 +96,22 @@ export interface LoopResult {
   iterations: number;
   checkpointsPassed: number;
   totalToolCalls: number;
+  estimatedTokens?: number;
+  providerUsage?: ProviderUsageSummary;
   trajectory: Trajectory;     // 完整执行轨迹，供学习 loop 消费
   failure?: FailureSummary;
+}
+
+export type ProviderCostStatus = "priced" | "pricing_not_configured";
+
+export interface ProviderUsageSummary {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  costStatus: ProviderCostStatus;
 }
 
 // ── 流式进度事件（供 CLI/UI 实时渲染）────────────────────────────────
@@ -160,6 +178,8 @@ export interface Trajectory {
   finalResponse: string;
   durationMs: number;
   skillsUsed: string[];       // 本次注入的 skill 名列表
+  estimatedTokens?: number;
+  providerUsage?: ProviderUsageSummary;
   failure?: FailureSummary;
 }
 

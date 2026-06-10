@@ -7,19 +7,20 @@ export function redactText(value: string): string {
 
 export function redactValue(key: string, value: unknown): unknown {
   if (SECRET_KEY.test(key)) {
+    if (typeof value === "number" || typeof value === "boolean") return value;
     if (value === undefined || value === null || value === "") return "[MISSING]";
     const text = String(value);
     return text.length >= 8 ? `[REDACTED:...${text.slice(-4)}]` : "[REDACTED]";
   }
 
-  if (Array.isArray(value)) return value.map((item) => redactObject(item));
+  if (Array.isArray(value)) return value.map((item) => typeof item === "string" ? redactText(item) : redactObject(item));
   if (value && typeof value === "object") return redactObject(value as Record<string, unknown>);
   if (typeof value === "string") return redactText(value);
   return value;
 }
 
 export function redactObject<T>(value: T): T {
-  if (Array.isArray(value)) return value.map((item) => redactObject(item)) as T;
+  if (Array.isArray(value)) return value.map((item) => typeof item === "string" ? redactText(item) : redactObject(item)) as T;
   if (!value || typeof value !== "object") return value;
 
   const result: Record<string, unknown> = {};

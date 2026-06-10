@@ -97,7 +97,7 @@ flowchart LR
     Runner --> Budget[Budget & Timeout\nmax child / tool / duration]
     Runner --> Policy[Permission Policy\nreadonly / write / execute / dangerous]
     Runner --> ChildA[Child Run: worker\nLoopEngine.run]
-    Runner --> ChildB[Child Run: verifier\nreadonly by default]
+    Runner --> ChildB[Child Run: reviewer/verifier\nreadonly by default]
 
     ChildA --> EvidenceA[child trajectory\ntools / checkpoints / final]
     ChildB --> EvidenceB[review verdict\nrubric / evidence]

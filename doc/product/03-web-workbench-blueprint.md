@@ -53,6 +53,8 @@ V1 明确不做：
 
 不能把它做成只有气泡的聊天 UI。
 
+当前实现备注（2026-06-10）：已实现前端内存事件流 Live Run Console view/render 层，支持 live/replay 标签、event timeline、pending tool/checkpoint/approval 统计和 selected event inspector。已新增 Web Run Launcher 与本地 Web API/SSE foundation：`keigent web --api` 启动 API，`POST /api/runs` 以 `task.source=web` 发起 run，`GET /api/runs/:id/events` 推送 workflow progress events，前端可通过 `VITE_KEIGENT_API_URL` 读取 run store、提交 task goal、订阅 run session events 并更新 Live Console。当前仍未提供完整交互式 Workbench。
+
 ## 4. Trajectory Replay
 
 Replay 必须：
@@ -95,9 +97,9 @@ Replay 必须：
 
 ## 8. 视觉原则
 
-- 温暖、明亮、低饱和。
-- cream/ivory base，apricot/mint/soft sky accent。
-- 避免紫色、冷蓝、黑色玻璃、AI sparkle、咖啡棕。
+- 明亮、克制、信息密度优先。
+- neutral base，blue / green / amber / red 分别用于导航、成功、等待/预算、失败/风险。
+- 避免紫色、黑色玻璃、AI sparkle、装饰性渐变背景和单一暖色主题。
 - 失败、升级、未验证不能视觉上像成功。
 - 所有状态颜色必须有文字标签。
 

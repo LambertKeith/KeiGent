@@ -1,4 +1,4 @@
-import type { RunRecord } from "@keigent/engine";
+import type { ApprovalSummary, ProviderUsageSummary, RunRecord, SkillRunSummary, ToolRunSummary } from "@keigent/engine";
 import { redactObject, redactText } from "../shared/redaction.js";
 
 export interface RunRecordListItem {
@@ -11,6 +11,8 @@ export interface RunRecordListItem {
   evidenceStatus: string;
   evidenceLabel: string;
   riskLabel: string;
+  durationMs: number;
+  durationLabel: string;
   approvalRequired: boolean;
   replayAvailable: boolean;
 }
@@ -46,10 +48,48 @@ export interface RunTimelineFact {
   value: string;
 }
 
+export interface RunBudgetMetric {
+  used: number;
+  limit: number | null;
+  label: string;
+}
+
+export interface RunBudgetPanel {
+  exceeded: boolean;
+  childRuns: RunBudgetMetric;
+  iterations: RunBudgetMetric;
+  toolCalls: RunBudgetMetric;
+  tokenEstimate: RunBudgetMetric;
+  providerUsage: RunProviderUsagePanel;
+  recoveryAttempts: RunBudgetMetric;
+  durationMs: RunBudgetMetric;
+}
+
+export interface RunProviderUsagePanel {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  totalTokens: number;
+  tokenLabel: string;
+  costUsd?: number;
+  costLabel: string;
+  costStatus: ProviderUsageSummary["costStatus"] | "not_reported";
+}
+
 export interface RunRecordDetailView {
   summary: RunRecordListItem;
+  route: {
+    source: string;
+    selectedProfile: string;
+    rationale?: string;
+    matchedSkillIds: string[];
+  };
+  skills: SkillRunSummary[];
+  tools: ToolRunSummary[];
   evidence: RunEvidencePanel;
   risk: RunRiskPanel;
+  budget: RunBudgetPanel;
   replay: RunReplayPanel;
   approvals: Array<{
     toolName: string;
@@ -59,6 +99,10 @@ export interface RunRecordDetailView {
   }>;
   artifacts: Array<{ kind: string; path: string }>;
   failures: Array<{ code: string; layer: string; message: string; nextAction: string }>;
+  nextAction: {
+    required: boolean;
+    label: string;
+  };
   timelineFacts: RunTimelineFact[];
   rawJson: string;
 }
@@ -69,10 +113,19 @@ export interface RunRecordCollectionView {
   runs: RunRecordListItem[];
 }
 
-export function normalizeRunRecord(record: RunRecord): RunRecordDetailView {
+export function normalizeRunRecord(input: unknown): RunRecordDetailView {
+  const record = normalizeRecordShape(input);
   const summary = listItemFor(record);
   return {
     summary,
+    route: {
+      source: redactText(record.route.source),
+      selectedProfile: redactText(record.route.selectedProfile ?? "unknown"),
+      ...(record.route.rationale ? { rationale: redactText(record.route.rationale) } : {}),
+      matchedSkillIds: record.route.matchedSkillIds.map((item) => redactText(item)),
+    },
+    skills: skillsFor(record),
+    tools: toolsFor(record),
     evidence: {
       status: record.evidence.status,
       total: record.evidence.total,
@@ -89,6 +142,7 @@ export function normalizeRunRecord(record: RunRecord): RunRecordDetailView {
       irreversibleActions: record.risk.irreversibleActions,
       permissions: record.risk.permissionClassesUsed.map((permission) => redactText(permission)),
     },
+    budget: budgetPanel(record),
     replay: {
       supported: record.replay.supported,
       freshExecution: record.replay.freshExecution,
@@ -112,18 +166,20 @@ export function normalizeRunRecord(record: RunRecord): RunRecordDetailView {
       message: redactText(failure.message),
       nextAction: redactText(failure.nextAction),
     })),
+    nextAction: nextActionFor(record),
     timelineFacts: timelineFacts(record),
     rawJson: JSON.stringify(redactObject(record), null, 2),
   };
 }
 
-export function summarizeRunRecords(records: RunRecord[]): RunRecordCollectionView {
+export function summarizeRunRecords(records: unknown[]): RunRecordCollectionView {
   if (records.length === 0) {
     return { empty: true, emptyMessage: "No run records saved", runs: [] };
   }
   return {
     empty: false,
     runs: records
+      .map(normalizeRecordShape)
       .map(listItemFor)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
   };
@@ -142,9 +198,132 @@ function listItemFor(record: RunRecord): RunRecordListItem {
     evidenceStatus: record.evidence.status,
     evidenceLabel: evidenceLabel(record),
     riskLabel: riskLabel(record),
+    durationMs: record.execution.durationMs,
+    durationLabel: durationLabel(record.execution.durationMs),
     approvalRequired: record.risk.approvalRequired,
     replayAvailable: record.replay.supported && Boolean(record.replay.trajectoryPath),
   };
+}
+
+function normalizeRecordShape(input: unknown): RunRecord {
+  const source = objectValue(input);
+  const route = objectValue(source.route);
+  const task = objectValue(source.task);
+  const evidence = objectValue(source.evidence);
+  const risk = objectValue(source.risk);
+  const replay = objectValue(source.replay);
+  const execution = objectValue(source.execution);
+  const successDef = successDefValue(task.successDef);
+
+  return {
+    schemaVersion: 1,
+    id: stringValue(source.id, "unknown"),
+    createdAt: stringValue(source.createdAt, ""),
+    updatedAt: stringValue(source.updatedAt, stringValue(source.createdAt, "")),
+    status: statusValue(source.status) as RunRecord["status"],
+    task: {
+      goal: stringValue(task.goal, "Unknown run"),
+      source: taskSourceValue(task.source),
+      ...(typeof task.requestedProfile === "string" ? { requestedProfile: task.requestedProfile } : {}),
+      ...(typeof task.resolvedProfile === "string" ? { resolvedProfile: task.resolvedProfile } : {}),
+      ...(typeof task.requestedWorkflowMode === "string" ? { requestedWorkflowMode: task.requestedWorkflowMode } : {}),
+      ...(typeof task.resolvedWorkflowMode === "string" ? { resolvedWorkflowMode: task.resolvedWorkflowMode } : {}),
+      ...(successDef ? { successDef } : {}),
+    },
+    route: {
+      selectedProfile: typeof route.selectedProfile === "string" ? route.selectedProfile : undefined,
+      source: routeSourceValue(route.source),
+      ruleId: typeof route.ruleId === "string" ? route.ruleId : undefined,
+      rationale: typeof route.rationale === "string" ? route.rationale : undefined,
+      guardApplied: typeof route.guardApplied === "boolean" ? route.guardApplied : undefined,
+      unguardedProfile: typeof route.unguardedProfile === "string" ? route.unguardedProfile : undefined,
+      matchedSkillIds: stringArray(route.matchedSkillIds),
+    },
+    ...(isObject(source.workflow) ? { workflow: source.workflow as unknown as RunRecord["workflow"] } : {}),
+    childRuns: Array.isArray(source.childRuns) ? source.childRuns as NonNullable<RunRecord["childRuns"]> : [],
+    execution: {
+      iterations: numberValue(execution.iterations),
+      totalToolCalls: numberValue(execution.totalToolCalls),
+      successfulToolCalls: numberValue(execution.successfulToolCalls),
+      failedToolCalls: numberValue(execution.failedToolCalls),
+      checkpointCount: numberValue(execution.checkpointCount),
+      passedCheckpoints: numberValue(execution.passedCheckpoints),
+      durationMs: numberValue(execution.durationMs),
+      exitReason: stringValue(execution.exitReason, "unknown"),
+      finalResponseSummary: stringValue(execution.finalResponseSummary, ""),
+      eventCounts: recordOfNumbers(execution.eventCounts),
+    },
+    skills: Array.isArray(source.skills) ? source.skills as SkillRunSummary[] : undefined,
+    tools: Array.isArray(source.tools) ? source.tools as ToolRunSummary[] : undefined,
+    evidence: {
+      status: evidenceStatusValue(evidence.status),
+      total: numberValue(evidence.total),
+      passed: numberValue(evidence.passed),
+      failed: numberValue(evidence.failed),
+      sources: stringArray(evidence.sources),
+      blocking: stringArray(evidence.blocking),
+    },
+    risk: {
+      highestRiskLevel: stringValue(risk.highestRiskLevel, "R0") as RunRecord["risk"]["highestRiskLevel"],
+      permissionClassesUsed: stringArray(risk.permissionClassesUsed) as RunRecord["risk"]["permissionClassesUsed"],
+      sideEffectsAttempted: numberValue(risk.sideEffectsAttempted),
+      sideEffectsSucceeded: numberValue(risk.sideEffectsSucceeded),
+      externalSideEffects: numberValue(risk.externalSideEffects),
+      irreversibleActions: numberValue(risk.irreversibleActions),
+      approvalRequired: risk.approvalRequired === true,
+    },
+    approvals: Array.isArray(source.approvals) ? source.approvals as RunRecord["approvals"] : [],
+    failures: Array.isArray(source.failures) ? source.failures as RunRecord["failures"] : [],
+    artifacts: Array.isArray(source.artifacts) ? source.artifacts as RunRecord["artifacts"] : [],
+    ...(isObject(source.automation) ? { automation: source.automation as unknown as RunRecord["automation"] } : {}),
+    ...(typeof source.nextAction === "string" ? { nextAction: source.nextAction } : {}),
+    replay: {
+      supported: replay.supported === true,
+      ...(typeof replay.unsupportedReason === "string" ? { unsupportedReason: replay.unsupportedReason } : {}),
+      ...(typeof replay.trajectoryPath === "string" ? { trajectoryPath: replay.trajectoryPath } : {}),
+      ...(typeof replay.trajectorySchemaVersion === "number" ? { trajectorySchemaVersion: replay.trajectorySchemaVersion } : {}),
+      ...(typeof replay.latestReplayReportId === "string" ? { latestReplayReportId: replay.latestReplayReportId } : {}),
+      freshExecution: replay.freshExecution !== false,
+    },
+    redaction: isObject(source.redaction) ? source.redaction as unknown as RunRecord["redaction"] : { applied: true, rawPayloadStored: false },
+  };
+}
+
+function skillsFor(record: RunRecord): SkillRunSummary[] {
+  if (record.skills?.length) return record.skills;
+  return record.route.matchedSkillIds.map((name) => ({
+    name,
+    reason: "matched route",
+    injected: true,
+    riskDelta: "R0",
+    evalCoverage: [],
+  }));
+}
+
+function toolsFor(record: RunRecord): ToolRunSummary[] {
+  if (record.tools?.length) return record.tools;
+  return record.approvals.map((approval: ApprovalSummary) => ({
+    name: approval.toolName,
+    attempted: true,
+    succeeded: approval.approved,
+    permission: approval.permission,
+    riskLevel: approval.riskLevel,
+    sideEffect: approval.sideEffect,
+    targetResource: approval.targetResource,
+  }));
+}
+
+function nextActionFor(record: RunRecord): RunRecordDetailView["nextAction"] {
+  if (record.nextAction) return { required: true, label: redactText(record.nextAction) };
+  const failure = record.failures.find((item) => item.nextAction);
+  if (failure) return { required: true, label: redactText(failure.nextAction) };
+  if (String(record.status) === "unknown") {
+    return { required: true, label: "Review run record schema before trusting this result." };
+  }
+  if (record.status === "failed" || record.status === "cancelled" || record.status === "degraded") {
+    return { required: true, label: "Review failure evidence before retrying." };
+  }
+  return { required: false, label: "No action required" };
 }
 
 function evidenceLabel(record: RunRecord): string {
@@ -157,6 +336,11 @@ function riskLabel(record: RunRecord): string {
   return `${record.risk.highestRiskLevel}, ${approval}`;
 }
 
+function durationLabel(durationMs: number): string {
+  if (durationMs < 1000) return `${durationMs}ms`;
+  return `${(durationMs / 1000).toFixed(1)}s`;
+}
+
 function replayLabel(record: RunRecord): string {
   if (!record.replay.supported) return record.replay.unsupportedReason ?? "Replay unavailable";
   if (!record.replay.freshExecution) return "Replay report, not fresh execution";
@@ -164,12 +348,115 @@ function replayLabel(record: RunRecord): string {
 }
 
 function timelineFacts(record: RunRecord): RunTimelineFact[] {
+  const budget = budgetPanel(record);
   return [
     { label: "Route", value: `${record.route.source}:${record.route.selectedProfile ?? "unknown"}` },
     { label: "Workflow", value: `${record.workflow?.mode ?? "unknown"}:${record.workflow?.exitReason ?? record.execution.exitReason}` },
+    { label: "Budget", value: budget.exceeded ? "exceeded" : `${budget.iterations.label} iterations` },
     { label: "Iterations", value: String(record.execution.iterations) },
     { label: "Tools", value: `${record.execution.successfulToolCalls}/${record.execution.totalToolCalls}` },
     { label: "Checkpoints", value: `${record.execution.passedCheckpoints}/${record.execution.checkpointCount}` },
     { label: "Events", value: String(Object.values(record.execution.eventCounts).reduce((sum, count) => sum + count, 0)) },
   ];
+}
+
+function budgetPanel(record: RunRecord): RunBudgetPanel {
+  const usage = record.workflow?.budgetUsage;
+  const budget = record.workflow?.budget;
+  const durationLimit = budget?.timeoutMs;
+  return {
+    exceeded: record.workflow?.budgetExceeded === true || record.workflow?.exitReason === "budget_exceeded",
+    childRuns: budgetMetric(usage?.childRuns ?? record.workflow?.childRuns ?? 0, budget?.maxChildRuns),
+    iterations: budgetMetric(usage?.iterations ?? record.execution.iterations, budget?.maxAggregateIterations ?? budget?.maxIterationsPerRun),
+    toolCalls: budgetMetric(usage?.toolCalls ?? record.execution.totalToolCalls, budget?.maxAggregateToolCalls ?? budget?.maxToolCallsPerRun),
+    tokenEstimate: budgetMetric(usage?.tokenEstimate ?? 0, budget?.maxAggregateTokenEstimate ?? budget?.maxTokenEstimatePerRun),
+    providerUsage: providerUsagePanel(usage?.providerUsage),
+    recoveryAttempts: budgetMetric(usage?.recoveryAttempts ?? 0, budget?.maxRecoveryAttemptsPerRun),
+    durationMs: budgetMetric(usage?.durationMs ?? record.execution.durationMs, durationLimit),
+  };
+}
+
+function budgetMetric(used: number, limit: number | undefined): RunBudgetMetric {
+  const numericLimit = typeof limit === "number" && Number.isFinite(limit) ? limit : null;
+  return {
+    used,
+    limit: numericLimit,
+    label: numericLimit === null ? `${used}/?` : `${used}/${numericLimit}`,
+  };
+}
+
+function providerUsagePanel(usage: ProviderUsageSummary | undefined): RunProviderUsagePanel {
+  if (!usage) {
+    return {
+      totalTokens: 0,
+      tokenLabel: "Not reported",
+      costLabel: "Not reported",
+      costStatus: "not_reported",
+    };
+  }
+
+  return {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
+    totalTokens: usage.totalTokens,
+    tokenLabel: `${usage.totalTokens} provider tokens`,
+    costUsd: usage.costUsd,
+    costLabel: usage.costStatus === "priced" ? `$${usage.costUsd.toFixed(6)}` : "Pricing not configured",
+    costStatus: usage.costStatus,
+  };
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function recordOfNumbers(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === "number"));
+}
+
+function successDefValue(value: unknown): RunRecord["task"]["successDef"] | undefined {
+  const source = objectValue(value);
+  const goal = source.goal;
+  const assertionCount = source.assertionCount;
+  if (typeof goal !== "string" || typeof assertionCount !== "number") return undefined;
+  return { goal, assertionCount };
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return isObject(value) ? value : {};
+}
+
+function statusValue(value: unknown): string {
+  const allowed = new Set(["created", "routed", "running", "awaiting_approval", "verifying", "succeeded", "failed", "degraded", "cancelled", "no_op"]);
+  return typeof value === "string" && allowed.has(value) ? value : "unknown";
+}
+
+function taskSourceValue(value: unknown): RunRecord["task"]["source"] {
+  const allowed = new Set(["cli", "web", "eval", "replay", "automation", "unknown"]);
+  return typeof value === "string" && allowed.has(value) ? value as RunRecord["task"]["source"] : "unknown";
+}
+
+function routeSourceValue(value: unknown): RunRecord["route"]["source"] {
+  const allowed = new Set(["explicit", "rule", "skill-match", "llm", "guard", "unknown"]);
+  return typeof value === "string" && allowed.has(value) ? value as RunRecord["route"]["source"] : "unknown";
+}
+
+function evidenceStatusValue(value: unknown): RunRecord["evidence"]["status"] {
+  const allowed = new Set(["passed", "failed", "not_checked", "insufficient_evidence"]);
+  return typeof value === "string" && allowed.has(value) ? value as RunRecord["evidence"]["status"] : "not_checked";
 }

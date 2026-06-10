@@ -34,7 +34,7 @@ describe("workflow policy helpers", () => {
     expect(isToolAllowedByWorkflowPolicy(tool({ permission: "readonly", riskLevel: "R1", sideEffect: "external" }), policy, "worker")).toBe(false);
   });
 
-  it("forces verifier children to readonly tools when verifierReadonly is enabled", () => {
+  it("forces reviewer and legacy verifier children to readonly tools when verifierReadonly is enabled", () => {
     const policy: WorkflowPolicy = {
       maxPermission: "dangerous",
       maxRiskLevel: "R5",
@@ -42,6 +42,9 @@ describe("workflow policy helpers", () => {
       verifierReadonly: true,
     };
 
+    expect(isToolAllowedByWorkflowPolicy(tool({ permission: "readonly", sideEffect: "none" }), policy, "reviewer")).toBe(true);
+    expect(isToolAllowedByWorkflowPolicy(tool({ permission: "write", sideEffect: "local" }), policy, "reviewer")).toBe(false);
+    expect(isToolAllowedByWorkflowPolicy(tool({ permission: "readonly", sideEffect: "external" }), policy, "reviewer")).toBe(false);
     expect(isToolAllowedByWorkflowPolicy(tool({ permission: "readonly", sideEffect: "none" }), policy, "verifier")).toBe(true);
     expect(isToolAllowedByWorkflowPolicy(tool({ permission: "write", sideEffect: "local" }), policy, "verifier")).toBe(false);
     expect(isToolAllowedByWorkflowPolicy(tool({ permission: "readonly", sideEffect: "external" }), policy, "verifier")).toBe(false);

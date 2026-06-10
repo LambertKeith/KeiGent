@@ -1,4 +1,4 @@
-import type { ExitReason, LoopResult, ProgressEvent, Task, Trajectory } from "../types.js";
+import type { ExitReason, LoopResult, ProgressEvent, ProviderUsageSummary, Task, Trajectory } from "../types.js";
 import type { FailureSummary } from "../failures.js";
 import type { PermissionLevel, RiskLevel } from "../tools/types.js";
 
@@ -13,13 +13,19 @@ export type WorkflowExitReason =
   | "child_escalated"
   | "max_iterations";
 
-export type WorkflowChildRole = "worker" | "verifier";
+export type WorkflowChildRole = "worker" | "reviewer" | "verifier";
 
 export interface WorkflowBudget {
   maxChildRuns: number;
   maxIterationsPerRun: number;
   maxAggregateIterations?: number;
+  maxToolCallsPerRun?: number;
   maxAggregateToolCalls?: number;
+  maxTokenEstimatePerRun?: number;
+  maxAggregateTokenEstimate?: number;
+  maxProviderCostUsdPerRun?: number;
+  maxAggregateProviderCostUsd?: number;
+  maxRecoveryAttemptsPerRun?: number;
   timeoutMs?: number;
 }
 
@@ -71,6 +77,9 @@ export interface WorkflowBudgetUsage {
   childRuns: number;
   iterations: number;
   toolCalls: number;
+  tokenEstimate?: number;
+  providerUsage?: ProviderUsageSummary;
+  recoveryAttempts: number;
   checkpointsPassed: number;
   durationMs: number;
 }

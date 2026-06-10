@@ -26,6 +26,34 @@ async function writeTrajectory(): Promise<string> {
   return path;
 }
 
+async function writeOperatorAcceptanceSignoff(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "keigent-operator-acceptance-"));
+  const path = join(dir, "signoff.json");
+  const caseIds = [
+    ["repo-acceptance", "accepted"],
+    ["failure-triage", "deferred"],
+    ["skill-promotion-review", "deferred"],
+    ["workbench-review", "accepted"],
+    ["governed-execution", "rejected"],
+    ["automation-no-op-review", "deferred"],
+    ["connector-readonly-review", "accepted"],
+  ];
+  await writeFile(path, JSON.stringify({
+    datasetId: "operator-scenario-v1",
+    reviewerName: "Casey Reviewer",
+    reviewedAt: "2026-06-10T00:00:00.000Z",
+    finalDecision: "accepted",
+    cases: caseIds.map(([caseId, humanDecision]) => ({
+      caseId,
+      humanDecision,
+      evidenceInspected: true,
+      falseConfidenceRisksAccepted: true,
+      notes: `Reviewed ${caseId}`,
+    })),
+  }), "utf8");
+  return path;
+}
+
 describe("eval and replay commands", () => {
   it("runs smoke eval through the engine eval harness", async () => {
     const output = capture();
@@ -79,10 +107,77 @@ describe("eval and replay commands", () => {
     expect(report).toMatchObject({
       level: "L2",
       datasetId: "local-real-task-v1",
-      totals: { total: 8, failed: 0 },
+      totals: { total: 17, failed: 0 },
       falseSuccessCount: 0,
     });
     expect(report.cases.map((testCase: { id: string }) => testCase.id)).toContain("approval-denied");
+    expect(report.cases.map((testCase: { id: string }) => testCase.id)).toContain("no-op-automation");
+    expect(report.cases.map((testCase: { id: string }) => testCase.id)).toContain("budget-exceeded");
+    expect(report.cases.find((testCase: { id: string }) => testCase.id === "replay-report")).toMatchObject({
+      runId: "run_replay-report",
+      runRecord: {
+        id: "run_replay-report",
+        replay: { freshExecution: false },
+      },
+    });
+  });
+
+  it("runs operator L3 eval through the fixture reviewer", async () => {
+    const output = capture();
+
+    await runEvalCommand(["operator", "--compact"], { stdout: output.stdout });
+    const report = JSON.parse(output.lines[0]!);
+
+    expect(report).toMatchObject({
+      level: "L3",
+      datasetId: "operator-scenario-v1",
+      totals: { total: 7, failed: 0 },
+      decisions: { accepted: 3, deferred: 3, rejected: 1 },
+      healthClaim: "Manual-review scenario fixture, not autonomous product certification",
+    });
+    expect(report.cases.map((testCase: { id: string }) => testCase.id)).toContain("failure-triage");
+  });
+
+  it("prints a human operator acceptance packet for L3 eval when requested", async () => {
+    const output = capture();
+
+    await runEvalCommand(["operator", "--packet"], { stdout: output.stdout });
+
+    expect(output.lines[0]).toContain("# L3 Operator Acceptance Packet");
+    expect(output.lines[0]).toContain("Fixture results are not human acceptance");
+    expect(output.lines[0]).toContain("## Manual Sign-off");
+    expect(output.lines[0]).toContain("repo-acceptance");
+  });
+
+  it("validates a human operator acceptance sign-off file", async () => {
+    const signoffPath = await writeOperatorAcceptanceSignoff();
+    const output = capture();
+
+    await runEvalCommand(["operator", "--acceptance", signoffPath, "--compact"], { stdout: output.stdout });
+    const record = JSON.parse(output.lines[0]!);
+
+    expect(record).toMatchObject({
+      kind: "operator-human-acceptance",
+      datasetId: "operator-scenario-v1",
+      reviewerName: "Casey Reviewer",
+      finalDecision: "accepted",
+      accepted: true,
+      totals: { total: 7, signedOff: 7, blockingIssues: 0 },
+    });
+    expect(record.fixtureOnly).toBe(false);
+  });
+
+  it("adds a Workbench deep link for real-world eval when --open is requested", async () => {
+    const output = capture();
+
+    await runEvalCommand(["real-world", "--compact", "--open"], { stdout: output.stdout });
+    const report = JSON.parse(output.lines[0]!);
+
+    expect(report).toMatchObject({
+      level: "L2",
+      datasetId: "local-real-task-v1",
+      workbenchHref: "http://127.0.0.1:5173/#eval/real-world/local-real-task-v1",
+    });
   });
 
   it("runs replay eval from trajectory mappings", async () => {

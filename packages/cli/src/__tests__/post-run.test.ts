@@ -24,6 +24,7 @@ vi.mock("@keigent/engine", async (importOriginal) => {
 });
 
 const config: KeigentConfig = {
+  configVersion: 1,
   apiKey: "test-key",
   apiProtocol: "openai",
   baseUrl: "https://example.com/v1",
@@ -33,6 +34,13 @@ const config: KeigentConfig = {
   memoryDir: "/tmp/memory",
   headless: true,
   maxIterations: 3,
+  maxChildRuns: 1,
+  maxToolCalls: 20,
+  maxTokenEstimate: 64_000,
+  maxProviderCostUsd: null,
+  modelPricing: null,
+  maxWallTimeMs: 120_000,
+  maxRecoveryAttempts: 3,
 };
 
 function childResult(overrides: Partial<LoopResult> = {}): LoopResult {
@@ -69,10 +77,12 @@ function workflowResult(exitReason: WorkflowResult["exitReason"]): WorkflowResul
       maxChildRuns: 1,
       maxIterationsPerRun: 3,
       maxAggregateIterations: 3,
+      maxToolCallsPerRun: 20,
       maxAggregateToolCalls: 20,
+      maxRecoveryAttemptsPerRun: 3,
       timeoutMs: 120_000,
     },
-    budgetUsage: { childRuns: 1, iterations: 1, toolCalls: 0, checkpointsPassed: 0, durationMs: 1 },
+    budgetUsage: { childRuns: 1, iterations: 1, toolCalls: 0, recoveryAttempts: 0, checkpointsPassed: 0, durationMs: 1 },
     durationMs: 1,
     trajectory: {
       schemaVersion: 1,
@@ -90,10 +100,12 @@ function workflowResult(exitReason: WorkflowResult["exitReason"]): WorkflowResul
         maxChildRuns: 1,
         maxIterationsPerRun: 3,
         maxAggregateIterations: 3,
+        maxToolCallsPerRun: 20,
         maxAggregateToolCalls: 20,
+        maxRecoveryAttemptsPerRun: 3,
         timeoutMs: 120_000,
       },
-      budgetUsage: { childRuns: 1, iterations: 1, toolCalls: 0, checkpointsPassed: 0, durationMs: 1 },
+      budgetUsage: { childRuns: 1, iterations: 1, toolCalls: 0, recoveryAttempts: 0, checkpointsPassed: 0, durationMs: 1 },
       durationMs: 1,
     },
   } as WorkflowResult;

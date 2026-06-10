@@ -45,8 +45,15 @@ function workflowTrajectory(overrides: Partial<WorkflowTrajectory> = {}): Workfl
     durationMs: 7,
     exitReason: "success",
     finalResponse: "done",
-    budget: { maxChildRuns: 1, maxIterationsPerRun: 10, maxAggregateIterations: 10, maxAggregateToolCalls: 20 },
-    budgetUsage: { childRuns: 1, iterations: 1, toolCalls: 0, checkpointsPassed: 0, durationMs: 7 },
+    budget: {
+      maxChildRuns: 1,
+      maxIterationsPerRun: 10,
+      maxAggregateIterations: 10,
+      maxToolCallsPerRun: 20,
+      maxAggregateToolCalls: 20,
+      maxRecoveryAttemptsPerRun: 3,
+    },
+    budgetUsage: { childRuns: 1, iterations: 1, toolCalls: 0, recoveryAttempts: 0, checkpointsPassed: 0, durationMs: 7 },
     evidence: [],
     events: [
       { kind: "workflow_start", workflowId: "wf-save", mode: "single-loop", goal: "Persist me" },

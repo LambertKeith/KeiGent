@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import {
   KEIGENT_HOME,
   PROTOCOL_DEFAULT_BASE_URLS,
+  isModelPricing,
   loadConfig,
   redactConfig,
   resolveConfig,
@@ -28,6 +29,7 @@ interface SourceAwareField {
 const DEFAULT_CONFIG_PATH = join(KEIGENT_HOME, "config.json");
 
 const CONFIG_KEYS = new Set<keyof KeigentConfig>([
+  "configVersion",
   "apiKey",
   "apiProtocol",
   "baseUrl",
@@ -37,6 +39,13 @@ const CONFIG_KEYS = new Set<keyof KeigentConfig>([
   "memoryDir",
   "headless",
   "maxIterations",
+  "maxChildRuns",
+  "maxToolCalls",
+  "maxTokenEstimate",
+  "maxProviderCostUsd",
+  "modelPricing",
+  "maxWallTimeMs",
+  "maxRecoveryAttempts",
 ]);
 
 const ENV_KEYS: Partial<Record<keyof KeigentConfig, string>> = {
@@ -57,12 +66,20 @@ function optionalEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
 
 function defaultConfigTemplate(): KeigentConfigInput {
   return {
+    configVersion: 1,
     apiKey: "",
     apiProtocol: "openai",
     baseUrl: PROTOCOL_DEFAULT_BASE_URLS.openai,
     modelId: "gpt-4o-mini",
     headless: false,
     maxIterations: 12,
+    maxChildRuns: 1,
+    maxToolCalls: 20,
+    maxTokenEstimate: 64_000,
+    maxProviderCostUsd: null,
+    modelPricing: null,
+    maxWallTimeMs: 120_000,
+    maxRecoveryAttempts: 3,
   };
 }
 
@@ -89,17 +106,53 @@ async function writeConfigFileAtomic(configPath: string, config: KeigentConfigIn
 
 function parseConfigValue(key: keyof KeigentConfig, value: string): KeigentConfig[keyof KeigentConfig] {
   switch (key) {
+    case "configVersion":
+      if (value !== "1") {
+        throw new Error("configVersion must be 1");
+      }
+      return 1;
     case "headless":
       if (value !== "true" && value !== "false") {
         throw new Error("headless must be true or false");
       }
       return value === "true";
-    case "maxIterations": {
+    case "maxIterations":
+    case "maxChildRuns":
+    case "maxToolCalls":
+    case "maxTokenEstimate":
+    case "maxWallTimeMs":
+    case "maxRecoveryAttempts": {
       const parsed = Number(value);
-      if (!Number.isInteger(parsed) || parsed < 1) {
-        throw new Error("maxIterations must be an integer >= 1");
+      const min = key === "maxRecoveryAttempts" ? 0 : 1;
+      if (!Number.isInteger(parsed) || parsed < min) {
+        throw new Error(`${key} must be an integer >= ${min}`);
       }
       return parsed;
+    }
+    case "maxProviderCostUsd": {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw new Error("maxProviderCostUsd must be a number > 0");
+      }
+      return parsed;
+    }
+    case "modelPricing": {
+      if (value === "null") return null;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(value);
+      } catch {
+        throw new Error("modelPricing must be null or JSON with non-negative input/output/cacheRead/cacheWrite numbers");
+      }
+      if (!isModelPricing(parsed)) {
+        throw new Error("modelPricing must be null or JSON with non-negative input/output/cacheRead/cacheWrite numbers");
+      }
+      return {
+        input: parsed.input,
+        output: parsed.output,
+        cacheRead: parsed.cacheRead,
+        cacheWrite: parsed.cacheWrite,
+      };
     }
     case "apiProtocol":
       if (value !== "openai" && value !== "anthropic") {
@@ -133,6 +186,7 @@ function buildSourceAwareConfig(
   const defaultBaseUrl = PROTOCOL_DEFAULT_BASE_URLS[fileProtocol];
   const defaults: Omit<KeigentConfig, "apiKey"> & { apiKey: string } = {
     apiKey: "",
+    configVersion: 1,
     apiProtocol: "openai",
     baseUrl: defaultBaseUrl,
     modelId: "gpt-4o-mini",
@@ -141,6 +195,13 @@ function buildSourceAwareConfig(
     memoryDir: join(configHome, "memory"),
     headless: false,
     maxIterations: 12,
+    maxChildRuns: 1,
+    maxToolCalls: 20,
+    maxTokenEstimate: 64_000,
+    maxProviderCostUsd: null,
+    modelPricing: null,
+    maxWallTimeMs: 120_000,
+    maxRecoveryAttempts: 3,
   };
 
   const fields = {} as Record<keyof KeigentConfig, SourceAwareField>;
@@ -246,7 +307,10 @@ export async function runConfigCommand(
 
       for (const key of CONFIG_KEYS) {
         const field = fields[key];
-        print(options, `${key}: ${String(field.value)} (${field.source})`);
+        const value = typeof field.value === "object" && field.value !== null
+          ? JSON.stringify(field.value)
+          : String(field.value);
+        print(options, `${key}: ${value} (${field.source})`);
       }
       return;
     }

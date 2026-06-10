@@ -113,4 +113,109 @@ describe("skill library view model", () => {
     });
     expect(library.skills[2]?.blockedReason).toBe("failed risk eval");
   });
+
+  it("accepts engine deprecatedReason metadata when rendering deprecated skills", () => {
+    const library = normalizeSkillLibrary({
+      skills: [
+        {
+          name: "old-shell",
+          description: "Old shell flow",
+          tags: ["shell"],
+          status: "deprecated",
+          deprecatedReason: "replaced by governed shell workflow",
+        },
+      ],
+    });
+
+    expect(library.skills[0]).toMatchObject({
+      name: "old-shell",
+      statusLabel: "Deprecated",
+      executable: false,
+      deprecationReason: "replaced by governed shell workflow",
+    });
+  });
+
+  it("normalizes engine skill match explanations into operator actions", () => {
+    const library = normalizeSkillLibrary({
+      skills: [
+        {
+          name: "file-write",
+          description: "Write files safely",
+          tags: ["file"],
+          status: "verified",
+          riskLevel: "R2",
+          evalCoverage: ["file-write-positive"],
+        },
+        {
+          name: "candidate-browser",
+          description: "Candidate browser flow",
+          tags: ["browser"],
+          status: "candidate",
+          evalCoverage: ["candidate-browser-positive"],
+        },
+        {
+          name: "blocked-shell",
+          description: "Unsafe shell flow",
+          tags: ["shell"],
+          status: "blocked",
+          blockedReason: "unsafe command",
+        },
+      ],
+      matchExplanations: [
+        {
+          name: "file-write",
+          status: "verified",
+          score: 12,
+          signals: ["tag:file"],
+          matched: true,
+          injected: true,
+          riskDelta: "declared R2",
+          evalCoverage: ["file-write-positive"],
+        },
+        {
+          name: "candidate-browser",
+          status: "candidate",
+          score: 8,
+          signals: ["tag:browser"],
+          matched: true,
+          injected: false,
+          exclusionReason: "candidate_not_enabled",
+          evalCoverage: ["candidate-browser-positive"],
+        },
+        {
+          name: "blocked-shell",
+          status: "blocked",
+          score: 9,
+          signals: ["tag:shell"],
+          matched: true,
+          injected: false,
+          exclusionReason: "blocked",
+          blockedReason: "unsafe command",
+        },
+      ],
+    });
+
+    expect(library.skills.map((skill) => [skill.name, skill.recommendedAction])).toEqual([
+      ["file-write", "Injected with eval coverage"],
+      ["candidate-browser", "Review before enabling"],
+      ["blocked-shell", "Do not inject"],
+    ]);
+    expect(library.skills[0]?.matchExplanations).toEqual([
+      expect.objectContaining({
+        reason: "tag:file",
+        injected: true,
+        riskDelta: "declared R2",
+        evalCoverageLinks: [{ id: "file-write-positive", label: "file-write-positive", href: "#eval/file-write-positive" }],
+      }),
+    ]);
+    expect(library.skills[1]?.matchExplanations[0]).toMatchObject({
+      exclusionReason: "candidate_not_enabled",
+      operatorMessage: "Candidate skill matched but was not injected.",
+    });
+    expect(library.skills[2]?.matchExplanations[0]).toMatchObject({
+      exclusionReason: "blocked",
+      operatorMessage: "Blocked skill matched and must remain disabled.",
+      blockedReason: "unsafe command",
+    });
+  });
 });

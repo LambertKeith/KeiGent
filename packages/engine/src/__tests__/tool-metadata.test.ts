@@ -25,6 +25,9 @@ describe("built-in tool governance metadata", () => {
 
     expect(registry.get("file_write")).toMatchObject({ permission: "write", riskLevel: "R1", sideEffect: "local", reversible: true });
     expect(registry.get("file_read")).toMatchObject({ permission: "readonly", riskLevel: "R0", sideEffect: "none", reversible: true });
+    expect(registry.get("git_status")).toMatchObject({ permission: "readonly", riskLevel: "R0", sideEffect: "none", reversible: true });
+    expect(registry.get("github_repo_read")).toMatchObject({ permission: "readonly", riskLevel: "R0", sideEffect: "none", reversible: true });
+    expect(registry.get("http_get")).toMatchObject({ permission: "readonly", riskLevel: "R0", sideEffect: "none", reversible: true });
     expect(registry.get("web_fetch")).toMatchObject({ permission: "readonly", riskLevel: "R0", sideEffect: "none", reversible: true });
   });
 

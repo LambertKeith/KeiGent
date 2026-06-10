@@ -3,6 +3,8 @@
 
   "apiKey": "",
 
+  "configVersion": 1,
+
   "apiProtocol": "openai",
 
   "baseUrl": "https://api.openai.com/v1",
@@ -11,5 +13,19 @@
 
   "headless": false,
 
-  "maxIterations": 12
+  "maxIterations": 12,
+
+  "maxChildRuns": 1,
+
+  "maxToolCalls": 20,
+
+  "maxTokenEstimate": 64000,
+
+  "maxProviderCostUsd": null,
+
+  "modelPricing": null,
+
+  "maxWallTimeMs": 120000,
+
+  "maxRecoveryAttempts": 3
 }

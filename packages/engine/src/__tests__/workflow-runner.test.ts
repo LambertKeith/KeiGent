@@ -76,7 +76,36 @@ describe("WorkflowRunner", () => {
     });
   });
 
-  it("runs reviewed-loop as worker followed by readonly verifier with reviewer evidence", async () => {
+  it("aggregates provider usage and cost from child loop results", async () => {
+    const child = loopResult({
+      providerUsage: {
+        inputTokens: 100,
+        outputTokens: 25,
+        cacheReadTokens: 10,
+        cacheWriteTokens: 5,
+        totalTokens: 140,
+        costUsd: 0.075,
+        costStatus: "priced",
+      },
+    });
+    child.trajectory.providerUsage = child.providerUsage;
+    const runner = new WorkflowRunner(fakeChildRunner(child));
+
+    const result = await runner.run(createWorkflowSpec({ id: "wf-provider-usage", task: task() }));
+
+    expect(result.budgetUsage.providerUsage).toEqual({
+      inputTokens: 100,
+      outputTokens: 25,
+      cacheReadTokens: 10,
+      cacheWriteTokens: 5,
+      totalTokens: 140,
+      costUsd: 0.075,
+      costStatus: "priced",
+    });
+    expect(result.trajectory.budgetUsage.providerUsage).toEqual(result.budgetUsage.providerUsage);
+  });
+
+  it("runs reviewed-loop as worker followed by readonly reviewer with reviewer evidence", async () => {
     const reviewedTask = task({
       successDef: {
         goal: "Review rubric",
@@ -87,7 +116,7 @@ describe("WorkflowRunner", () => {
       steps: [{ iteration: 1, kind: "tool_call", toolName: "file_write", toolResult: "ok", toolSucceeded: true }],
       finalResponse: "worker done",
     });
-    const verifierTrajectory = trajectory({
+    const reviewerTrajectory = trajectory({
       steps: [
         {
           iteration: 1,
@@ -106,7 +135,7 @@ describe("WorkflowRunner", () => {
         seenChildren.push({ id: child.id, role: child.role, policy: child.policy });
         return child.role === "worker"
           ? loopResult({ finalResponse: "worker done", trajectory: workerTrajectory })
-          : loopResult({ finalResponse: "review passed", checkpointsPassed: 1, trajectory: verifierTrajectory });
+          : loopResult({ finalResponse: "review passed", checkpointsPassed: 1, trajectory: reviewerTrajectory });
       },
     });
     const events: Array<{ kind: string; childRunId?: string; role?: string }> = [];
@@ -117,22 +146,22 @@ describe("WorkflowRunner", () => {
     );
 
     expect(result.exitReason).toBe("success");
-    expect(result.childRuns.map((child) => child.role)).toEqual(["worker", "verifier"]);
+    expect(result.childRuns.map((child) => child.role)).toEqual(["worker", "reviewer"]);
     expect(seenChildren[1]).toMatchObject({
-      id: "wf-reviewed:verifier-1",
-      role: "verifier",
+      id: "wf-reviewed:reviewer-1",
+      role: "reviewer",
       policy: { verifierReadonly: true, allowExternalSideEffects: false },
     });
     expect(events.filter((event) => event.kind === "child_start").map((event) => [event.childRunId, event.role])).toEqual([
       ["wf-reviewed:worker-1", "worker"],
-      ["wf-reviewed:verifier-1", "verifier"],
+      ["wf-reviewed:reviewer-1", "reviewer"],
     ]);
     expect(result.evidence).toContainEqual(
       expect.objectContaining({
         kind: "checkpoint",
         passed: true,
         message: "reviewer accepted worker result",
-        sourceChildRunId: "wf-reviewed:verifier-1",
+        sourceChildRunId: "wf-reviewed:reviewer-1",
       }),
     );
     expect(result.finalResponse).toContain("worker done");
@@ -382,6 +411,74 @@ describe("WorkflowRunner", () => {
     expect(observedMaxIterations).toBe(3);
   });
 
+  it("passes per-run tool, wall-time, recovery, and provider cost budgets to the child runner", async () => {
+    let observedOptions: Parameters<WorkflowChildRunner["runChild"]>[1];
+    const runner = new WorkflowRunner({
+      async runChild(_child, options) {
+        observedOptions = options;
+        return loopResult({ iterations: 1 });
+      },
+    });
+
+    await runner.run(
+      createWorkflowSpec({
+        id: "wf-pass-child-budget",
+        task: task(),
+        budget: {
+          maxIterationsPerRun: 3,
+          maxToolCallsPerRun: 4,
+          maxTokenEstimatePerRun: 100,
+          maxProviderCostUsdPerRun: 0.25,
+          timeoutMs: 5_000,
+          maxRecoveryAttemptsPerRun: 2,
+        },
+      }),
+    );
+
+    expect(observedOptions).toMatchObject({
+      maxIterations: 3,
+      maxToolCalls: 4,
+      maxTokenEstimate: 100,
+      maxProviderCostUsd: 0.25,
+      maxWallTimeMs: 5_000,
+      maxRecoveryAttempts: 2,
+    });
+  });
+
+  it("marks budget_exceeded when aggregate priced provider cost exceeds the workflow budget", async () => {
+    const child = loopResult({
+      providerUsage: {
+        inputTokens: 100,
+        outputTokens: 25,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 125,
+        costUsd: 0.3,
+        costStatus: "priced",
+      },
+    });
+    child.trajectory.providerUsage = child.providerUsage;
+    const runner = new WorkflowRunner(fakeChildRunner(child));
+
+    const result = await runner.run(
+      createWorkflowSpec({
+        id: "wf-provider-cost-budget",
+        task: task(),
+        budget: { maxAggregateProviderCostUsd: 0.2 },
+      }),
+    );
+
+    expect(result.exitReason).toBe("budget_exceeded");
+    expect(result.budgetUsage.providerUsage).toMatchObject({ costUsd: 0.3, costStatus: "priced" });
+    expect(result.evidence).toContainEqual(
+      expect.objectContaining({
+        kind: "budget",
+        passed: false,
+        message: expect.stringContaining("maxAggregateProviderCostUsd"),
+      }),
+    );
+  });
+
   it("marks budget_exceeded when a child result exceeds maxIterationsPerRun", async () => {
     const childTrajectory = trajectory({
       steps: [{ iteration: 2, kind: "text_output", text: "late done" }],
@@ -503,6 +600,29 @@ describe("WorkflowRunner", () => {
     await expect(
       toolRunner.run(createWorkflowSpec({ id: "wf-tool-budget", task: task(), budget: { maxAggregateToolCalls: 2 } })),
     ).resolves.toMatchObject({ exitReason: "budget_exceeded" });
+
+    const recoveryRunner = new WorkflowRunner(fakeChildRunner(loopResult({
+      trajectory: trajectory({
+        steps: [
+          { iteration: 1, kind: "recovery", recovery: { decision: "retry" } },
+          { iteration: 2, kind: "recovery", recovery: { decision: "repair", hint: "collect evidence" } },
+        ],
+      }),
+    })));
+    await expect(
+      recoveryRunner.run(createWorkflowSpec({ id: "wf-recovery-budget", task: task(), budget: { maxRecoveryAttemptsPerRun: 1 } })),
+    ).resolves.toMatchObject({
+      exitReason: "budget_exceeded",
+      budgetUsage: { recoveryAttempts: 2 },
+    });
+
+    const tokenRunner = new WorkflowRunner(fakeChildRunner(loopResult({ estimatedTokens: 101 })));
+    await expect(
+      tokenRunner.run(createWorkflowSpec({ id: "wf-token-budget", task: task(), budget: { maxTokenEstimatePerRun: 100 } })),
+    ).resolves.toMatchObject({
+      exitReason: "budget_exceeded",
+      budgetUsage: { tokenEstimate: 101 },
+    });
 
     const timeoutRunner = new WorkflowRunner({
       async runChild() {

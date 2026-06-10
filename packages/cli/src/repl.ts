@@ -149,11 +149,16 @@ async function runTask(goal: string, deps: TaskDeps): Promise<void> {
         registry,
         skillContext: replState.skillContext,
         stateCapture,
-        createEngine(maxIterations) {
+        createEngine(maxIterations, budget) {
           return new LoopEngine({
             model,
             apiKey: config.apiKey,
             maxIterations: maxIterations ?? config.maxIterations,
+            maxToolCalls: budget?.maxToolCalls ?? config.maxToolCalls,
+            maxTokenEstimate: budget?.maxTokenEstimate ?? config.maxTokenEstimate,
+            maxProviderCostUsd: budget?.maxProviderCostUsd ?? config.maxProviderCostUsd ?? undefined,
+            maxWallTimeMs: budget?.maxWallTimeMs ?? config.maxWallTimeMs,
+            maxRecoveryAttempts: budget?.maxRecoveryAttempts ?? config.maxRecoveryAttempts,
             registry,
             workspace: config.workspace,
             approval,
@@ -169,8 +174,21 @@ async function runTask(goal: string, deps: TaskDeps): Promise<void> {
         id: `repl-${Date.now()}`,
         task,
         budget: {
+          maxChildRuns: config.maxChildRuns,
           maxIterationsPerRun: config.maxIterations,
-          maxAggregateIterations: config.maxIterations,
+          maxAggregateIterations: config.maxIterations * config.maxChildRuns,
+          maxToolCallsPerRun: config.maxToolCalls,
+          maxAggregateToolCalls: config.maxToolCalls * config.maxChildRuns,
+          maxTokenEstimatePerRun: config.maxTokenEstimate,
+          maxAggregateTokenEstimate: config.maxTokenEstimate * config.maxChildRuns,
+          ...(config.maxProviderCostUsd !== null
+            ? {
+                maxProviderCostUsdPerRun: config.maxProviderCostUsd,
+                maxAggregateProviderCostUsd: config.maxProviderCostUsd * config.maxChildRuns,
+              }
+            : {}),
+          maxRecoveryAttemptsPerRun: config.maxRecoveryAttempts,
+          timeoutMs: config.maxWallTimeMs,
         },
       }),
       renderWorkflowProgress,

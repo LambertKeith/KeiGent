@@ -1,3 +1,9 @@
+import type {
+  RealWorldEvalCaseResult,
+  RealWorldEvalFinding,
+  RealWorldEvalReport,
+} from "@keigent/engine";
+
 export interface EvalCaseResultView {
   id: string;
   title: string;
@@ -47,6 +53,51 @@ export interface DashboardSummary {
   authoritative: boolean;
   invalid: boolean;
   issues: ReportValidationIssue[];
+}
+
+export interface RealWorldMetricView {
+  value: number | null;
+  label: string;
+}
+
+export interface RealWorldEvalCaseView {
+  id: string;
+  title: string;
+  level: string;
+  runId: string;
+  runDetailHref: string;
+  expectedResult: string;
+  result: string;
+  passed: boolean;
+  routeMatched: boolean;
+  taskSucceeded: boolean;
+  evidenceChecked: boolean;
+  riskCompliant: boolean;
+  falseSuccess: boolean;
+  status: string;
+  evidenceStatus: string;
+  replayFreshExecution: boolean;
+  failureCodes: string[];
+  failures: string[];
+}
+
+export interface RealWorldEvalReportView {
+  startedAt: string;
+  durationMs: number;
+  level: string;
+  datasetId: string;
+  totals: RealWorldEvalReport["totals"];
+  healthClaim: string;
+  metrics: {
+    routeAccuracy: RealWorldMetricView;
+    taskSuccessRate: RealWorldMetricView;
+    evidenceQuality: RealWorldMetricView;
+    toolReliability: RealWorldMetricView;
+    riskCompliance: RealWorldMetricView;
+  };
+  falseSuccessCount: number;
+  falseConfidenceFindings: RealWorldEvalFinding[];
+  cases: RealWorldEvalCaseView[];
 }
 
 export type DashboardCaseFilter =
@@ -119,4 +170,66 @@ export function filterDashboardCases(report: EvalReportView, filter: DashboardCa
     case "permissionDenied":
       return casesWithFailureCode(report, "permission_denied");
   }
+}
+
+export function normalizeRealWorldEvalReport(report: RealWorldEvalReport): RealWorldEvalReportView {
+  return {
+    startedAt: report.startedAt,
+    durationMs: report.durationMs,
+    level: report.level,
+    datasetId: report.datasetId,
+    totals: report.totals,
+    healthClaim: healthClaimForRealWorldReport(report),
+    metrics: {
+      routeAccuracy: metricView(report.routeAccuracy),
+      taskSuccessRate: metricView(report.taskSuccessRate),
+      evidenceQuality: metricView(report.evidenceQuality),
+      toolReliability: metricView(report.toolReliability),
+      riskCompliance: metricView(report.riskCompliance),
+    },
+    falseSuccessCount: report.falseSuccessCount,
+    falseConfidenceFindings: report.falseConfidenceFindings,
+    cases: report.cases.map(realWorldCaseView),
+  };
+}
+
+function realWorldCaseView(testCase: RealWorldEvalCaseResult): RealWorldEvalCaseView {
+  return {
+    id: testCase.id,
+    title: testCase.title,
+    level: testCase.level,
+    runId: testCase.runId,
+    runDetailHref: runDetailHrefFor(testCase.runId),
+    expectedResult: testCase.expectedResult,
+    result: testCase.result,
+    passed: testCase.passed,
+    routeMatched: testCase.routeMatched,
+    taskSucceeded: testCase.taskSucceeded,
+    evidenceChecked: testCase.evidenceChecked,
+    riskCompliant: testCase.riskCompliant,
+    falseSuccess: testCase.falseSuccess,
+    status: testCase.runRecord.status,
+    evidenceStatus: testCase.runRecord.evidence.status,
+    replayFreshExecution: testCase.runRecord.replay.freshExecution,
+    failureCodes: testCase.runRecord.failures.map((failure) => failure.code),
+    failures: testCase.failures,
+  };
+}
+
+function runDetailHrefFor(runId: string): string {
+  return `#runs/${encodeURIComponent(runId)}`;
+}
+
+function metricView(value: number | null): RealWorldMetricView {
+  return {
+    value,
+    label: value === null ? "Not checked" : `${(value * 100).toFixed(1)}%`,
+  };
+}
+
+function healthClaimForRealWorldReport(report: RealWorldEvalReport): string {
+  if (report.totals.total === 0) return "No cases checked";
+  return report.falseConfidenceFindings.some((finding) => finding.code === "fixture_level")
+    ? "Fixture-level regression, not product health"
+    : "Layered eval report, not product health";
 }

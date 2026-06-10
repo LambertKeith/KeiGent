@@ -36,14 +36,30 @@ export type {
 export { describeAssertion, evaluateAssertion, evaluateAssertions } from "./assertions.js";
 export { failureSummaryForLoopExit, failureSummaryForWorkflowExit, recommendedNextActionFor } from "./failures.js";
 export type { FailureCode, FailureLayer, FailureSummary } from "./failures.js";
+export { addProviderUsage, normalizeProviderUsage } from "./provider-usage.js";
 export {
+  buildNoOpRunRecord,
   buildRunRecordFromWorkflowResult,
+  readRunRecord,
+  readRunStore,
   saveRunRecord,
   summarizeRunRecord,
 } from "./run-record.js";
+export {
+  canWriteWorkspace,
+  cleanupIsolatedWorkspace,
+  collectWorkspaceArtifacts,
+  createIsolatedWorkspace,
+  detectWorkspaceConflicts,
+  readWorkspaceManifest,
+} from "./worktree-isolation.js";
+export { exportRunDebugBundle } from "./debug-bundle.js";
 export type {
   ApprovalSummary,
+  AutomationSummary,
+  BuildNoOpRunRecordOptions,
   BuildRunRecordOptions,
+  ChildRunSummary,
   EvidenceSummary as RunEvidenceSummary,
   ExecutionSummary as RunExecutionSummary,
   RedactionSummary,
@@ -53,12 +69,34 @@ export type {
   RunArtifact,
   RunEvidenceStatus,
   RunRecord,
+  RunStoreError,
+  RunStoreReadResult,
   RunStatus,
   RunTaskSnapshot,
   RunTaskSource,
   SaveRunRecordOptions,
+  SkillRunSummary,
+  ToolRunSummary,
   WorkflowSnapshot,
 } from "./run-record.js";
+export type {
+  CleanupIsolatedWorkspaceOptions,
+  CreateIsolatedWorkspaceOptions,
+  IsolatedWorkspace,
+  WorkspaceArtifact,
+  WorkspaceArtifactKind,
+  WorkspaceArtifactSet,
+  WorkspaceCleanupMode,
+  WorkspaceConflict,
+  WorkspaceStatus,
+} from "./worktree-isolation.js";
+export type {
+  DebugBundleExportResult,
+  DebugBundleFile,
+  DebugBundleFileKind,
+  DebugBundleMissingArtifact,
+  ExportRunDebugBundleOptions,
+} from "./debug-bundle.js";
 
 export type {
   Task,
@@ -73,7 +111,10 @@ export type {
   Trajectory,
   TrajectoryStep,
   SkillContext,
+  SkillMatchExplanation,
   ExitReason,
+  ProviderCostStatus,
+  ProviderUsageSummary,
 } from "./types.js";
 
 export { makeConversationalProfile } from "./profiles/conversational.js";
@@ -100,6 +141,30 @@ export {
   runRealWorldEvalCases,
 } from "./evals/real-world.js";
 export {
+  DEFAULT_OPERATOR_L3_CASES,
+  OPERATOR_L3_DATASET_ID,
+  buildOperatorAcceptanceRecord,
+  createOperatorScenarioFixtureReviewer,
+  formatOperatorAcceptancePacket,
+  runOperatorScenarioEvalCases,
+} from "./evals/operator-scenarios.js";
+export type {
+  OperatorAcceptanceCaseRecord,
+  OperatorAcceptanceCaseSignoff,
+  OperatorAcceptanceIssue,
+  OperatorAcceptanceRecord,
+  OperatorAcceptanceSignoff,
+  OperatorEvidenceLink,
+  OperatorScenarioCaseResult,
+  OperatorScenarioDecision,
+  OperatorScenarioEvalCase,
+  OperatorScenarioEvalReport,
+  OperatorScenarioFinding,
+  OperatorScenarioJourney,
+  OperatorScenarioReview,
+  OperatorScenarioReviewer,
+} from "./evals/operator-scenarios.js";
+export {
   createEngineWorkflowChildRunner,
   DEFAULT_WORKFLOW_BUDGET,
   WorkflowRunner,
@@ -117,6 +182,7 @@ export type {
   ExecutionMode,
   WorkflowBudget,
   WorkflowBudgetUsage,
+  WorkflowChildRunOptions,
   WorkflowChildRole,
   WorkflowEvent,
   WorkflowEvidence,

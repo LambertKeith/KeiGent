@@ -1,5 +1,5 @@
 import { vlog, vwarn } from "./logger.js";
-import { complete, type Api, type AssistantMessage, type Model, type Tool, type ToolCall, type ToolResultMessage } from "@earendil-works/pi-ai";
+import { complete, type Api, type AssistantMessage, type Context, type Model, type Tool, type ToolCall, type ToolResultMessage } from "@earendil-works/pi-ai";
 import type {
   ExitReason,
   LoopProfile,
@@ -19,6 +19,7 @@ import type { ApprovalRequest } from "./tools/types.js";
 import { AllowAllGate } from "./tools/types.js";
 import { approvalScopeMatches } from "./workflow/policy.js";
 import { explainSkillMatches } from "./profiles/strategies.js";
+import { addProviderUsage, normalizeProviderUsage } from "./provider-usage.js";
 
 const CHECKPOINT_TOOL = CHECKPOINT_TOOL_NAME;
 const DEFAULT_LLM_TIMEOUT_MS = 60_000;
@@ -27,6 +28,11 @@ export interface EngineOptions {
   model: Model<Api>;
   apiKey: string;
   maxIterations?: number;
+  maxToolCalls?: number;
+  maxTokenEstimate?: number;
+  maxProviderCostUsd?: number;
+  maxWallTimeMs?: number;
+  maxRecoveryAttempts?: number;
   registry: ToolRegistry;       // 工具注册表（B0：工具与引擎解耦）
   workspace?: string;           // 文件沙箱根目录
   approval?: ApprovalGate;      // dangerous 工具审批门
@@ -52,6 +58,11 @@ export class LoopEngine {
   private readonly model: Model<Api>;
   private readonly apiKey: string;
   private readonly maxIterations: number;
+  private readonly maxToolCalls?: number;
+  private readonly maxTokenEstimate?: number;
+  private readonly maxProviderCostUsd?: number;
+  private readonly maxWallTimeMs?: number;
+  private readonly maxRecoveryAttempts?: number;
   private readonly registry: ToolRegistry;
   private readonly workspace: string;
   private readonly approval: ApprovalGate;
@@ -64,6 +75,11 @@ export class LoopEngine {
     this.model = opts.model;
     this.apiKey = opts.apiKey;
     this.maxIterations = opts.maxIterations ?? 10;
+    this.maxToolCalls = opts.maxToolCalls;
+    this.maxTokenEstimate = opts.maxTokenEstimate;
+    this.maxProviderCostUsd = opts.maxProviderCostUsd;
+    this.maxWallTimeMs = opts.maxWallTimeMs;
+    this.maxRecoveryAttempts = opts.maxRecoveryAttempts;
     this.registry = opts.registry;
     this.workspace = opts.workspace ?? process.cwd();
     this.approval = opts.approval ?? new AllowAllGate();
@@ -85,6 +101,7 @@ export class LoopEngine {
     const emit = onProgress ?? (() => {});
     this._emit = emit;     // result() 用它发 done 事件
     vlog(`\n[engine] ▶ profile=${profile.name} goal="${task.goal}"`);
+    const startedAt = Date.now();
 
     // 重置 profile 实例级可变状态，确保 profile 复用安全（S2/S3 修复）
     profile.attention.reset();
@@ -133,8 +150,10 @@ export class LoopEngine {
       snapshots: [],
       checkpointCount: 0,
       toolCallCount: 0,
+      tokenEstimate: 0,
       failed: false,
     };
+    let recoveryAttempts = 0;
 
     if (isAborted(signal)) {
       return this.result(state, "error", abortMessage(), collector, matchedSkills);
@@ -152,6 +171,9 @@ export class LoopEngine {
     });
 
     while (!profile.terminate.shouldStop(state)) {
+      if (this.isWallTimeBudgetExceeded(startedAt, state)) {
+        return this.result(state, "budget_exceeded", "[错误] budget_exceeded: maxWallTimeMs", collector, matchedSkills);
+      }
       if (isAborted(signal)) {
         return this.result(state, "error", abortMessage(), collector, matchedSkills);
       }
@@ -171,12 +193,20 @@ export class LoopEngine {
         skillContext,
         availableTools,
       );
+      state.tokenEstimate = (state.tokenEstimate ?? 0) + estimateContextTokens(context);
+      if (this.isTokenBudgetExceeded(state)) {
+        return this.result(state, "budget_exceeded", "[错误] budget_exceeded: maxTokenEstimate", collector, matchedSkills);
+      }
       if (isAborted(signal)) {
         return this.result(state, "error", abortMessage(), collector, matchedSkills);
       }
 
       // LLM 调用
       const response = await this.callLLM(context, signal);
+      state.providerUsage = addProviderUsage(state.providerUsage, normalizeProviderUsage(response.usage));
+      if (this.isProviderCostBudgetExceeded(state)) {
+        return this.result(state, "budget_exceeded", `[错误] budget_exceeded: maxProviderCostUsd (${state.providerUsage!.costUsd} > ${this.maxProviderCostUsd})`, collector, matchedSkills);
+      }
       if (isAborted(signal)) {
         return this.result(state, "error", abortMessage(), collector, matchedSkills);
       }
@@ -264,6 +294,9 @@ export class LoopEngine {
 
       // 处理每个工具调用
       for (const toolCall of toolCalls) {
+        if (this.isToolCallBudgetExceeded(state)) {
+          return this.result(state, "budget_exceeded", "[错误] budget_exceeded: maxToolCalls", collector, matchedSkills);
+        }
         state.toolCallCount++;
         vlog(`[engine] 工具: ${toolCall.name}(${JSON.stringify(toolCall.arguments)})`);
         emit({ kind: "tool_call", iteration: state.iteration, toolName: toolCall.name, args: toolCall.arguments as Record<string, unknown> });
@@ -314,10 +347,14 @@ export class LoopEngine {
             if (isAborted(signal)) {
               return this.result(state, "error", abortMessage(), collector, matchedSkills);
             }
+            if (this.isRecoveryBudgetExceeded(recoveryAttempts)) {
+              return this.result(state, "budget_exceeded", "[错误] budget_exceeded: maxRecoveryAttempts", collector, matchedSkills);
+            }
             const decision = await profile.recover.handle(state, verdict);
             if (isAborted(signal)) {
               return this.result(state, "error", abortMessage(), collector, matchedSkills);
             }
+            recoveryAttempts++;
             const recovery = recoveryPayload(decision);
             collector.addRecovery(state.iteration, recovery);
             emit({ kind: "recovery", iteration: state.iteration, decision: recovery.decision, ...(recovery.hint ? { hint: recovery.hint } : {}), ...(recovery.reason ? { reason: recovery.reason } : {}) });
@@ -444,6 +481,30 @@ export class LoopEngine {
     }
   }
 
+  private isToolCallBudgetExceeded(state: LoopState): boolean {
+    return this.maxToolCalls !== undefined && state.toolCallCount >= this.maxToolCalls;
+  }
+
+  private isWallTimeBudgetExceeded(startedAt: number, state: LoopState): boolean {
+    if (this.maxWallTimeMs === undefined) return false;
+    if (state.iteration === 0) return false;
+    return Date.now() - startedAt >= this.maxWallTimeMs;
+  }
+
+  private isTokenBudgetExceeded(state: LoopState): boolean {
+    return this.maxTokenEstimate !== undefined && (state.tokenEstimate ?? 0) > this.maxTokenEstimate;
+  }
+
+  private isProviderCostBudgetExceeded(state: LoopState): boolean {
+    return this.maxProviderCostUsd !== undefined
+      && state.providerUsage?.costStatus === "priced"
+      && state.providerUsage.costUsd > this.maxProviderCostUsd;
+  }
+
+  private isRecoveryBudgetExceeded(recoveryAttempts: number): boolean {
+    return this.maxRecoveryAttempts !== undefined && recoveryAttempts >= this.maxRecoveryAttempts;
+  }
+
   private pushToolResult(
     state: LoopState,
     toolCall: ToolCall,
@@ -478,6 +539,8 @@ export class LoopEngine {
           exitReason,
           finalResponse,
           skillsUsed: skillsUsed ?? [],
+          estimatedTokens: state.tokenEstimate,
+          providerUsage: state.providerUsage,
           ...(failure ? { failure } : {}),
         })
       : {
@@ -488,6 +551,8 @@ export class LoopEngine {
           finalResponse,
           durationMs: 0,
           skillsUsed: [],
+          estimatedTokens: state.tokenEstimate,
+          providerUsage: state.providerUsage,
           ...(failure ? { failure } : {}),
         };
 
@@ -499,10 +564,21 @@ export class LoopEngine {
       iterations: state.iteration,
       checkpointsPassed: state.checkpointCount,
       totalToolCalls: state.toolCallCount,
+      estimatedTokens: state.tokenEstimate,
+      providerUsage: state.providerUsage,
       trajectory,
       ...(failure ? { failure } : {}),
     };
   }
+}
+
+function estimateContextTokens(context: Context): number {
+  const source = context as unknown as { messages?: unknown; tools?: unknown };
+  const serialized = JSON.stringify({
+    messages: source.messages ?? [],
+    tools: source.tools ?? [],
+  });
+  return Math.max(1, Math.ceil(serialized.length / 4));
 }
 
 function approvalWithInheritedScopes(base: ApprovalGate, scopes: string[] | undefined): ApprovalGate {

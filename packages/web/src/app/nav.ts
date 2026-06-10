@@ -1,4 +1,4 @@
-export type AppSection = "runs" | "conversation" | "dashboard" | "config";
+export type AppSection = "runs" | "conversation" | "dashboard" | "skills" | "config";
 
 export interface NavItem {
   id: AppSection;
@@ -21,6 +21,11 @@ export const NAV_ITEMS: NavItem[] = [
     id: "dashboard",
     label: "Dashboard",
     description: "Measure eval, replay, and orchestrator health.",
+  },
+  {
+    id: "skills",
+    label: "Skills",
+    description: "Review skill status, match reasons, and eval coverage.",
   },
   {
     id: "config",

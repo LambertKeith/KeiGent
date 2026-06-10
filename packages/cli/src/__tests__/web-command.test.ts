@@ -16,6 +16,16 @@ describe("web command", () => {
     expect(output.lines.join("\n")).toContain("corepack pnpm --filter @keigent/web dev");
   });
 
+  it("prints the local Web API URL when requested", async () => {
+    const output = capture();
+
+    await runWebCommand(["--api", "--api-port", "5174", "--print"], { stdout: output.stdout });
+
+    expect(output.lines.join("\n")).toContain("http://127.0.0.1:5173");
+    expect(output.lines.join("\n")).toContain("API: http://127.0.0.1:5174");
+    expect(output.lines.join("\n")).toContain("VITE_KEIGENT_API_URL=http://127.0.0.1:5174");
+  });
+
   it("rejects public bind unless explicitly allowed", async () => {
     await expect(runWebCommand(["--host", "0.0.0.0", "--print"])).rejects.toThrow(
       "public bind requires --allow-public",

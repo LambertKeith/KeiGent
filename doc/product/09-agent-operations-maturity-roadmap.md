@@ -162,6 +162,8 @@ Next Action
 - replay run 明确标记 `freshExecution: false`；
 - failed run 必须突出 blocking evidence。
 
+当前实现备注（2026-06-10）：已新增前端内存事件流 Live Run Console、Web Run Launcher，以及 Run Workbench v1 静态审计 surface。Live Run Console 展示 live/replay 标签、event timeline、pending tool/checkpoint/approval 统计与 selected event inspector；Run Workbench 包含 Run list、Run summary、Route and skills、Evidence、Risk and approvals、Tools and budget、Replay and artifacts、Failures、Raw redacted record。页面使用 `RunRecord` / progress event view model，默认选择最新 run，展示 needs-action / replayable / failed-degraded 队列统计，并在 inspector 中递归脱敏。已新增 `keigent web --api` 本地 API/SSE foundation，支持读取 run store、以 `task.source=web` 发起 run、订阅 run session workflow events 并更新 Live Console；当前仍不是完整交互式 Workbench。
+
 ### 4.4 RunRecord Completeness
 
 #### 产品目标
@@ -269,6 +271,8 @@ interface SkillMatchExplanation {
 - no skill 显示 none；
 - skill match reason 可读。
 
+当前实现备注（2026-06-10）：已新增 Skill Workbench 静态治理 surface，包含 Skill list、Selected skill、Match explanations、Governance、Eval coverage、Recent matches and learning。页面展示 executable / needs-review / blocked-deprecated / eval coverage 队列统计，区分 verified、candidate、blocked、deprecated 等状态，并显示 injected、risk delta、operator message 与 eval coverage 链接。
+
 ### 4.6 Stability Hardening Gate
 
 #### 产品目标
@@ -343,6 +347,8 @@ eval case
 - false confidence findings 有独立区域；
 - replay 与 fresh execution 明确分离；
 - insufficient evidence 不被记为成功。
+
+当前实现备注（2026-06-10）：已新增 Dashboard real-world eval surface，展示 route accuracy、task success、evidence quality、tool reliability、risk compliance 的分离指标；case table 包含 `runDetailHref` 指向 `#runs/<runId>`；false-confidence findings 独立展示；replay case 显示为 Replay report，不伪装 fresh execution；页面文案明确 fixture-level report 不是 product health。
 
 ---
 
@@ -622,6 +628,8 @@ next actions
 
 不要急着让 judge 自动打分。
 
+当前实现备注（2026-06-10）：已新增 deterministic L3 operator scenario fixture，覆盖 repo acceptance、failure triage、skill promotion review、Workbench review、governed execution、automation no-op review、readonly connector review；输出 accepted/deferred/rejected、confidence、false-confidence risks、blocking issues、next actions 与 evidence links。CLI 额外提供 `eval operator --packet` 生成人工验收 packet，并提供 `eval operator --acceptance <signoff.json>` 将人类 reviewer 的 JSON sign-off 校验为 `operator-human-acceptance` 结构化记录。fixture、packet 与 sign-off 校验都不等同真人审证本身，最终接受仍需要人类 reviewer 检查证据后签署或覆盖决定。
+
 ### 7.5 Observability / Debug Package
 
 #### 产品目标
@@ -654,6 +662,8 @@ failure-summary.md
 
 用户可以把一个 debug bundle 发给开发者，开发者不用复现环境也能判断大致问题。
 
+当前实现备注（2026-06-10）：debug bundle 已包含 redacted record/artifacts/config、tool summary、failure summary、observability summary。observability summary 覆盖 structured event timeline、budget/recovery、timeout/abort、failure taxonomy，并对尚未记录的 tool/model latency 显示 `not_recorded`。
+
 ### 7.6 Release / Packaging / Upgrade Path
 
 #### 产品目标
@@ -674,6 +684,8 @@ failure-summary.md
 - version compatibility。
 
 特别要解决：通过 pnpm 启动时，JSON 输出前可能有 wrapper 噪音；正式 CLI 必须提供更干净的入口。
+
+当前实现备注（2026-06-10）：已具备 CLI bin shim、package build metadata、secret-safe sample config、doctor 改进、Node 22+ engine 声明、`configVersion: 1` 兼容边界、Apache-2.0 package metadata 与 `CONTRIBUTING.md`。legacy 无版本 config 在解析时升级为 v1，doctor 会拒绝未知未来版本。first-run guide、config upgrade policy、release checklist、changelog 与版本兼容边界已收敛到 [`doc/product/10-release-and-upgrade.md`](10-release-and-upgrade.md)。
 
 ### 7.7 Performance / Budget Controls
 
@@ -700,6 +712,8 @@ failure-summary.md
 - parent / child budget 分开；
 - Workbench 显示预算耗用；
 - eval 覆盖 budget exceeded。
+
+当前实现备注（2026-06-10）：已覆盖 iterations、tool calls、child runs、wall time、max token estimate（请求前保守估算）、provider usage/cost 聚合、`maxProviderCostUsd` hard ceiling（仅在 `costStatus: "priced"` 时强制执行）、显式本地 `modelPricing`（USD per million tokens）配置、retry/recovery attempts、per-tool timeout 元数据、`budget_exceeded` failure code、RunRecord/Web budget usage、debug bundle、real-world eval fixture。自定义 endpoint 未配置价格时显示 `pricing_not_configured`；远程自动价格表同步不实现，避免内置过期价格。
 
 ---
 

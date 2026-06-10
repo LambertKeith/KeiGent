@@ -1,6 +1,6 @@
 import { access, stat } from "fs/promises";
 import type { KeigentConfig } from "./config.js";
-import { isModelApiProtocol } from "./config.js";
+import { isModelApiProtocol, isModelPricing } from "./config.js";
 
 export type ConfigIssueSeverity = "info" | "warning" | "error";
 export type ConfigSource = "env" | "file" | "default";
@@ -35,6 +35,10 @@ export function redactSecret(value: string | undefined): string {
 export function validateConfig(config: KeigentConfig): ConfigIssue[] {
   const issues: ConfigIssue[] = [];
 
+  if (config.configVersion !== 1) {
+    issues.push({ code: "configVersion.unsupported", severity: "error", field: "configVersion", message: "configVersion must be 1 for this KeiGent release" });
+  }
+
   if (!config.apiKey) {
     issues.push({ code: "apiKey.missing", severity: "error", field: "apiKey", message: "KEIGENT_API_KEY or config apiKey is required" });
   }
@@ -61,6 +65,48 @@ export function validateConfig(config: KeigentConfig): ConfigIssue[] {
     issues.push({ code: "maxIterations.invalid", severity: "error", field: "maxIterations", message: "maxIterations must be an integer >= 1" });
   } else if (config.maxIterations > 100) {
     issues.push({ code: "maxIterations.high", severity: "warning", field: "maxIterations", message: "maxIterations above 100 may hide runaway loops" });
+  }
+
+  if (!Number.isInteger(config.maxChildRuns) || config.maxChildRuns < 1) {
+    issues.push({ code: "maxChildRuns.invalid", severity: "error", field: "maxChildRuns", message: "maxChildRuns must be an integer >= 1" });
+  } else if (config.maxChildRuns > 10) {
+    issues.push({ code: "maxChildRuns.high", severity: "warning", field: "maxChildRuns", message: "maxChildRuns above 10 may hide runaway workflows" });
+  }
+
+  if (!Number.isInteger(config.maxToolCalls) || config.maxToolCalls < 1) {
+    issues.push({ code: "maxToolCalls.invalid", severity: "error", field: "maxToolCalls", message: "maxToolCalls must be an integer >= 1" });
+  } else if (config.maxToolCalls > 500) {
+    issues.push({ code: "maxToolCalls.high", severity: "warning", field: "maxToolCalls", message: "maxToolCalls above 500 may hide runaway tool loops" });
+  }
+
+  if (!Number.isInteger(config.maxTokenEstimate) || config.maxTokenEstimate < 1) {
+    issues.push({ code: "maxTokenEstimate.invalid", severity: "error", field: "maxTokenEstimate", message: "maxTokenEstimate must be an integer >= 1" });
+  } else if (config.maxTokenEstimate > 200_000) {
+    issues.push({ code: "maxTokenEstimate.high", severity: "warning", field: "maxTokenEstimate", message: "maxTokenEstimate above 200000 may exceed common model context limits" });
+  }
+
+  if (config.maxProviderCostUsd !== null && (!Number.isFinite(config.maxProviderCostUsd) || config.maxProviderCostUsd <= 0)) {
+    issues.push({ code: "maxProviderCostUsd.invalid", severity: "error", field: "maxProviderCostUsd", message: "maxProviderCostUsd must be null or a number > 0" });
+  }
+
+  if (config.modelPricing !== null && !isModelPricing(config.modelPricing)) {
+    issues.push({ code: "modelPricing.invalid", severity: "error", field: "modelPricing", message: "modelPricing must be null or non-negative input/output/cacheRead/cacheWrite numbers" });
+  }
+
+  if (config.maxProviderCostUsd !== null && config.modelPricing === null) {
+    issues.push({ code: "modelPricing.missing_for_cost_budget", severity: "warning", field: "modelPricing", message: "maxProviderCostUsd only enforces priced provider usage; configure modelPricing for custom endpoints" });
+  }
+
+  if (!Number.isInteger(config.maxWallTimeMs) || config.maxWallTimeMs < 1) {
+    issues.push({ code: "maxWallTimeMs.invalid", severity: "error", field: "maxWallTimeMs", message: "maxWallTimeMs must be an integer >= 1" });
+  } else if (config.maxWallTimeMs > 30 * 60 * 1000) {
+    issues.push({ code: "maxWallTimeMs.high", severity: "warning", field: "maxWallTimeMs", message: "maxWallTimeMs above 30 minutes may hide stuck runs" });
+  }
+
+  if (!Number.isInteger(config.maxRecoveryAttempts) || config.maxRecoveryAttempts < 0) {
+    issues.push({ code: "maxRecoveryAttempts.invalid", severity: "error", field: "maxRecoveryAttempts", message: "maxRecoveryAttempts must be an integer >= 0" });
+  } else if (config.maxRecoveryAttempts > 20) {
+    issues.push({ code: "maxRecoveryAttempts.high", severity: "warning", field: "maxRecoveryAttempts", message: "maxRecoveryAttempts above 20 may hide repeated failed repairs" });
   }
 
   if (typeof config.headless !== "boolean") {

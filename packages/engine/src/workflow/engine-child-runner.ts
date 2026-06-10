@@ -5,7 +5,7 @@ import type { LoopProfile, LoopResult, ProgressCallback, SkillContext, StateCapt
 import type { ToolRegistry } from "../tools/index.js";
 import { toolsForProfile } from "../tool-filter.js";
 import { isToolAllowedByWorkflowPolicy } from "./policy.js";
-import type { WorkflowChildRunner } from "./runner.js";
+import type { WorkflowChildRunner, WorkflowChildRunOptions } from "./runner.js";
 
 export interface EngineWorkflowRunner {
   run(
@@ -21,7 +21,7 @@ export interface EngineWorkflowRunner {
 
 export interface EngineWorkflowChildRunnerOptions {
   orchestrator: EngineEvalOrchestrator;
-  createEngine(maxIterations?: number): EngineWorkflowRunner | LoopEngine;
+  createEngine(maxIterations?: number, budget?: Pick<WorkflowChildRunOptions, "maxToolCalls" | "maxTokenEstimate" | "maxProviderCostUsd" | "maxWallTimeMs" | "maxRecoveryAttempts">): EngineWorkflowRunner | LoopEngine;
   registry: ToolRegistry;
   skillContext: SkillContext;
   stateCapture: StateCapture;
@@ -48,7 +48,13 @@ export function createEngineWorkflowChildRunner(opts: EngineWorkflowChildRunnerO
       const availableTools = opts.registry.toPiAiTools(
         (tool) => profileToolNames.has(tool.name) && isToolAllowedByWorkflowPolicy(tool, child.policy, child.role),
       );
-      const engine = opts.createEngine(options?.maxIterations);
+      const engine = opts.createEngine(options?.maxIterations, {
+        maxToolCalls: options?.maxToolCalls,
+        maxTokenEstimate: options?.maxTokenEstimate,
+        maxProviderCostUsd: options?.maxProviderCostUsd,
+        maxWallTimeMs: options?.maxWallTimeMs,
+        maxRecoveryAttempts: options?.maxRecoveryAttempts,
+      });
 
       return engine.run(
         taskForRun,

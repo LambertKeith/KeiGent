@@ -21,6 +21,12 @@ const mocks = vi.hoisted(() => ({
     memoryDir: "/tmp/memory",
     headless: true,
     maxIterations: 3,
+    maxChildRuns: 2,
+    maxToolCalls: 7,
+    maxTokenEstimate: 8_000,
+    maxProviderCostUsd: 0.25,
+    maxWallTimeMs: 9_000,
+    maxRecoveryAttempts: 1,
   })),
 }));
 
@@ -68,7 +74,7 @@ vi.mock("@keigent/engine", () => {
     makeRegistry: vi.fn(() => ({})),
     buildDefaultRegistry: vi.fn(() => ({})),
     createEngineWorkflowChildRunner: vi.fn((opts) => {
-      opts.createEngine(3);
+      opts.createEngine(3, { maxToolCalls: 7, maxTokenEstimate: 8_000, maxProviderCostUsd: 0.25, maxWallTimeMs: 9_000, maxRecoveryAttempts: 1 });
       return { runChild: vi.fn() };
     }),
     createWorkflowSpec: vi.fn((spec) => spec),
@@ -104,10 +110,12 @@ function workflowResult(exitReason: WorkflowResult["exitReason"]): WorkflowResul
       maxChildRuns: 1,
       maxIterationsPerRun: 3,
       maxAggregateIterations: 3,
+      maxToolCallsPerRun: 20,
       maxAggregateToolCalls: 20,
+      maxRecoveryAttemptsPerRun: 3,
       timeoutMs: 120_000,
     },
-    budgetUsage: { childRuns: 0, iterations: 0, toolCalls: 0, checkpointsPassed: 0, durationMs: 1 },
+    budgetUsage: { childRuns: 0, iterations: 0, toolCalls: 0, recoveryAttempts: 0, checkpointsPassed: 0, durationMs: 1 },
     durationMs: 1,
     trajectory: {} as WorkflowResult["trajectory"],
   } as WorkflowResult;
@@ -128,6 +136,12 @@ describe("runOnce workflow exit semantics", () => {
       memoryDir: "/tmp/memory",
       headless: true,
       maxIterations: 3,
+      maxChildRuns: 2,
+      maxToolCalls: 7,
+      maxTokenEstimate: 8_000,
+      maxProviderCostUsd: 0.25,
+      maxWallTimeMs: 9_000,
+      maxRecoveryAttempts: 1,
     });
     process.exitCode = undefined;
   });
@@ -162,6 +176,37 @@ describe("runOnce workflow exit semantics", () => {
     await runOnce("Do the thing");
 
     expect(mocks.loopEngineOptions[0]?.approval).toMatchObject({ kind: "deny" });
+  });
+
+  it("passes configured runtime budgets into the workflow spec and child engine", async () => {
+    mocks.workflowRun.mockResolvedValueOnce(workflowResult("success"));
+    const { runOnce } = await import("../run-once.js");
+
+    await runOnce("Do the thing");
+
+    expect(mocks.workflowRun.mock.calls[0]?.[0]).toMatchObject({
+      budget: {
+        maxChildRuns: 2,
+        maxIterationsPerRun: 3,
+        maxAggregateIterations: 6,
+        maxToolCallsPerRun: 7,
+        maxAggregateToolCalls: 14,
+        maxTokenEstimatePerRun: 8_000,
+        maxAggregateTokenEstimate: 16_000,
+        maxProviderCostUsdPerRun: 0.25,
+        maxAggregateProviderCostUsd: 0.5,
+        maxRecoveryAttemptsPerRun: 1,
+        timeoutMs: 9_000,
+      },
+    });
+    expect(mocks.loopEngineOptions[0]).toMatchObject({
+      maxIterations: 3,
+      maxToolCalls: 7,
+      maxTokenEstimate: 8_000,
+      maxProviderCostUsd: 0.25,
+      maxWallTimeMs: 9_000,
+      maxRecoveryAttempts: 1,
+    });
   });
 
   it("sets a non-zero exit code when an unexpected exception escapes the workflow path", async () => {

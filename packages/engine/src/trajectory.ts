@@ -6,6 +6,7 @@ import type { ApprovalDecision } from "./tools/types.js";
 import type { FailureSummary } from "./failures.js";
 import type {
   ExitReason,
+  ProviderUsageSummary,
   SkillMatchExplanation,
   StateSnapshot,
   Task,
@@ -80,6 +81,8 @@ export class TrajectoryCollector {
     exitReason: ExitReason;
     finalResponse: string;
     skillsUsed: string[];
+    estimatedTokens?: number;
+    providerUsage?: ProviderUsageSummary;
     failure?: FailureSummary;
   }): Trajectory {
     return {

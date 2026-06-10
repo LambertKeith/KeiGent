@@ -1,6 +1,15 @@
 import { redactObject, redactText } from "../shared/redaction.js";
 
-export type ExitReason = "success" | "escalated" | "max_iterations" | "error";
+export type ExitReason =
+  | "success"
+  | "escalated"
+  | "max_iterations"
+  | "budget_exceeded"
+  | "verified_failure"
+  | "timeout"
+  | "child_error"
+  | "child_escalated"
+  | "error";
 
 export interface FailureSummaryView {
   code: string;
@@ -41,6 +50,7 @@ export type ProgressEvent =
   | { kind: "iteration_start"; iteration: number }
   | { kind: "tool_call"; iteration: number; toolName: string; args: Record<string, unknown> }
   | { kind: "tool_result"; iteration: number; toolName: string; result: string; succeeded: boolean }
+  | { kind: "approval_request"; iteration: number; request: ApprovalRequestView }
   | { kind: "approval"; iteration: number; request: ApprovalRequestView; approved: boolean; decidedAt: string }
   | { kind: "text"; iteration: number; text: string }
   | { kind: "checkpoint"; iteration: number; desc: string }
@@ -79,7 +89,7 @@ export type TimelineItem =
   | { id: string; kind: "iteration"; iteration: number }
   | { id: string; kind: "assistant_text"; iteration: number; text: string }
   | { id: string; kind: "tool_activity"; iteration: number; toolName: string; args: Record<string, unknown>; result?: string; state: "pending" | "succeeded" | "failed" | "incomplete" }
-  | { id: string; kind: "approval"; iteration: number; request: ApprovalRequestView; approved: boolean; decidedAt: string }
+  | { id: string; kind: "approval"; iteration: number; request: ApprovalRequestView; state: "pending" | "approved" | "denied"; approved?: boolean; decidedAt?: string }
   | { id: string; kind: "checkpoint"; iteration: number; desc: string; verdict?: { passed: boolean; evidence: string }; state: "pending" | "passed" | "failed" | "unverified" }
   | { id: string; kind: "recovery"; iteration: number; decision: "retry" | "repair" | "escalate"; hint?: string; reason?: string }
   | { id: string; kind: "escalation"; reason: string }
@@ -218,6 +228,16 @@ export function normalizeConversationRun(options: NormalizeRunOptions): Conversa
         }
         break;
       }
+      case "approval_request":
+        iterations.add(event.iteration);
+        timeline.push({
+          id: `approval-${index}`,
+          kind: "approval",
+          iteration: event.iteration,
+          request: { ...event.request, args: redactObject(event.request.args) },
+          state: "pending",
+        });
+        break;
       case "approval":
         iterations.add(event.iteration);
         timeline.push({
@@ -225,6 +245,7 @@ export function normalizeConversationRun(options: NormalizeRunOptions): Conversa
           kind: "approval",
           iteration: event.iteration,
           request: { ...event.request, args: redactObject(event.request.args) },
+          state: event.approved ? "approved" : "denied",
           approved: event.approved,
           decidedAt: event.decidedAt,
         });

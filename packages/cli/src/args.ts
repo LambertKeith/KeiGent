@@ -3,6 +3,8 @@ export type CliInvocation =
   | { kind: "config"; args: string[] }
   | { kind: "eval"; args: string[] }
   | { kind: "replay"; args: string[] }
+  | { kind: "runs"; args: string[] }
+  | { kind: "automation"; args: string[] }
   | { kind: "web"; args: string[] }
   | { kind: "run"; task: string }
   | { kind: "repl" };
@@ -25,6 +27,12 @@ export function parseCliArgs(rawArgs: string[]): CliInvocation {
   }
   if (args[0] === "replay") {
     return { kind: "replay", args: args.slice(1) };
+  }
+  if (args[0] === "runs") {
+    return { kind: "runs", args: args.slice(1) };
+  }
+  if (args[0] === "automation") {
+    return { kind: "automation", args: args.slice(1) };
   }
   if (args[0] === "web") {
     return { kind: "web", args: args.slice(1) };

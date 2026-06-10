@@ -16,3 +16,4 @@
 | 事实源 | [11 Skill Lifecycle and Governance](11-skill-lifecycle-and-governance.md) | Skill 状态、学习、晋升与隔离 |
 | 事实源 | [12 Agent Debuggability](12-agent-debuggability.md) | Trajectory、debug timeline、解释事实源 |
 | 事实源 | [13 Failure Recovery Semantics](13-failure-recovery-semantics.md) | Failure code、recovery、exit semantics |
+| 事实源 | [14 Worktree Isolation and Parallel Runs](14-worktree-isolation-and-parallel-runs.md) | child workspace 隔离、artifact 回收、冲突检测与 cleanup 语义 |
