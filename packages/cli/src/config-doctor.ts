@@ -10,6 +10,7 @@ export interface ConfigIssue {
   severity: ConfigIssueSeverity;
   field?: keyof KeigentConfig;
   message: string;
+  nextAction?: string;
   source?: ConfigSource;
 }
 
@@ -32,7 +33,7 @@ export function redactSecret(value: string | undefined): string {
   return value.length >= 8 ? `[REDACTED:...${value.slice(-4)}]` : "[REDACTED]";
 }
 
-export function validateConfig(config: KeigentConfig): ConfigIssue[] {
+export function validateConfig(config: KeigentConfig, env: NodeJS.ProcessEnv = process.env): ConfigIssue[] {
   const issues: ConfigIssue[] = [];
 
   if (config.configVersion !== 1) {
@@ -111,6 +112,15 @@ export function validateConfig(config: KeigentConfig): ConfigIssue[] {
 
   if (typeof config.headless !== "boolean") {
     issues.push({ code: "headless.invalid", severity: "error", field: "headless", message: "headless must be boolean" });
+  }
+
+  if (!env.PLAYWRIGHT_BROWSERS_PATH?.trim()) {
+    issues.push({
+      code: "browser.playwright_path_unset",
+      severity: "warning",
+      message: "PLAYWRIGHT_BROWSERS_PATH is not set; browser verification may use an unavailable default cache.",
+      nextAction: "Set PLAYWRIGHT_BROWSERS_PATH to the installed Playwright browser cache before running verify:browser.",
+    });
   }
 
   return issues;

@@ -74,11 +74,22 @@ corepack pnpm --filter @keigent/cli start web --api --print
 每次发布候选必须从仓库根目录运行：
 
 ```bash
+corepack pnpm verify:node
 corepack pnpm -r check
 corepack pnpm -r test
 corepack pnpm -r --if-present build
 git diff --check
 ```
+
+`corepack pnpm verify:node` 是 release gate，必须在 Node.js `>=22.19.0` 环境中通过。较低 Node 版本可以用于本地探索和部分开发验证，但不得作为正式 release acceptance 结果。
+
+Browser 验收应显式使用已安装的 Playwright browser cache，例如：
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH=/opt/data/home/.cache/ms-playwright corepack pnpm --filter @keigent/engine verify:browser
+```
+
+如果 `doctor` 输出 `browser.playwright_path_unset`，先设置 `PLAYWRIGHT_BROWSERS_PATH` 再运行浏览器验收，避免默认 cache 路径缺失造成误报。
 
 发布前人工检查：
 
@@ -89,7 +100,7 @@ git diff --check
 - `README.md` 和 `doc/product/README.md` 指向当前发布/升级文档。
 - `doc/product/09-agent-operations-maturity-roadmap.md` 的实现备注没有过期声明。
 - `packages/cli/package.json` 的 `bin` 指向 `./bin/keigent.mjs`。
-- `packages/cli/bin/keigent.mjs` 可以在没有 `pnpm` wrapper 的情况下执行。
+- `packages/cli/bin/keigent.mjs` 以 executable bit 提交，可以在没有 `pnpm` wrapper 的情况下执行。
 - `corepack pnpm --filter @keigent/cli start doctor --compact` 输出为可解析 JSON。
 - `node packages/cli/bin/keigent.mjs runs list --compact` 输出为可解析 JSON。
 - `corepack pnpm --filter @keigent/cli start web --api --print` 输出 Workbench URL、API URL 和 `VITE_KEIGENT_API_URL` dev command。

@@ -77,6 +77,25 @@ describe("config doctor", () => {
     expect(validateConfig(config).map((issue) => issue.code)).toContain("configVersion.unsupported");
   });
 
+  it("reports missing Playwright browser cache as an actionable verification risk", () => {
+    const previous = process.env.PLAYWRIGHT_BROWSERS_PATH;
+    delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+    try {
+      const config = resolveConfig({ apiKey: "file-key" }, {}, "/tmp/keigent-home");
+
+      expect(validateConfig(config)).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          code: "browser.playwright_path_unset",
+          severity: "warning",
+          nextAction: expect.stringContaining("PLAYWRIGHT_BROWSERS_PATH"),
+        }),
+      ]));
+    } finally {
+      if (previous === undefined) delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+      else process.env.PLAYWRIGHT_BROWSERS_PATH = previous;
+    }
+  });
+
   it("redacts secrets with optional fingerprint", () => {
     expect(redactSecret(undefined)).toBe("[MISSING]");
     expect(redactSecret("abc")).toBe("[REDACTED]");

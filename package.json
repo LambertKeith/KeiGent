@@ -11,6 +11,7 @@
     "build": "pnpm -r build",
     "check": "pnpm -r check",
     "test": "pnpm -r test",
+    "verify:node": "node scripts/verify-node-version.mjs",
     "dev": "pnpm --filter @keigent/engine dev"
   }
 }
