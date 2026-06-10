@@ -182,7 +182,7 @@ KeiGent 配置层按协议区分：
 
 - 任务涉及架构事实时，先读 `doc/design/01-architecture.md`。
 - 任务涉及产品范围或成熟度时，先读 `doc/product/01-product-blueprint.md`。
-- 任务涉及下一阶段开发计划、RunRecord、Workbench V1 或 operator 旅程时，先读 `doc/product/05-run-record-and-run-lifecycle.md`、`doc/product/07-local-operator-user-journeys.md`。
+- 任务涉及下一阶段开发计划、RunRecord、Workbench V1、operator 旅程或 Loop Engineering 时，先读 `doc/product/05-run-record-and-run-lifecycle.md`、`doc/product/07-local-operator-user-journeys.md`、`doc/product/08-loop-engineering-development-requirements.md`。
 - 任务涉及权限、风险、审批时，先读 `doc/design/09-permission-risk-governance.md`。
 - 任务涉及成功证据时，先读 `doc/design/08-success-evidence-model.md`。
 - 任务涉及 workflow 时，先读 `doc/design/07-workflow-run-envelope.md` 和 `doc/design/10-workflow-modes-product-semantics.md`。

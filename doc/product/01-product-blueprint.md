@@ -104,6 +104,7 @@ KeiGent 是一个 **skill-driven、profile-switchable、evidence-first 的 Agent
 下一阶段 P1 文档：
 
 - [`07-local-operator-user-journeys.md`](07-local-operator-user-journeys.md)：定义安装、执行、审批、复盘、skill 晋升与真实世界 eval 的 operator 旅程。
+- [`08-loop-engineering-development-requirements.md`](08-loop-engineering-development-requirements.md)：把 Loop Engineering 提炼为 automation、worktree、skill、connector、sub-agent、memory 的开发要求。
 
 ## 9. 产品质量门
 
