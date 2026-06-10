@@ -5,6 +5,7 @@
 | 设计蓝图 | [01 Real-world Eval Suite](01-real-world-eval-suite.md) | 真实世界 eval/benchmark 的目标、边界与准入计划 |
 | 验收报告 | [02 Main Acceptance Report](02-main-acceptance-report.md) | main 分支产品、架构、工程质量验收意见 |
 | Eval 路线图 | [03 Real-world Eval Roadmap](03-real-world-eval-roadmap.md) | 下一阶段 P0：L1/L2/L3 分层 eval、false confidence 防线与准入条件 |
+| 验收报告 | [04 Agent Operations Foundation Acceptance](04-main-acceptance-report-2026-06-10-agent-operations-foundation.md) | 2026-06-10 main 分支按 Agent Operations 设计要求的 traceability 验收报告 |
 
 当前本地 L2 fixture 基线入口：
 
