@@ -1,6 +1,8 @@
 import { escapeHtml } from "../ui/html.js";
 import type { RealWorldEvalReportView, RealWorldMetricView } from "./report-model.js";
 
+type ProofBoundaryView = RealWorldEvalReportView["proofBoundary"];
+
 export function renderRealWorldEvalDashboard(view: RealWorldEvalReportView): string {
   return `
     <section class="hero compact"><p class="eyebrow">Dashboard</p><h1>Eval-run linkage without health theater.</h1><p>${escapeHtml(view.healthClaim)}</p></section>
@@ -15,7 +17,10 @@ export function renderRealWorldEvalDashboard(view: RealWorldEvalReportView): str
       ${panel("Eval-run linkage", renderCaseTable(view))}
       ${panel("False-confidence findings", renderFindings(view))}
     </section>
-    <section class="panel"><h2>Product rules</h2><ul class="audit-list"><li>Eval pass is not profile accuracy.</li><li>Replay report is not fresh execution.</li><li>Failure-code count can exceed failed case count.</li><li>Fixture-level reports do not prove product health.</li></ul></section>
+    <section class="split-panels">
+      ${panel("Proof boundary", renderProofBoundary(view))}
+      ${panel("Product rules", "<ul class=\"audit-list\"><li>Eval pass is not profile accuracy.</li><li>Replay report is not fresh execution.</li><li>Failure-code count can exceed failed case count.</li><li>Fixture-level reports do not prove product health.</li></ul>")}
+    </section>
   `;
 }
 
@@ -39,6 +44,12 @@ export function sampleRealWorldEvalDashboardView(): RealWorldEvalReportView {
       { code: "fixture_level", severity: "info", message: "Fixture-level report only." },
       { code: "false_success", severity: "blocking", caseId: "insufficient-evidence", message: "A non-success case produced success without evidence." },
     ],
+    proofBoundary: {
+      proven: ["Deterministic L2 fixture cases were evaluated."],
+      notProven: ["Fixture results do not prove product health."],
+      assumptions: ["Fixtures represent selected local acceptance boundaries only."],
+      evidenceGaps: [],
+    },
     cases: [
       caseView("file-summary", "Summarize file with evidence", "run_file-summary", "success", "success", true, true, true, true, true),
       caseView("replay-report", "Replay report boundary", "run_replay-report", "replay", "replay", true, true, true, true, false),
@@ -80,6 +91,12 @@ function caseView(
     replayFreshExecution,
     failureCodes,
     failures,
+    proofBoundary: {
+      proven: passed ? [`Case ${id} matched fixture expectation.`] : [],
+      notProven: ["Fixture case does not prove product health."],
+      assumptions: ["Sample dashboard data is illustrative."],
+      evidenceGaps: passed ? [] : failures,
+    },
   };
 }
 
@@ -106,6 +123,38 @@ function renderFindings(view: RealWorldEvalReportView): string {
     </li>
   `).join("");
   return `<ul class="audit-list">${findings || "<li>No false-confidence findings recorded</li>"}</ul>`;
+}
+
+function renderProofBoundary(view: RealWorldEvalReportView): string {
+  const boundary = proofBoundaryValue(view.proofBoundary);
+  return `<ul class="audit-list">
+    <li><strong>Proven</strong><span>${escapeHtml(boundary.proven.join(", ") || "None")}</span></li>
+    <li><strong>Not proven</strong><span>${escapeHtml(boundary.notProven.join(", ") || "None")}</span></li>
+    <li><strong>Assumptions</strong><span>${escapeHtml(boundary.assumptions.join(", ") || "None")}</span></li>
+    <li><strong>Evidence gaps</strong><span>${escapeHtml(boundary.evidenceGaps.join(", ") || "None")}</span></li>
+  </ul>`;
+}
+
+function proofBoundaryValue(value: unknown): ProofBoundaryView {
+  if (!value || typeof value !== "object") {
+    return {
+      proven: [],
+      notProven: ["Fixture results do not prove product health."],
+      assumptions: ["Proof boundary was absent from the report payload."],
+      evidenceGaps: ["Report payload did not include proof boundary evidence."],
+    };
+  }
+  const source = value as Partial<Record<keyof ProofBoundaryView, unknown>>;
+  return {
+    proven: stringArray(source.proven),
+    notProven: stringArray(source.notProven),
+    assumptions: stringArray(source.assumptions),
+    evidenceGaps: stringArray(source.evidenceGaps),
+  };
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 function renderMetric(label: string, metric: RealWorldMetricView): string {

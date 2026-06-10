@@ -147,6 +147,9 @@ describe("dashboard report model", () => {
         taskSuccessRate: { value: 4 / 17, label: "23.5%" },
         evidenceQuality: { label: expect.stringMatching(/%$/) },
       },
+      proofBoundary: {
+        notProven: expect.arrayContaining(["Fixture results do not prove product health."]),
+      },
     });
     expect(view.cases.find((testCase) => testCase.id === "no-op-automation")).toMatchObject({
       runId: "run_no-op-automation",

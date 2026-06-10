@@ -91,6 +91,12 @@ function runRecord(overrides: Partial<RunRecord> = {}): RunRecord {
       freshExecution: true,
     },
     redaction: { applied: true, rawPayloadStored: false },
+    proofBoundary: {
+      proven: ["Evidence passed: file exists"],
+      notProven: ["External production health is not proven by this run."],
+      assumptions: ["Local fixture evidence is representative for this run only."],
+      evidenceGaps: [],
+    },
     ...overrides,
   };
 }
@@ -132,6 +138,10 @@ describe("run record view model", () => {
       },
     });
     expect(view.nextAction.label).toBe("No action required");
+    expect(view.proofBoundary).toMatchObject({
+      proven: ["Evidence passed: file exists"],
+      notProven: ["External production health is not proven by this run."],
+    });
     expect(view.timelineFacts.map((fact) => fact.label)).toEqual(["Route", "Workflow", "Budget", "Iterations", "Tools", "Checkpoints", "Events"]);
   });
 
@@ -186,6 +196,10 @@ describe("run record view model", () => {
     expect(view.nextAction).toMatchObject({
       required: true,
       label: "Review run record schema before trusting this result.",
+    });
+    expect(view.proofBoundary).toMatchObject({
+      notProven: ["External production health is not proven by this run.", "Historical replay does not prove fresh execution."],
+      evidenceGaps: ["No verification evidence was checked."],
     });
   });
 

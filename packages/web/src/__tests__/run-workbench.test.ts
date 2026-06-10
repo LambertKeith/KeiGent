@@ -115,6 +115,12 @@ function record(overrides: Partial<RunRecord> = {}): RunRecord {
       trajectorySchemaVersion: 1,
       freshExecution: true,
     },
+    proofBoundary: {
+      proven: ["Evidence passed: file exists"],
+      notProven: ["External production health is not proven by this run."],
+      assumptions: ["Local fixture evidence is representative for this run only."],
+      evidenceGaps: [],
+    },
     redaction: { applied: true, rawPayloadStored: false },
     ...overrides,
   };

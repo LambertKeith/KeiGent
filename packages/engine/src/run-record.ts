@@ -1,6 +1,7 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { failureSummaryForWorkflowExit, type FailureSummary } from "./failures.js";
+import { proofBoundaryForRunRecord, proofBoundaryForWorkflowResult, type ProofBoundary } from "./proof-boundary.js";
 import { redactObject, redactText } from "./redaction.js";
 import type { ApprovalDecision, PermissionLevel, RiskLevel, SideEffect } from "./tools/types.js";
 import type { SkillMatchExplanation, Task, Trajectory, TrajectoryStep } from "./types.js";
@@ -176,6 +177,7 @@ export interface RunRecord {
   artifacts: RunArtifact[];
   automation?: AutomationSummary;
   nextAction?: string;
+  proofBoundary: ProofBoundary;
   replay: ReplayCapability;
   redaction: RedactionSummary;
 }
@@ -233,12 +235,27 @@ export function buildRunRecordFromWorkflowResult(
   const failures = collectFailures(result);
   const nextAction = failures[0]?.nextAction ?? failureSummaryForWorkflowExit(result.exitReason)?.nextAction;
 
+  const replay = {
+    supported: true,
+    trajectoryPath: options.workflowTrajectoryPath ?? options.trajectoryPath,
+    trajectorySchemaVersion: result.trajectory.schemaVersion,
+    freshExecution: true,
+    ...options.replay,
+  };
+  const partial = {
+    status: statusForWorkflowExit(result.exitReason),
+    evidence,
+    replay,
+    failures,
+  };
+  const proofBoundary = mergeRecordProof(proofBoundaryForWorkflowResult(result), proofBoundaryForRunRecord(partial));
+
   return {
     schemaVersion: 1,
     id: options.id ?? makeRunId(createdAt),
     createdAt,
     updatedAt: createdAt,
-    status: statusForWorkflowExit(result.exitReason),
+    status: partial.status,
     ...(options.parentRunId ? { parentRunId: options.parentRunId } : {}),
     childRunIds: result.childRuns.map((child) => child.id),
     ...(options.childRole ? { childRole: options.childRole } : {}),
@@ -263,13 +280,8 @@ export function buildRunRecordFromWorkflowResult(
     failures,
     artifacts,
     ...(nextAction ? { nextAction } : {}),
-    replay: {
-      supported: true,
-      trajectoryPath: options.workflowTrajectoryPath ?? options.trajectoryPath,
-      trajectorySchemaVersion: result.trajectory.schemaVersion,
-      freshExecution: true,
-      ...options.replay,
-    },
+    proofBoundary,
+    replay,
     redaction: { applied: true, rawPayloadStored: false },
   };
 }
@@ -277,6 +289,20 @@ export function buildRunRecordFromWorkflowResult(
 export function buildNoOpRunRecord(options: BuildNoOpRunRecordOptions): RunRecord {
   const createdAt = options.createdAt ?? new Date().toISOString();
   const nextAction = "Review automation scope before treating no-op as health.";
+  const replay = { supported: false, unsupportedReason: "No-op automation produced no trajectory.", freshExecution: true };
+  const automation = {
+    trigger: options.trigger,
+    scope: options.scope,
+    noOpReason: options.noOpReason,
+    doesNotProve: options.doesNotProve,
+  };
+  const proofBoundary = proofBoundaryForRunRecord({
+    status: "no_op",
+    evidence: { status: "not_checked", total: 0, passed: 0, failed: 0, sources: [], blocking: [] },
+    failures: [],
+    automation,
+    replay,
+  });
   return {
     schemaVersion: 1,
     id: options.id ?? makeRunId(createdAt),
@@ -317,14 +343,10 @@ export function buildNoOpRunRecord(options: BuildNoOpRunRecordOptions): RunRecor
     approvals: [],
     failures: [],
     artifacts: [],
-    automation: {
-      trigger: options.trigger,
-      scope: options.scope,
-      noOpReason: options.noOpReason,
-      doesNotProve: options.doesNotProve,
-    },
+    automation,
     nextAction,
-    replay: { supported: false, unsupportedReason: "No-op automation produced no trajectory.", freshExecution: true },
+    proofBoundary,
+    replay,
     redaction: { applied: true, rawPayloadStored: false },
   };
 }
@@ -386,13 +408,35 @@ function normalizeRunRecordShape(input: unknown): RunRecord {
   const risk = objectValue(source.risk);
   const replay = objectValue(source.replay);
   const successDef = successDefValue(task.successDef);
+  const status = statusValue(source.status);
+  const evidenceSummary: EvidenceSummary = {
+    status: evidenceStatusValue(evidence.status),
+    total: numberValue(evidence.total),
+    passed: numberValue(evidence.passed),
+    failed: numberValue(evidence.failed),
+    sources: stringArray(evidence.sources),
+    blocking: stringArray(evidence.blocking),
+  };
+  const failures = Array.isArray(source.failures) ? redactObject(source.failures) as FailureSummary[] : [];
+  const automation = isObject(source.automation) ? redactObject(source.automation) as unknown as AutomationSummary : undefined;
+  const replayCapability: ReplayCapability = {
+    supported: replay.supported === true,
+    ...(typeof replay.unsupportedReason === "string" ? { unsupportedReason: redactText(replay.unsupportedReason) } : {}),
+    ...(typeof replay.trajectoryPath === "string" ? { trajectoryPath: redactText(replay.trajectoryPath) } : {}),
+    ...(typeof replay.trajectorySchemaVersion === "number" ? { trajectorySchemaVersion: replay.trajectorySchemaVersion } : {}),
+    ...(typeof replay.latestReplayReportId === "string" ? { latestReplayReportId: redactText(replay.latestReplayReportId) } : {}),
+    freshExecution: replay.freshExecution !== false,
+  };
+  const proofBoundary = isObject(source.proofBoundary)
+    ? proofBoundaryValue(source.proofBoundary)
+    : proofBoundaryForRunRecord({ status, evidence: evidenceSummary, ...(automation ? { automation } : {}), replay: replayCapability, failures });
 
   return {
     schemaVersion: 1,
     id: stringValue(source.id, "unknown"),
     createdAt: stringValue(source.createdAt, ""),
     updatedAt: stringValue(source.updatedAt, stringValue(source.createdAt, "")),
-    status: statusValue(source.status),
+    status,
     ...(typeof source.parentRunId === "string" ? { parentRunId: redactText(source.parentRunId) } : {}),
     ...(stringArray(source.childRunIds).length ? { childRunIds: stringArray(source.childRunIds) } : {}),
     ...(childRoleValue(source.childRole) ? { childRole: childRoleValue(source.childRole)! } : {}),
@@ -430,14 +474,7 @@ function normalizeRunRecordShape(input: unknown): RunRecord {
     },
     ...(Array.isArray(source.skills) ? { skills: redactObject(source.skills) as SkillRunSummary[] } : {}),
     ...(Array.isArray(source.tools) ? { tools: redactObject(source.tools) as ToolRunSummary[] } : {}),
-    evidence: {
-      status: evidenceStatusValue(evidence.status),
-      total: numberValue(evidence.total),
-      passed: numberValue(evidence.passed),
-      failed: numberValue(evidence.failed),
-      sources: stringArray(evidence.sources),
-      blocking: stringArray(evidence.blocking),
-    },
+    evidence: evidenceSummary,
     risk: {
       highestRiskLevel: riskLevelValue(risk.highestRiskLevel),
       permissionClassesUsed: stringArray(risk.permissionClassesUsed) as PermissionLevel[],
@@ -448,21 +485,24 @@ function normalizeRunRecordShape(input: unknown): RunRecord {
       approvalRequired: risk.approvalRequired === true,
     },
     approvals: Array.isArray(source.approvals) ? redactObject(source.approvals) as ApprovalSummary[] : [],
-    failures: Array.isArray(source.failures) ? redactObject(source.failures) as FailureSummary[] : [],
+    failures,
     artifacts: Array.isArray(source.artifacts) ? redactObject(source.artifacts) as RunArtifact[] : [],
-    ...(isObject(source.automation) ? { automation: redactObject(source.automation) as unknown as AutomationSummary } : {}),
+    ...(automation ? { automation } : {}),
     ...(typeof source.nextAction === "string" ? { nextAction: redactText(source.nextAction) } : {}),
-    replay: {
-      supported: replay.supported === true,
-      ...(typeof replay.unsupportedReason === "string" ? { unsupportedReason: redactText(replay.unsupportedReason) } : {}),
-      ...(typeof replay.trajectoryPath === "string" ? { trajectoryPath: redactText(replay.trajectoryPath) } : {}),
-      ...(typeof replay.trajectorySchemaVersion === "number" ? { trajectorySchemaVersion: replay.trajectorySchemaVersion } : {}),
-      ...(typeof replay.latestReplayReportId === "string" ? { latestReplayReportId: redactText(replay.latestReplayReportId) } : {}),
-      freshExecution: replay.freshExecution !== false,
-    },
+    proofBoundary,
+    replay: replayCapability,
     redaction: isObject(source.redaction)
       ? redactObject(source.redaction) as unknown as RedactionSummary
       : { applied: true, rawPayloadStored: false },
+  };
+}
+
+function mergeRecordProof(workflow: ProofBoundary, record: ProofBoundary): ProofBoundary {
+  return {
+    proven: [...new Set([...workflow.proven, ...record.proven])],
+    notProven: [...new Set([...workflow.notProven, ...record.notProven])],
+    assumptions: [...new Set([...workflow.assumptions, ...record.assumptions])],
+    evidenceGaps: [...new Set([...workflow.evidenceGaps, ...record.evidenceGaps])],
   };
 }
 
@@ -543,6 +583,16 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function objectValue(value: unknown): Record<string, unknown> {
   return isObject(value) ? value : {};
+}
+
+function proofBoundaryValue(value: unknown): ProofBoundary {
+  const source = objectValue(value);
+  return {
+    proven: stringArray(source.proven),
+    notProven: stringArray(source.notProven),
+    assumptions: stringArray(source.assumptions),
+    evidenceGaps: stringArray(source.evidenceGaps),
+  };
 }
 
 export function summarizeRunRecord(record: RunRecord): string {

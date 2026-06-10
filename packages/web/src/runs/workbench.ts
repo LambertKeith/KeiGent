@@ -54,6 +54,7 @@ export function renderRunWorkbench(view: RunWorkbenchView): string {
         ${renderSummary(view.selected)}
         ${renderRouteAndSkills(view.selected)}
         ${renderEvidenceAndRisk(view.selected)}
+        ${renderProofBoundary(view.selected)}
         ${renderToolsAndBudget(view.selected)}
         ${renderReplayAndFailures(view.selected)}
         ${renderRawInspector(view.selected)}
@@ -135,6 +136,19 @@ function renderEvidenceAndRisk(run: RunRecordDetailView): string {
       `)}
     </div>
   `;
+}
+
+function renderProofBoundary(run: RunRecordDetailView): string {
+  return panel("Proof boundary", `
+    <div class="split-panels">
+      ${renderListBlock("Proven", run.proofBoundary.proven)}
+      ${renderListBlock("Not proven", run.proofBoundary.notProven)}
+    </div>
+    <div class="split-panels">
+      ${renderListBlock("Assumptions", run.proofBoundary.assumptions)}
+      ${renderListBlock("Evidence gaps", run.proofBoundary.evidenceGaps)}
+    </div>
+  `);
 }
 
 function renderToolsAndBudget(run: RunRecordDetailView): string {

@@ -134,6 +134,12 @@ const demoRunRecord: RunRecord = {
     trajectorySchemaVersion: 1,
     freshExecution: true,
   },
+  proofBoundary: {
+    proven: ["Evidence passed: hello.txt exists"],
+    notProven: ["External production health is not proven by this run."],
+    assumptions: ["Demo fixture evidence is representative for this local shell only."],
+    evidenceGaps: [],
+  },
   redaction: { applied: true, rawPayloadStored: false },
 };
 

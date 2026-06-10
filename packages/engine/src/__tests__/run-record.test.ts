@@ -230,6 +230,11 @@ describe("RunRecord", () => {
         freshExecution: true,
         trajectoryPath: "/tmp/workflow.json",
       },
+      proofBoundary: {
+        proven: expect.arrayContaining(["Evidence passed: file exists"]),
+        notProven: expect.arrayContaining(["External production health is not proven by this run."]),
+        evidenceGaps: [],
+      },
     });
     expect(record.approvals).toHaveLength(1);
     expect(record.artifacts).toContainEqual({ kind: "workflow_trajectory", path: "/tmp/workflow.json" });
@@ -268,6 +273,7 @@ describe("RunRecord", () => {
 
     expect(record.status).toBe("succeeded");
     expect(record.evidence).toMatchObject({ status: "not_checked", total: 0, passed: 0, failed: 0 });
+    expect(record.proofBoundary.evidenceGaps).toContain("No verification evidence was checked.");
   });
 
   it("marks timeout and replay records without overriding fresh execution semantics", () => {

@@ -1,5 +1,6 @@
 import { buildNoOpRunRecord, buildRunRecordFromWorkflowResult, type RunRecord } from "../run-record.js";
 import { failureSummaryForWorkflowExit, recommendedNextActionFor, type FailureCode, type FailureSummary } from "../failures.js";
+import { mergeProofBoundaries, type ProofBoundary } from "../proof-boundary.js";
 import type { ProfileName } from "../orchestrator.js";
 import type { ApprovalDecision, ApprovalRequest } from "../tools/types.js";
 import type { LoopResult, Task, TrajectoryStep } from "../types.js";
@@ -60,6 +61,7 @@ export interface RealWorldEvalCaseResult {
   riskCompliant: boolean;
   falseSuccess: boolean;
   failures: string[];
+  proofBoundary: ProofBoundary;
   runRecord: RunRecord;
 }
 
@@ -76,6 +78,7 @@ export interface RealWorldEvalReport {
   riskCompliance: number | null;
   falseSuccessCount: number;
   falseConfidenceFindings: RealWorldEvalFinding[];
+  proofBoundary: ProofBoundary;
   cases: RealWorldEvalCaseResult[];
 }
 
@@ -341,6 +344,7 @@ function evaluateRealWorldCase(
     riskCompliant,
     falseSuccess,
     failures,
+    proofBoundary: execution.runRecord.proofBoundary,
     runRecord: execution.runRecord,
   };
 }
@@ -381,6 +385,15 @@ function buildRealWorldEvalReport(
     riskCompliance: ratioOrNull(cases.filter((testCase) => testCase.riskCompliant).length, total),
     falseSuccessCount: cases.filter((testCase) => testCase.falseSuccess).length,
     falseConfidenceFindings: findings,
+    proofBoundary: mergeProofBoundaries([
+      {
+        proven: total > 0 ? ["Deterministic L2 fixture cases were evaluated."] : [],
+        notProven: ["Fixture results do not prove product health."],
+        assumptions: ["Fixtures represent selected local acceptance boundaries only."],
+        evidenceGaps: total === 0 ? ["No real-world eval cases were provided."] : [],
+      },
+      ...cases.map((testCase) => testCase.proofBoundary),
+    ]),
     cases,
   };
 }
@@ -764,6 +777,7 @@ function errorCaseResult(evalCase: RealWorldEvalCase, error: unknown): RealWorld
     riskCompliant: false,
     falseSuccess: false,
     failures: [`executor error: ${message}`],
+    proofBoundary: runRecord.proofBoundary,
     runRecord,
   };
 }
