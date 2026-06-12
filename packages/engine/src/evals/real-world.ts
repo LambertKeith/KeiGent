@@ -420,7 +420,7 @@ function buildRealWorldEvalReport(
   };
 }
 
-function fixtureExecutionFor(testCase: RealWorldEvalCase): RealWorldEvalExecution {
+export function fixtureExecutionFor(testCase: RealWorldEvalCase): RealWorldEvalExecution {
   if (testCase.expectedResult === "no_op") {
     const runRecord = buildNoOpRunRecord({
       id: `run_${testCase.id}`,

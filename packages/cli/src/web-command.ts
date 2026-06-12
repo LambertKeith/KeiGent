@@ -94,7 +94,6 @@ function commandFor(config: WebCommandConfig): { command: string; args: string[]
       "--filter",
       "@keigent/web",
       "dev",
-      "--",
       "--host",
       config.host,
       "--port",

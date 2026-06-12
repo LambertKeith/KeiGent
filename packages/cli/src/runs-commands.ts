@@ -5,6 +5,7 @@ import {
   readRunStore,
   type RunRecord,
   type RunStoreError,
+  type RunStoreMigrationWarning,
 } from "@keigent/engine";
 import { KEIGENT_HOME } from "./config.js";
 import { formatJson, parseJsonOutputFormat } from "./json-output.js";
@@ -31,6 +32,7 @@ interface RunTriageItem {
   createdAt: string;
   goal: string;
   evidenceStatus: string;
+  reason: "blocking_failure" | "review_needed" | "missing_evidence" | "stale_schema";
   blocking: string[];
   nextAction?: string;
 }
@@ -56,6 +58,7 @@ export async function runRunsCommand(
       total: store.records.length,
       runs: store.records.map(runListItem),
       errors: store.errors.map(runStoreError),
+      migrationReport: store.migrationReport,
     };
     if (outputFormat.json) {
       print(options, formatJson(payload, rest));
@@ -126,7 +129,9 @@ export async function runRunsCommand(
   if (subcommand === "triage") {
     const outputFormat = parseJsonOutputFormat(rest);
     const store = await readRunStore({ runsDir });
-    const runs = store.records.filter(isTriageCandidate).map(runTriageItem);
+    const migrationWarnings = migrationWarningsByRunId(store.migrationReport.warnings);
+    const runs = store.records.map((record) => runTriageItem(record, migrationWarnings.get(record.id) ?? []))
+      .filter((item): item is RunTriageItem => Boolean(item));
     const payload = {
       total: runs.length,
       runs,
@@ -210,18 +215,65 @@ function bundleDirArg(args: string[], fallback: string): string {
   return args[index + 1] ?? fallback;
 }
 
-function isTriageCandidate(record: RunRecord): boolean {
-  return record.status !== "succeeded";
+function runTriageItem(record: RunRecord, schemaWarnings: RunStoreMigrationWarning[] = []): RunTriageItem | undefined {
+  if (schemaWarnings.length > 0) {
+    return {
+      ...baseRunTriageItem(record),
+      reason: "stale_schema",
+      blocking: schemaWarnings.map(formatSchemaWarning),
+      nextAction: "Review run record schema before trusting this result.",
+    };
+  }
+  if (record.evidence.blocking.length > 0) {
+    return {
+      ...baseRunTriageItem(record),
+      reason: "blocking_failure",
+      blocking: record.evidence.blocking,
+      nextAction: record.nextAction ?? record.failures[0]?.nextAction ?? "Inspect blocking evidence before retrying.",
+    };
+  }
+  if (record.status === "failed" || record.status === "degraded" || record.status === "cancelled" || record.status === "unknown") {
+    const staleSchema = record.status === "unknown";
+    return {
+      ...baseRunTriageItem(record),
+      reason: staleSchema ? "stale_schema" : "review_needed",
+      blocking: record.evidence.blocking,
+      nextAction: record.nextAction ?? record.failures[0]?.nextAction ?? (
+        staleSchema ? "Review run record schema before trusting this result." : "Review failed or degraded run before retrying."
+      ),
+    };
+  }
+  if (record.evidence.status === "insufficient_evidence" || record.evidence.status === "not_checked" || record.evidence.total === 0) {
+    return {
+      ...baseRunTriageItem(record),
+      reason: "missing_evidence",
+      blocking: record.evidence.blocking,
+      nextAction: record.nextAction ?? "Collect evidence before treating this run as successful.",
+    };
+  }
+  return undefined;
 }
 
-function runTriageItem(record: RunRecord): RunTriageItem {
+function baseRunTriageItem(record: RunRecord): Omit<RunTriageItem, "reason" | "blocking" | "nextAction"> {
   return {
     id: record.id,
     status: record.status,
     createdAt: record.createdAt,
     goal: record.task.goal,
     evidenceStatus: record.evidence.status,
-    blocking: record.evidence.blocking,
-    nextAction: record.nextAction,
   };
+}
+
+function migrationWarningsByRunId(warnings: RunStoreMigrationWarning[]): Map<string, RunStoreMigrationWarning[]> {
+  const grouped = new Map<string, RunStoreMigrationWarning[]>();
+  for (const warning of warnings) {
+    const current = grouped.get(warning.runId) ?? [];
+    current.push(warning);
+    grouped.set(warning.runId, current);
+  }
+  return grouped;
+}
+
+function formatSchemaWarning(warning: RunStoreMigrationWarning): string {
+  return `${warning.code}: ${warning.message}`;
 }

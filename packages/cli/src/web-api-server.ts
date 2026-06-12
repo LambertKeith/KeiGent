@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import {
   readRunStore,
   type RunStoreReadResult,
   type RunTaskSource,
+  type RealWorldEvalReport,
   type WorkflowEvent,
   type WorkflowResult,
 } from "@keigent/engine";
@@ -27,8 +29,10 @@ export interface WebRunExecutionResult {
 
 export interface WebApiServerOptions {
   runsDir?: string;
+  evalReportsDir?: string;
   executeRun?: (request: WebRunExecutionRequest) => Promise<WebRunExecutionResult>;
   readRunStore?: (options: { runsDir: string }) => Promise<RunStoreReadResult>;
+  readRealWorldEvalReport?: (options: { evalReportsDir: string; datasetId: string }) => Promise<RealWorldEvalReport | undefined>;
 }
 
 export interface StartWebApiServerOptions extends WebApiServerOptions {
@@ -59,13 +63,16 @@ interface WebRunSession {
 }
 
 const DEFAULT_RUNS_DIR = join(KEIGENT_HOME, "runs");
+const DEFAULT_EVAL_REPORTS_DIR = join(KEIGENT_HOME, "evals");
 const DEFAULT_API_HOST = "127.0.0.1";
 const DEFAULT_API_PORT = 5174;
 const MAX_BODY_CHARS = 64_000;
 
 export function createWebApiServer(options: WebApiServerOptions = {}): Server {
   const runsDir = options.runsDir ?? DEFAULT_RUNS_DIR;
+  const evalReportsDir = options.evalReportsDir ?? evalReportsDirForRunsDir(runsDir);
   const readStore = options.readRunStore ?? readRunStore;
+  const readEvalReport = options.readRealWorldEvalReport ?? readLatestRealWorldEvalReport;
   const executeRun = options.executeRun ?? defaultExecuteRun;
   const sessions = new Map<string, WebRunSession>();
 
@@ -90,6 +97,18 @@ export function createWebApiServer(options: WebApiServerOptions = {}): Server {
         return;
       }
 
+      const evalReportMatch = /^\/api\/evals\/real-world\/([^/]+)\/latest$/.exec(url.pathname);
+      if (request.method === "GET" && evalReportMatch) {
+        const datasetId = decodeURIComponent(evalReportMatch[1]!);
+        const report = await readEvalReport({ evalReportsDir, datasetId });
+        if (!report) {
+          writeJson(response, 404, { error: "eval report not found", datasetId });
+          return;
+        }
+        writeJson(response, 200, report);
+        return;
+      }
+
       if (request.method === "POST" && url.pathname === "/api/runs") {
         await handleStartRun(request, response, sessions, executeRun);
         return;
@@ -106,6 +125,20 @@ export function createWebApiServer(options: WebApiServerOptions = {}): Server {
       writeJson(response, 500, { error: error instanceof Error ? error.message : String(error) });
     }
   });
+}
+
+async function readLatestRealWorldEvalReport(options: { evalReportsDir: string; datasetId: string }): Promise<RealWorldEvalReport | undefined> {
+  const path = join(options.evalReportsDir, "real-world", options.datasetId, "latest.json");
+  try {
+    return JSON.parse(await readFile(path, "utf8")) as RealWorldEvalReport;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+function evalReportsDirForRunsDir(runsDir: string): string {
+  return runsDir === DEFAULT_RUNS_DIR ? DEFAULT_EVAL_REPORTS_DIR : join(runsDir, "..", "evals");
 }
 
 export async function startWebApiServer(options: StartWebApiServerOptions = {}): Promise<StartedWebApiServer> {

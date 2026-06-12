@@ -1,7 +1,8 @@
 // @keigent/engine 公共 API 桶文件（供 CLI 等外部包使用）
 
 export { LoopEngine, type EngineOptions } from "./engine.js";
-export { loadSkillContext, renderSkillIndex } from "./skills.js";
+export { loadSkillCatalog, loadSkillContext, renderSkillIndex } from "./skills.js";
+export type { SkillCatalogItem } from "./skills.js";
 export {
   Orchestrator,
   makeRegistry,
@@ -99,6 +100,11 @@ export type {
   WorkflowSnapshot,
 } from "./run-record.js";
 export type {
+  RunStoreMigrationReport,
+  RunStoreMigrationWarning,
+  RunStoreMigrationWarningCode,
+} from "./run-store-migration.js";
+export type {
   CleanupIsolatedWorkspaceOptions,
   CreateIsolatedWorkspaceOptions,
   IsolatedWorkspace,
@@ -130,7 +136,9 @@ export type {
   Trajectory,
   TrajectoryStep,
   SkillContext,
+  SkillMeta,
   SkillMatchExplanation,
+  SkillStatus,
   ExitReason,
   ProviderCostStatus,
   ProviderUsageSummary,
@@ -159,6 +167,10 @@ export {
   createRealWorldFixtureExecutor,
   runRealWorldEvalCases,
 } from "./evals/real-world.js";
+export {
+  P0_RUN_AUDIT_CASE_IDS,
+  buildP0RunAuditFixtureRecords,
+} from "./evals/run-audit-fixtures.js";
 export {
   DEFAULT_OPERATOR_L3_CASES,
   OPERATOR_L3_DATASET_ID,
@@ -212,6 +224,10 @@ export type {
   WorkflowSpec,
   WorkflowTrajectory,
   WorkflowVerificationPolicy,
+  ReviewIssue,
+  ReviewRubric,
+  ReviewSummary,
+  WorkflowReviewPolicy,
   EngineWorkflowChildRunnerOptions,
   EngineWorkflowRunner,
 } from "./workflow/index.js";

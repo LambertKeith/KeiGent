@@ -68,8 +68,16 @@ export function sampleSkillInputs(): SkillInput[] {
       description: "Write files safely with checkpoint evidence.",
       tags: ["file", "write"],
       status: "verified",
+      version: "1.0.0",
+      taskTypes: ["file.write"],
+      triggers: ["create file", "edit file"],
+      requiredTools: ["file_write"],
+      allowedTools: ["file_read"],
+      nonGoals: ["do not overwrite unrelated files"],
+      dangerousActions: ["delete files outside the requested scope"],
       riskLevel: "R2",
       permissionsExpected: ["file.write"],
+      source: { type: "human-authored" },
       evalCoverage: ["file-write-positive"],
     },
     {
@@ -77,6 +85,9 @@ export function sampleSkillInputs(): SkillInput[] {
       description: "Candidate browser inspection workflow.",
       tags: ["browser"],
       status: "candidate",
+      nonGoals: ["do not submit forms"],
+      dangerousActions: ["form submission"],
+      permissionsExpected: ["browser.readonly"],
       evalCoverage: ["browser-review-positive"],
     },
     {
@@ -84,6 +95,7 @@ export function sampleSkillInputs(): SkillInput[] {
       description: "Deprecated shell workflow.",
       tags: ["shell"],
       status: "deprecated",
+      dangerousActions: ["unbounded shell execution"],
       deprecationReason: "replaced by governed shell workflow",
     },
   ];
@@ -140,6 +152,20 @@ function renderGovernance(skill: SkillView): string {
       ${renderFact("Permissions", skill.governance.permissionsExpected.join(", ") || "None")}
       ${renderFact("Blocked reason", skill.blockedReason ?? "None")}
       ${renderFact("Deprecated reason", skill.deprecationReason ?? "None")}
+    </div>
+    <div class="split-panels">
+      <div>
+        ${renderListBlock("Tool boundaries", [
+          ...skill.governance.requiredTools.map((tool) => `Required: ${tool}`),
+          ...skill.governance.allowedTools.map((tool) => `Allowed: ${tool}`),
+        ])}
+      </div>
+      <div>
+        ${renderListBlock("Non-goals and dangerous actions", [
+          ...skill.governance.nonGoals.map((nonGoal) => `Non-goal: ${nonGoal}`),
+          ...skill.governance.dangerousActions.map((action) => `Dangerous: ${action}`),
+        ])}
+      </div>
     </div>
     ${skill.quarantineReason ? `<p class="run-goal">${escapeHtml(skill.quarantineReason)}</p>` : ""}
   `);

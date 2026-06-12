@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  auditHandoffFromStreamEvent,
   progressEventsFromStreamEvent,
   renderWebRunLauncher,
   type WebRunStreamEvent,
@@ -69,5 +70,44 @@ describe("web run launcher", () => {
       exitReason: "budget_exceeded",
       finalResponse: "budget stopped the run",
     }]);
+  });
+
+  it("keeps the persisted record handoff from terminal run events", () => {
+    const streamEvent: WebRunStreamEvent = {
+      kind: "run_finished",
+      runId: "web_123",
+      workflowId: "wf_123",
+      exitReason: "success",
+      finalResponse: "created",
+      recordId: "run_20260612_001",
+      recordPath: "/tmp/runs/run_20260612_001/record.json",
+    };
+
+    expect(auditHandoffFromStreamEvent(streamEvent)).toEqual({
+      recordId: "run_20260612_001",
+      recordPath: "/tmp/runs/run_20260612_001/record.json",
+      href: "#runs/run_20260612_001",
+    });
+    expect(auditHandoffFromStreamEvent({ kind: "run_error", runId: "web_123", message: "boom" })).toBeUndefined();
+  });
+
+  it("renders a review-run link after a persisted run is available", () => {
+    const html = renderWebRunLauncher({
+      apiEnabled: true,
+      run: {
+        id: "web_123",
+        mode: "live",
+        task: { goal: "Inspect repo evidence" },
+        events: [],
+      },
+      auditHandoff: {
+        recordId: "run_20260612_001",
+        href: "#runs/run_20260612_001",
+      },
+    });
+
+    expect(html).toContain("Review run");
+    expect(html).toContain("#runs/run_20260612_001");
+    expect(html).toContain("run_20260612_001");
   });
 });

@@ -16,6 +16,14 @@ describe("Workbench API client", () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
       records: [{ id: "run_web", status: "succeeded" }],
       errors: [],
+      migrationReport: {
+        schemaVersion: 1,
+        totalRecords: 1,
+        normalizedRecords: 0,
+        legacyRecords: 0,
+        unsupportedRecords: 0,
+        warnings: [],
+      },
     }), { status: 200 }));
     const client = createKeigentApiClient({ baseUrl: "http://127.0.0.1:5174", fetcher });
 
@@ -24,7 +32,33 @@ describe("Workbench API client", () => {
     expect(fetcher).toHaveBeenCalledWith("http://127.0.0.1:5174/api/runs", expect.objectContaining({
       headers: { accept: "application/json" },
     }));
-    expect(store).toMatchObject({ records: [{ id: "run_web" }], errors: [] });
+    expect(store).toMatchObject({
+      records: [{ id: "run_web" }],
+      errors: [],
+      migrationReport: {
+        schemaVersion: 1,
+        totalRecords: 1,
+        warnings: [],
+      },
+    });
+  });
+
+  it("fetches the latest real-world eval report from the local Web API", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      datasetId: "local-real-task-v1",
+      cases: [{ id: "replay-report", runId: "run_replay-report" }],
+    }), { status: 200 }));
+    const client = createKeigentApiClient({ baseUrl: "http://127.0.0.1:5174", fetcher });
+
+    const report = await client.fetchLatestRealWorldEvalReport("local-real-task-v1");
+
+    expect(fetcher).toHaveBeenCalledWith("http://127.0.0.1:5174/api/evals/real-world/local-real-task-v1/latest", expect.objectContaining({
+      headers: { accept: "application/json" },
+    }));
+    expect(report).toMatchObject({
+      datasetId: "local-real-task-v1",
+      cases: [{ id: "replay-report", runId: "run_replay-report" }],
+    });
   });
 
   it("starts a web run through the local Web API", async () => {
@@ -73,5 +107,14 @@ describe("Workbench API client", () => {
     });
 
     await expect(client.fetchRunStore()).rejects.toThrow("Web API request failed: GET /api/runs 404");
+  });
+
+  it("fails loudly when the latest real-world eval report is missing", async () => {
+    const client = createKeigentApiClient({
+      baseUrl: "http://127.0.0.1:5174",
+      fetcher: async () => new Response("missing", { status: 404 }),
+    });
+
+    await expect(client.fetchLatestRealWorldEvalReport("missing")).rejects.toThrow("Web API request failed: GET /api/evals/real-world/missing/latest 404");
   });
 });

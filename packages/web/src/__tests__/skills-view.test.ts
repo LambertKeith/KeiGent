@@ -53,7 +53,10 @@ describe("skill library view model", () => {
       ["risky-shell", "Quarantined", false],
     ]);
     expect(library.skills[0]).toMatchObject({
-      triggerConditions: ["tag:file", "tag:write", "requires:file_write"],
+      triggerConditions: ["tag:file", "tag:write"],
+      governance: {
+        requiredTools: ["file_write"],
+      },
       recentMatches: [expect.objectContaining({ score: 12, injected: true })],
       learningNotes: ["Prefer deterministic file paths."],
       evalCoverageLinks: [{ id: "file-write-success", label: "file-write-success", href: "#eval/file-write-success" }],
@@ -101,7 +104,7 @@ describe("skill library view model", () => {
       ["blocked-shell", "Blocked", false],
     ]);
     expect(library.skills[0]).toMatchObject({
-      triggerConditions: ["tag:file", "task:file.write", "trigger:create file", "permission:file.write"],
+      triggerConditions: ["tag:file", "task:file.write", "trigger:create file"],
       governance: {
         version: "1.2.0",
         riskLevel: "R2",
@@ -112,6 +115,36 @@ describe("skill library view model", () => {
       },
     });
     expect(library.skills[2]?.blockedReason).toBe("failed risk eval");
+  });
+
+  it("separates governance boundaries from trigger conditions", () => {
+    const library = normalizeSkillLibrary({
+      skills: [
+        {
+          name: "web-summarize",
+          description: "Summarize web pages without submitting forms.",
+          tags: ["web", "summary"],
+          status: "verified",
+          requiredTools: ["browser_read"],
+          allowedTools: ["http_request"],
+          nonGoals: ["do not submit forms"],
+          dangerousActions: ["form_submit"],
+          permissionsExpected: ["browser.readonly", "http.readonly"],
+          evalCoverage: ["web-summary-basic"],
+        },
+      ],
+    });
+
+    expect(library.skills[0]).toMatchObject({
+      triggerConditions: ["tag:web", "tag:summary"],
+      governance: {
+        requiredTools: ["browser_read"],
+        allowedTools: ["http_request"],
+        permissionsExpected: ["browser.readonly", "http.readonly"],
+        nonGoals: ["do not submit forms"],
+        dangerousActions: ["form_submit"],
+      },
+    });
   });
 
   it("accepts engine deprecatedReason metadata when rendering deprecated skills", () => {

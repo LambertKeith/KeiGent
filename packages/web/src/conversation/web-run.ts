@@ -21,6 +21,13 @@ export interface WebRunLauncherView {
   apiEnabled: boolean;
   run: NormalizeRunOptions;
   error?: string;
+  auditHandoff?: WebRunAuditHandoff;
+}
+
+export interface WebRunAuditHandoff {
+  recordId: string;
+  href: string;
+  recordPath?: string;
 }
 
 export function progressEventsFromStreamEvent(event: WebRunStreamEvent): ProgressEvent[] {
@@ -43,10 +50,22 @@ export function progressEventsFromStreamEvent(event: WebRunStreamEvent): Progres
   return [];
 }
 
+export function auditHandoffFromStreamEvent(event: WebRunStreamEvent): WebRunAuditHandoff | undefined {
+  if (event.kind !== "run_finished" || !event.recordId) return undefined;
+  return {
+    recordId: event.recordId,
+    href: `#runs/${encodeURIComponent(event.recordId)}`,
+    ...(event.recordPath ? { recordPath: event.recordPath } : {}),
+  };
+}
+
 export function renderWebRunLauncher(view: WebRunLauncherView): string {
   const disabled = view.apiEnabled ? "" : " disabled";
   const status = view.apiEnabled ? "Local API connected" : "Local API not connected";
   const error = view.error ? `<p class="launcher-error">${escapeHtml(view.error)}</p>` : "";
+  const auditHandoff = view.auditHandoff
+    ? `<p class="audit-handoff"><a href="${escapeHtml(view.auditHandoff.href)}">Review run</a><span>${escapeHtml(view.auditHandoff.recordId)}</span></p>`
+    : "";
   const launcher = `
     <section class="panel run-launcher">
       <h2>Web Run Launcher</h2>
@@ -60,6 +79,7 @@ export function renderWebRunLauncher(view: WebRunLauncherView): string {
           <span>${escapeHtml(status)}</span>
         </div>
         ${error}
+        ${auditHandoff}
       </form>
     </section>
   `;

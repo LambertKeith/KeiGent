@@ -28,7 +28,7 @@ Workflow 不是“更高级的 loop”，而是 parent envelope。每个 child �
 
 ### P1 可设计实现
 
-- reviewed-loop：worker + readonly reviewer。
+- reviewed-loop：worker + readonly reviewer + rubric-bound review summary。
 - stronger assertion evaluation。
 - workflow policy enforcement。
 
@@ -86,6 +86,7 @@ Workflow 不是“更高级的 loop”，而是 parent envelope。每个 child �
 - parent timeout 后 late child success 不能覆盖 parent result。
 - verified-loop 至少要求一个 passed checkpoint/verdict。
 - reviewed-loop 的 reviewer 默认 readonly。
+- reviewed-loop 必须保留 reviewer rubric、reviewer run id 与 reviewer issues。
 - fanout/tournament 进入实现前必须先有 eval fixture 与 rubric。
 
 ## 8. 产品化顺序

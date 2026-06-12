@@ -1,9 +1,9 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { runEvalCommand, runReplayCommand } from "../eval-commands.js";
-import type { Trajectory } from "@keigent/engine";
+import { readRunStore, type Trajectory } from "@keigent/engine";
 
 function capture(): { lines: string[]; stdout: (line: string) => void } {
   const lines: string[] = [];
@@ -170,15 +170,37 @@ describe("eval and replay commands", () => {
   });
 
   it("adds a Workbench deep link for real-world eval when --open is requested", async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), "keigent-eval-runs-"));
     const output = capture();
 
-    await runEvalCommand(["real-world", "--compact", "--open"], { stdout: output.stdout });
+    await runEvalCommand(["real-world", "--compact", "--open"], { stdout: output.stdout, runsDir });
     const report = JSON.parse(output.lines[0]!);
+    const store = await readRunStore({ runsDir });
 
     expect(report).toMatchObject({
       level: "L2",
       datasetId: "local-real-task-v1",
       workbenchHref: "http://127.0.0.1:5173/#eval/real-world/local-real-task-v1",
+      persistedRunRecords: {
+        total: 19,
+        runsDir,
+      },
+      persistedEvalReport: {
+        datasetId: "local-real-task-v1",
+        path: join(runsDir, "..", "evals", "real-world", "local-real-task-v1", "latest.json"),
+      },
+    });
+    expect(store.records).toHaveLength(19);
+    await expect(readFile(report.persistedEvalReport.path, "utf8").then(JSON.parse)).resolves.toMatchObject({
+      datasetId: "local-real-task-v1",
+      cases: expect.arrayContaining([
+        expect.objectContaining({ runId: "run_replay-report" }),
+      ]),
+    });
+    expect(store.records.map((record) => record.id)).toContain("run_file-summary");
+    expect(store.records.map((record) => record.id)).toContain("run_replay-report");
+    expect(store.records.find((record) => record.id === "run_replay-report")).toMatchObject({
+      replay: { freshExecution: false },
     });
   });
 

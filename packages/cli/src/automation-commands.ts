@@ -5,6 +5,7 @@ import {
   saveRunRecord,
   type RunRecord,
   type RunStoreError,
+  type RunStoreMigrationWarning,
 } from "@keigent/engine";
 import { KEIGENT_HOME } from "./config.js";
 import { formatJson, parseJsonOutputFormat } from "./json-output.js";
@@ -24,6 +25,7 @@ interface LocalTriageCandidate {
   reason: TriageReason;
   blocking: string[];
   nextAction: string;
+  schemaWarnings?: string[];
 }
 
 interface LocalTriageReport {
@@ -62,7 +64,9 @@ export async function runAutomationCommand(
     const scope = `last ${limit} runs`;
     const store = await readRunStore({ runsDir });
     const scanned = store.records.slice(0, limit);
-    const candidates = scanned.map(triageCandidate).filter((item): item is LocalTriageCandidate => Boolean(item));
+    const migrationWarnings = migrationWarningsByRunId(store.migrationReport.warnings);
+    const candidates = scanned.map((record) => triageCandidate(record, migrationWarnings.get(record.id) ?? []))
+      .filter((item): item is LocalTriageCandidate => Boolean(item));
     const report: LocalTriageReport = {
       kind: "local-run-triage",
       status: candidates.length === 0 ? "no_op" : "attention_required",
@@ -116,7 +120,16 @@ export async function runAutomationCommand(
   throw new Error("Usage: keigent automation triage local [--json|--compact] [--limit N]");
 }
 
-function triageCandidate(record: RunRecord): LocalTriageCandidate | undefined {
+function triageCandidate(record: RunRecord, schemaWarnings: RunStoreMigrationWarning[] = []): LocalTriageCandidate | undefined {
+  if (schemaWarnings.length > 0) {
+    return candidate(
+      record,
+      "stale_schema",
+      "Review run record schema before trusting this result.",
+      schemaWarnings.map(formatSchemaWarning),
+    );
+  }
+
   if (record.status === "no_op" || record.status === "succeeded" && record.evidence.status === "passed") return undefined;
 
   if (record.status === "unknown") {
@@ -138,15 +151,35 @@ function triageCandidate(record: RunRecord): LocalTriageCandidate | undefined {
   return undefined;
 }
 
-function candidate(record: RunRecord, reason: TriageReason, fallbackNextAction: string): LocalTriageCandidate {
+function candidate(
+  record: RunRecord,
+  reason: TriageReason,
+  fallbackNextAction: string,
+  schemaWarnings: string[] = [],
+): LocalTriageCandidate {
   return {
     runId: record.id,
     status: record.status,
     evidenceStatus: record.evidence.status,
     reason,
-    blocking: record.evidence.blocking,
+    blocking: schemaWarnings.length > 0 ? schemaWarnings : record.evidence.blocking,
     nextAction: record.nextAction ?? record.failures[0]?.nextAction ?? fallbackNextAction,
+    ...(schemaWarnings.length > 0 ? { schemaWarnings } : {}),
   };
+}
+
+function migrationWarningsByRunId(warnings: RunStoreMigrationWarning[]): Map<string, RunStoreMigrationWarning[]> {
+  const grouped = new Map<string, RunStoreMigrationWarning[]>();
+  for (const warning of warnings) {
+    const current = grouped.get(warning.runId) ?? [];
+    current.push(warning);
+    grouped.set(warning.runId, current);
+  }
+  return grouped;
+}
+
+function formatSchemaWarning(warning: RunStoreMigrationWarning): string {
+  return `${warning.code}: ${warning.message}`;
 }
 
 function triageLimit(args: string[]): number {

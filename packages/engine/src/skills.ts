@@ -11,6 +11,12 @@ interface ParsedSkill {
   rawContent: string;  // 完整原始文本（body 从这里切出）
 }
 
+export interface SkillCatalogItem {
+  meta: SkillMeta;
+  bodyPath: string;
+  executable: boolean;
+}
+
 function parseFrontmatter(content: string): { meta: SkillMeta; body: string } | null {
   const match = FRONTMATTER_RE.exec(content);
   if (!match) return null;
@@ -105,22 +111,13 @@ function isExecutableSkill(meta: SkillMeta): boolean {
   return meta.status === "active" || meta.status === "promoted" || meta.status === undefined;
 }
 
-/**
- * 从指定目录扫描所有 SKILL.md，返回 SkillContext。
- * 目录结构：skillsDir/<skill-name>/SKILL.md
- *
- * 渐进式披露：
- *   第一层（常驻 system prompt）：meta.name + meta.description，~100 token/skill
- *   第二层（按需，注入 user message）：完整 body，通过 loadBody(name) 获取
- */
-export async function loadSkillContext(skillsDir: string): Promise<SkillContext> {
+async function readSkillEntries(skillsDir: string): Promise<ParsedSkill[]> {
   const parsed: ParsedSkill[] = [];
-
   let entries: string[] = [];
   try {
     entries = await readdir(skillsDir);
   } catch {
-    // 目录不存在时返回空 context
+    // 目录不存在时返回空 context/catalog
     vwarn(`[skills] 目录不存在: ${skillsDir}`);
   }
 
@@ -133,10 +130,6 @@ export async function loadSkillContext(skillsDir: string): Promise<SkillContext>
         vwarn(`[skills] 解析失败（无 frontmatter）: ${skillMdPath}`);
         continue;
       }
-      if (!isExecutableSkill(result.meta)) {
-        vlog(`[skills] 跳过非执行 skill: ${result.meta.name} status=${result.meta.status}`);
-        continue;
-      }
       parsed.push({
         meta: result.meta,
         bodyPath: skillMdPath,
@@ -147,6 +140,33 @@ export async function loadSkillContext(skillsDir: string): Promise<SkillContext>
       // 跳过不存在的文件
     }
   }
+
+  return parsed;
+}
+
+export async function loadSkillCatalog(skillsDir: string): Promise<SkillCatalogItem[]> {
+  const parsed = await readSkillEntries(skillsDir);
+  return parsed.map((skill) => ({
+    meta: skill.meta,
+    bodyPath: skill.bodyPath,
+    executable: isExecutableSkill(skill.meta),
+  }));
+}
+
+/**
+ * 从指定目录扫描所有 SKILL.md，返回 SkillContext。
+ * 目录结构：skillsDir/<skill-name>/SKILL.md
+ *
+ * 渐进式披露：
+ *   第一层（常驻 system prompt）：meta.name + meta.description，~100 token/skill
+ *   第二层（按需，注入 user message）：完整 body，通过 loadBody(name) 获取
+ */
+export async function loadSkillContext(skillsDir: string): Promise<SkillContext> {
+  const parsed = (await readSkillEntries(skillsDir)).filter((skill) => {
+    if (isExecutableSkill(skill.meta)) return true;
+    vlog(`[skills] 跳过非执行 skill: ${skill.meta.name} status=${skill.meta.status}`);
+    return false;
+  });
 
   // 按需 body 加载（渐进式披露第二层）
   const bodyCache = new Map<string, string>();

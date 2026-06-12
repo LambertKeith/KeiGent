@@ -16,6 +16,16 @@ describe("web command", () => {
     expect(output.lines.join("\n")).toContain("corepack pnpm --filter @keigent/web dev");
   });
 
+  it("prints a runnable custom-port dev command without swallowing Vite flags", async () => {
+    const output = capture();
+
+    await runWebCommand(["--port", "5199", "--print"], { stdout: output.stdout });
+    const command = output.lines.at(-1)!;
+
+    expect(output.lines.join("\n")).toContain("http://127.0.0.1:5199");
+    expect(command).toBe("corepack pnpm --filter @keigent/web dev --host 127.0.0.1 --port 5199");
+  });
+
   it("prints the local Web API URL when requested", async () => {
     const output = capture();
 

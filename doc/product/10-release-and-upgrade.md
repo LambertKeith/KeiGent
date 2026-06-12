@@ -7,6 +7,13 @@
 
 ## 1. First-run Guide
 
+CLI 可先打印只读首次运行指引，不会写配置、不会发起网络检查、不会宣称产品健康。机器可读输出中的每个步骤都带有 `gate`、`proves` 和 `doesNotProve`，便于 operator 区分 setup、diagnostic、fixture、release 与 Workbench 边界：
+
+```bash
+corepack pnpm --filter @keigent/cli start guide first-run
+corepack pnpm --filter @keigent/cli start guide first-run --compact
+```
+
 从仓库根目录执行：
 
 ```bash
@@ -53,6 +60,7 @@ real-world L2 与 operator L3 fixture 只证明确定性本地样本和人工验
 
 ```bash
 node packages/cli/bin/keigent.mjs runs list --compact
+node packages/cli/bin/keigent.mjs skill list --compact
 corepack pnpm --filter @keigent/cli start web --api --print
 ```
 
@@ -82,6 +90,13 @@ corepack pnpm --filter @keigent/cli start web --api --print
 ---
 
 ## 3. Release Checklist
+
+CLI 可打印只读 release checklist，不运行 gate、不修改 workspace、不宣称 release ready：
+
+```bash
+corepack pnpm --filter @keigent/cli start guide release-checklist
+corepack pnpm --filter @keigent/cli start guide release-checklist --compact
+```
 
 每次发布候选必须从仓库根目录运行：
 
@@ -113,14 +128,19 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/data/home/.cache/ms-playwright corepack pnpm --fil
 - `doc/product/09-agent-operations-maturity-roadmap.md` 的实现备注没有过期声明。
 - `packages/cli/package.json` 的 `bin` 指向 `./bin/keigent.mjs`。
 - `packages/cli/bin/keigent.mjs` 以 executable bit 提交，可以在没有 `pnpm` wrapper 的情况下执行。
+- `node packages/cli/bin/keigent.mjs guide first-run --compact` 输出为可解析 JSON，并明确 `does_not_write_config`、`does_not_run_network_checks`、`does_not_claim_product_health`。
 - `corepack pnpm --filter @keigent/cli start doctor --compact` 输出为可解析 JSON。
-- `node packages/cli/bin/keigent.mjs runs list --compact` 输出为可解析 JSON。
+- `node packages/cli/bin/keigent.mjs runs list --compact` 输出为可解析 JSON，并包含只读 `migrationReport`，不得静默写回 legacy / unsupported RunRecord。
+- `node packages/cli/bin/keigent.mjs skill list --compact` 输出为可解析 JSON，并展示非执行状态 skill 的只读治理信息。
 - `corepack pnpm --filter @keigent/cli start web --api --print` 输出 Workbench URL、API URL 和 `VITE_KEIGENT_API_URL` dev command。
+- `corepack pnpm --filter @keigent/cli start web --port 5199 --print` 输出的 dev command 必须可直接启动到 `http://127.0.0.1:5199/`，不得用额外 `--` 吞掉 Vite flags。
 - debug bundle 不泄露 secret，并包含 `observability-summary.json`。
 - real-world L2 和 operator L3 fixture 报告不得宣称完整产品健康。
+- `corepack pnpm --filter @keigent/cli start eval real-world --compact --open` 必须保存 L2 case RunRecord，并让报告中的 Workbench 链接可追到同一 run store 的 Run Detail。
 - operator L3 `--packet` 输出必须保留 Proof boundary、Evidence inspected、Override reason、Next actions 与人工 sign-off 勾选项，并明确 fixture 不是 human acceptance。
 - operator L3 `--acceptance` 输出必须是 `operator-human-acceptance` 结构化记录，且缺 evidence inspected 或 override reason 时不得 accepted。
 - RunRecord / Workbench 必须展示 Proof boundary、Autonomy、Repair attempts 和 Next action。
+- Web Run Launcher 收到 `run_finished.recordId` 后必须提供 Run Detail handoff，Live Console 结束态不能替代 RunRecord 审计。
 - Loop Event Protocol 必须继续服务 CLI、Live Console、Workbench 和 reports，不允许 UI 回退到解析 raw logs。
 
 ---
@@ -134,7 +154,7 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/data/home/.cache/ms-playwright corepack pnpm --fil
 - Added real-world L2 fixture expansion and operator L3 scenario fixture.
 - Added L3 operator human acceptance packet output for fixture reports.
 - Added L3 operator human sign-off JSON validation and structured acceptance records.
-- Added reviewed-loop readonly reviewer semantics.
+- Added reviewed-loop readonly reviewer semantics with rubric-bound review summaries and Workbench review issue display.
 - Added worktree isolation foundation.
 - Added readonly git / HTTP / GitHub connector baseline.
 - Added CLI bin shim and build metadata for cleaner machine-readable command output.
@@ -150,6 +170,10 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/data/home/.cache/ms-playwright corepack pnpm --fil
 - Hardened operator acceptance packets with proof boundary, evidence-inspected checks, override reason requirements, and next actions.
 - Added starter path commands and fixture boundary notes for smoke / real-world / operator evals.
 - Added CLI RunRecord -> local Web API -> Workbench product E2E regression.
+- Added Web run audit handoff and real-world eval RunRecord persistence for eval case -> Run Detail review.
+- Added read-only skill governance CLI inventory and inspect commands.
+- Added read-only RunRecord migration diagnostics across CLI, local Web API, and Workbench schema compatibility review.
+- Fixed Web dev command printing so custom Workbench ports are runnable and do not swallow Vite flags.
 
 ### 0.0.1
 

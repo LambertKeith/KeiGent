@@ -91,7 +91,11 @@ export interface SkillView {
   governance: {
     version?: string;
     riskLevel?: string;
+    requiredTools: string[];
+    allowedTools: string[];
     permissionsExpected: string[];
+    nonGoals: string[];
+    dangerousActions: string[];
     sourceType?: string;
     sourceTrajectoryId?: string;
     evalCoverageCount: number;
@@ -142,7 +146,11 @@ function normalizeSkill(skill: SkillInput, input: SkillLibraryInput): SkillView 
     governance: {
       ...(skill.version ? { version: redactText(skill.version) } : {}),
       ...(skill.riskLevel ? { riskLevel: redactText(skill.riskLevel) } : {}),
+      requiredTools: (skill.requiredTools ?? []).map((tool) => redactText(tool)),
+      allowedTools: (skill.allowedTools ?? []).map((tool) => redactText(tool)),
       permissionsExpected: (skill.permissionsExpected ?? []).map((permission) => redactText(permission)),
+      nonGoals: (skill.nonGoals ?? []).map((nonGoal) => redactText(nonGoal)),
+      dangerousActions: (skill.dangerousActions ?? []).map((action) => redactText(action)),
       ...(skill.source?.type ? { sourceType: redactText(skill.source.type) } : {}),
       ...(skill.source?.trajectoryId ? { sourceTrajectoryId: redactText(skill.source.trajectoryId) } : {}),
       evalCoverageCount: (skill.evalCoverage ?? []).length,
@@ -187,10 +195,6 @@ function triggerConditions(skill: SkillInput): string[] {
     ...skill.tags.map((tag) => `tag:${redactText(tag)}`),
     ...(skill.taskTypes ?? []).map((taskType) => `task:${redactText(taskType)}`),
     ...(skill.triggers ?? []).map((trigger) => `trigger:${redactText(trigger)}`),
-    ...(skill.requiredTools ?? []).map((tool) => `requires:${redactText(tool)}`),
-    ...(skill.allowedTools ?? []).map((tool) => `allows:${redactText(tool)}`),
-    ...(skill.permissionsExpected ?? []).map((permission) => `permission:${redactText(permission)}`),
-    ...(skill.nonGoals ?? []).map((nonGoal) => `not:${redactText(nonGoal)}`),
   ];
 }
 

@@ -79,6 +79,14 @@ describe("runs commands", () => {
         evidenceStatus: "not_checked",
       })],
       errors: [],
+      migrationReport: {
+        legacyRecords: 1,
+        unsupportedRecords: 0,
+        warnings: expect.arrayContaining([
+          expect.objectContaining({ runId: "legacy", code: "missing_schema_version" }),
+          expect.objectContaining({ runId: "legacy", code: "unknown_status" }),
+        ]),
+      },
     });
     expect(serialized).not.toContain("sk-legacy-secret-123456");
   });
@@ -152,6 +160,7 @@ describe("runs commands", () => {
     failed.nextAction = "Inspect the failed assertion.";
     const succeeded = noOpRecord("run_ok");
     succeeded.status = "succeeded";
+    succeeded.evidence = { status: "passed", total: 1, passed: 1, failed: 0, sources: ["assertion"], blocking: [] };
     await saveRunRecord(succeeded, { runsDir });
     await saveRunRecord(failed, { runsDir });
     const output = capture();
@@ -167,6 +176,87 @@ describe("runs commands", () => {
         blocking: ["missing output"],
         nextAction: "Inspect the failed assertion.",
       }],
+    });
+  });
+
+  it("triages schema warnings and missing evidence instead of only non-success status", async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), "keigent-cli-run-triage-schema-"));
+    const missingEvidence = noOpRecord("run_missing_evidence");
+    missingEvidence.status = "succeeded";
+    missingEvidence.evidence = { status: "not_checked", total: 0, passed: 0, failed: 0, sources: [], blocking: [] };
+    delete missingEvidence.nextAction;
+    await saveRunRecord(missingEvidence, { runsDir });
+    const unknownStatus = noOpRecord("run_unknown_status");
+    unknownStatus.status = "unknown";
+    unknownStatus.evidence = { status: "not_checked", total: 0, passed: 0, failed: 0, sources: [], blocking: [] };
+    delete unknownStatus.nextAction;
+    await saveRunRecord(unknownStatus, { runsDir });
+    await mkdir(join(runsDir, "legacy-success"), { recursive: true });
+    await writeFile(join(runsDir, "legacy-success", "record.json"), JSON.stringify({
+      id: "legacy-success",
+      createdAt: "2026-06-10T00:00:00.000Z",
+      updatedAt: "2026-06-10T00:00:00.000Z",
+      status: "succeeded",
+      task: { goal: "Legacy successful run", source: "cli" },
+      route: { source: "rule", matchedSkillIds: [] },
+      execution: {
+        iterations: 1,
+        totalToolCalls: 0,
+        successfulToolCalls: 0,
+        failedToolCalls: 0,
+        checkpointCount: 1,
+        passedCheckpoints: 1,
+        durationMs: 10,
+        exitReason: "completed",
+        finalResponseSummary: "ok",
+        eventCounts: {},
+      },
+      evidence: { status: "passed", total: 1, passed: 1, failed: 0, sources: ["assertion"], blocking: [] },
+      risk: {
+        highestRiskLevel: "R0",
+        permissionClassesUsed: [],
+        sideEffectsAttempted: 0,
+        sideEffectsSucceeded: 0,
+        externalSideEffects: 0,
+        irreversibleActions: 0,
+        approvalRequired: false,
+      },
+      approvals: [],
+      failures: [],
+      artifacts: [],
+      autonomy: { outcome: "completed", repairAttempts: [], escalations: [], budgetExhausted: false },
+      proofBoundary: { proven: ["legacy assertion passed"], notProven: [], assumptions: [], evidenceGaps: [] },
+      replay: { supported: false, freshExecution: true },
+      redaction: { applied: true, rawPayloadStored: false },
+    }), "utf8");
+    const output = capture();
+
+    await runRunsCommand(["triage", "--compact"], { runsDir, stdout: output.stdout });
+
+    const payload = JSON.parse(output.lines[0]!);
+    expect(payload).toMatchObject({
+      total: 3,
+      runs: expect.arrayContaining([
+        expect.objectContaining({
+          id: "run_missing_evidence",
+          status: "succeeded",
+          reason: "missing_evidence",
+          nextAction: "Collect evidence before treating this run as successful.",
+        }),
+        expect.objectContaining({
+          id: "run_unknown_status",
+          status: "unknown",
+          reason: "stale_schema",
+          nextAction: "Review run record schema before trusting this result.",
+        }),
+        expect.objectContaining({
+          id: "legacy-success",
+          status: "succeeded",
+          reason: "stale_schema",
+          blocking: ["missing_schema_version: record schemaVersion is missing; normalized as schemaVersion 1"],
+          nextAction: "Review run record schema before trusting this result.",
+        }),
+      ]),
     });
   });
 

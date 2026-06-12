@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Learner, WorkflowResult } from "@keigent/engine";
 import type { KeigentConfig } from "../config.js";
+import { runEvalCommand } from "../eval-commands.js";
 import { persistWorkflowAndLearn } from "../post-run.js";
 import { createWebApiServer } from "../web-api-server.js";
 
@@ -17,13 +18,19 @@ interface WebRunDetailView {
   evidence: { status: string };
   proofBoundary: { proven: string[]; notProven: string[]; assumptions: string[] };
   autonomy: { outcome: string; repairAttempts: unknown[]; escalations: unknown[] };
-  replay: { supported: boolean };
+  replay: { supported: boolean; freshExecution: boolean };
   nextAction: { required: boolean; label: string };
 }
 
 interface WebWorkbenchModule {
   buildRunWorkbenchView(records: unknown[], selectedRunId?: string): unknown;
   renderRunWorkbench(view: unknown): string;
+}
+
+interface WebDashboardModule {
+  normalizeRealWorldEvalReport(report: unknown): {
+    cases: Array<{ id: string; runId: string; runDetailHref: string }>;
+  };
 }
 
 interface WebModelModule {
@@ -76,6 +83,59 @@ describe("CLI to Web Workbench product E2E", () => {
     expect(html).toContain("Next action");
     expect(html).toContain("No action required");
   });
+
+  it("persists real-world eval case records so Workbench deep links resolve to Run Detail", async () => {
+    const home = await mkdtemp(join(tmpdir(), "keigent-eval-product-e2e-"));
+    const runsDir = join(home, "runs");
+    const output: string[] = [];
+
+    await runEvalCommand(["real-world", "--compact", "--open"], {
+      runsDir,
+      stdout: (line) => output.push(line),
+    });
+
+    const report = JSON.parse(output[0]!) as {
+      workbenchHref: string;
+      persistedRunRecords: { total: number; runIds: string[] };
+    };
+    const reportObject = report as unknown as { cases: unknown[] };
+    const baseUrl = await serve(createWebApiServer({ runsDir }));
+    const store = await fetchJson(`${baseUrl}/api/runs`) as { records: unknown[] };
+    const latestReport = await fetchJson(`${baseUrl}/api/evals/real-world/local-real-task-v1/latest`);
+    const { normalizeRunRecord } = await loadWebModelModule();
+    const { buildRunWorkbenchView, renderRunWorkbench } = await loadWebWorkbenchModule();
+    const { normalizeRealWorldEvalReport } = await loadWebDashboardModule();
+    const dashboard = normalizeRealWorldEvalReport(latestReport);
+    const persistedIds = new Set(report.persistedRunRecords.runIds);
+    const insufficientEvidenceCase = dashboard.cases.find((testCase) => testCase.id === "insufficient-evidence-success-claim");
+    const replayView = normalizeRunRecord(store.records.find((record) =>
+      typeof record === "object" && record !== null && "id" in record && record.id === "run_replay-report"));
+    const replayHtml = renderRunWorkbench(buildRunWorkbenchView(store.records, "run_replay-report"));
+    const noOpHtml = renderRunWorkbench(buildRunWorkbenchView(store.records, "run_no-op-automation"));
+
+    expect(report).toMatchObject({
+      workbenchHref: "http://127.0.0.1:5173/#eval/real-world/local-real-task-v1",
+      persistedRunRecords: { total: 19 },
+    });
+    expect(report.persistedRunRecords.runIds).toContain("run_replay-report");
+    expect(store.records).toHaveLength(19);
+    expect(latestReport).toMatchObject({
+      datasetId: "local-real-task-v1",
+      cases: expect.arrayContaining([
+        expect.objectContaining({ runId: "run_replay-report" }),
+      ]),
+    });
+    expect(reportObject.cases.length).toBe(dashboard.cases.length);
+    expect(insufficientEvidenceCase).toMatchObject({
+      runId: "run_insufficient-evidence-success-claim",
+      runDetailHref: "#runs/run_insufficient-evidence-success-claim",
+    });
+    expect(dashboard.cases.every((testCase) => persistedIds.has(testCase.runId))).toBe(true);
+    expect(replayView.summary.id).toBe("run_replay-report");
+    expect(replayView.replay.freshExecution).toBe(false);
+    expect(replayHtml).toContain("Replay report, not fresh execution");
+    expect(noOpHtml).toContain("No hidden failures outside this scope.");
+  });
 });
 
 async function serve(server: Server): Promise<string> {
@@ -98,6 +158,10 @@ async function loadWebModelModule(): Promise<WebModelModule> {
 
 async function loadWebWorkbenchModule(): Promise<WebWorkbenchModule> {
   return await importWebModule<WebWorkbenchModule>("runs/workbench.ts");
+}
+
+async function loadWebDashboardModule(): Promise<WebDashboardModule> {
+  return await importWebModule<WebDashboardModule>("dashboard/report-model.ts");
 }
 
 async function importWebModule<T>(relativePath: string): Promise<T> {

@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -105,5 +105,68 @@ describe("automation commands", () => {
       expect.objectContaining({ runId: "run_missing_evidence", reason: "missing_evidence" }),
       expect.objectContaining({ runId: "run_unknown", reason: "stale_schema" }),
     ]));
+  });
+
+  it("triages legacy records with migration warnings even when normalized as successful", async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), "keigent-automation-stale-schema-"));
+    await mkdir(join(runsDir, "legacy-success"), { recursive: true });
+    await writeFile(join(runsDir, "legacy-success", "record.json"), JSON.stringify({
+      id: "legacy-success",
+      createdAt: "2026-06-10T00:00:00.000Z",
+      updatedAt: "2026-06-10T00:00:00.000Z",
+      status: "succeeded",
+      task: { goal: "Legacy successful run", source: "cli" },
+      route: { source: "rule", matchedSkillIds: [] },
+      execution: {
+        iterations: 1,
+        totalToolCalls: 0,
+        successfulToolCalls: 0,
+        failedToolCalls: 0,
+        checkpointCount: 1,
+        passedCheckpoints: 1,
+        durationMs: 10,
+        exitReason: "completed",
+        finalResponseSummary: "ok",
+        eventCounts: {},
+      },
+      evidence: { status: "passed", total: 1, passed: 1, failed: 0, sources: ["assertion"], blocking: [] },
+      risk: {
+        highestRiskLevel: "R0",
+        permissionClassesUsed: [],
+        sideEffectsAttempted: 0,
+        sideEffectsSucceeded: 0,
+        externalSideEffects: 0,
+        irreversibleActions: 0,
+        approvalRequired: false,
+      },
+      approvals: [],
+      failures: [],
+      artifacts: [],
+      autonomy: { outcome: "completed", repairAttempts: [], escalations: [], budgetExhausted: false },
+      proofBoundary: { proven: ["legacy assertion passed"], notProven: [], assumptions: [], evidenceGaps: [] },
+      replay: { supported: false, freshExecution: true },
+      redaction: { applied: true, rawPayloadStored: false },
+    }), "utf8");
+    const output = capture();
+
+    await runAutomationCommand(["triage", "local", "--compact"], { runsDir, stdout: output.stdout });
+
+    const payload = JSON.parse(output.lines[0]!);
+    expect(payload).toMatchObject({
+      status: "attention_required",
+      totalScanned: 1,
+      totalCandidates: 1,
+      candidates: [
+        expect.objectContaining({
+          runId: "legacy-success",
+          status: "succeeded",
+          evidenceStatus: "passed",
+          reason: "stale_schema",
+          blocking: ["missing_schema_version: record schemaVersion is missing; normalized as schemaVersion 1"],
+          nextAction: "Review run record schema before trusting this result.",
+        }),
+      ],
+    });
+    expect(payload.automationRecord).toBeUndefined();
   });
 });

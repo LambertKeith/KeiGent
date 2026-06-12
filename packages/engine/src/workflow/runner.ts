@@ -7,6 +7,7 @@ import { buildAutonomySummary } from "./autonomy.js";
 import type {
   ChildRunResult,
   ChildRunSpec,
+  ReviewSummary,
   WorkflowBudgetUsage,
   WorkflowEvent,
   WorkflowEvidence,
@@ -151,6 +152,7 @@ export class WorkflowRunner {
     const budgetUsage = computeBudgetUsage(childRuns, durationMs);
     const budgetFailure = findBudgetFailure(input.spec, budgetUsage, childRuns);
     const review = evaluateReviewedLoop(workerRun.childRun, reviewerRun.childRun);
+    const reviewSummary = summarizeReview(input.spec, reviewerRun.childRun, review.evidence);
     const timedOut = workerRun.timedOut || reviewerRun.timedOut;
     const exitReason = timedOut
       ? "timeout"
@@ -178,6 +180,7 @@ export class WorkflowRunner {
       finalResponse: `${workerRun.childRun.result.finalResponse}\n\n[review]\n${reviewerRun.childRun.result.finalResponse}`,
       childRuns,
       evidence: workflowEvidence,
+      review: reviewSummary,
       events: input.events,
       emit: input.emit,
       budgetUsage,
@@ -233,6 +236,7 @@ export class WorkflowRunner {
     finalResponse: string;
     childRuns: ChildRunResult[];
     evidence: WorkflowEvidence[];
+    review?: ReviewSummary;
     events: WorkflowEvent[];
     emit: (event: WorkflowEvent) => void;
     budgetUsage?: WorkflowBudgetUsage;
@@ -259,6 +263,7 @@ export class WorkflowRunner {
       budgetUsage,
       autonomy,
       evidence: input.evidence,
+      ...(input.review ? { review: input.review } : {}),
       ...(failure ? { failure } : {}),
       events: input.events,
       childRuns: input.childRuns.map((child) => ({
@@ -279,6 +284,7 @@ export class WorkflowRunner {
       budget: input.spec.budget,
       budgetUsage,
       autonomy,
+      ...(input.review ? { review: input.review } : {}),
       durationMs: input.durationMs,
       trajectory,
       ...(failure ? { failure } : {}),
@@ -387,6 +393,36 @@ function evaluateReviewedLoop(workerRun: ChildRunResult, verifierRun: ChildRunRe
             sourceChildRunId: verifierRun.id,
           }]),
     ],
+  };
+}
+
+function summarizeReview(
+  spec: WorkflowSpec,
+  reviewerRun: ChildRunResult,
+  evidence: WorkflowEvidence[],
+): ReviewSummary {
+  const rubric = spec.review?.rubric ?? {
+    taskGoal: spec.goal,
+    successCriteria: spec.rootTask.successDef?.assertions.map(describeAssertion) ?? [],
+    requiredEvidence: ["reviewer checkpoint verdict"],
+    forbiddenClaims: ["Do not claim reviewer acceptance without a passed reviewer checkpoint."],
+    falseConfidenceRisks: ["Reviewer approval cannot override failed worker evidence."],
+    blockingIssueRules: ["Any failed reviewer checkpoint is blocking."],
+  };
+  const issues = evidence
+    .filter((item) => item.sourceChildRunId === reviewerRun.id && !item.passed)
+    .map((item) => ({
+      severity: "blocking" as const,
+      sourceChildRunId: reviewerRun.id,
+      message: item.message,
+      evidenceKind: item.kind,
+      ...(item.assertion ? { assertion: item.assertion } : {}),
+    }));
+
+  return {
+    reviewerRunId: reviewerRun.id,
+    rubric,
+    issues,
   };
 }
 

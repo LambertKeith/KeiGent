@@ -46,6 +46,10 @@ describe("skill workbench page", () => {
           description: "Use api_key=sk-secret123456 to write files",
           tags: ["file"],
           status: "verified",
+          requiredTools: ["file_write"],
+          allowedTools: ["file_read"],
+          nonGoals: ["do not overwrite unrequested files"],
+          dangerousActions: ["rm -rf"],
           riskLevel: "R2",
           permissionsExpected: ["file.write"],
           evalCoverage: ["verified-file-positive"],
@@ -107,11 +111,17 @@ describe("skill workbench page", () => {
     expect(html).toContain("Selected skill");
     expect(html).toContain("Match explanations");
     expect(html).toContain("Governance");
+    expect(html).toContain("Tool boundaries");
+    expect(html).toContain("Non-goals and dangerous actions");
     expect(html).toContain("Eval coverage");
     expect(html).toContain("Injected with eval coverage");
     expect(html).toContain("Review before enabling");
     expect(html).toContain("Do not inject");
     expect(html).toContain("#eval/verified-file-positive");
+    expect(html).toContain("file_write");
+    expect(html).toContain("file_read");
+    expect(html).toContain("do not overwrite unrequested files");
+    expect(html).toContain("rm -rf");
     expect(html).toContain("Prefer deterministic file paths.");
     expect(html).not.toContain("sk-secret123456");
     expect(html).toContain("[REDACTED]");

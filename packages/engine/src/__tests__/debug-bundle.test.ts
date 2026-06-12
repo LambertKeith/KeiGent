@@ -74,6 +74,18 @@ function failedRecord(workflowPath: string): RunRecord {
     message: "Bearer super-secret-token failed",
     nextAction: "Inspect the failing tool output.",
   }];
+  record.automation = {
+    trigger: "manual",
+    scope: "last 20 runs",
+    noOpReason: "No triage candidates found.",
+    doesNotProve: ["No hidden failures outside token=sk-scope-secret-123456."],
+  };
+  record.proofBoundary = {
+    proven: ["tool failure captured"],
+    notProven: ["No hidden failures outside token=sk-proof-secret-123456."],
+    assumptions: ["The local run store was complete."],
+    evidenceGaps: ["No model latency trace was recorded."],
+  };
   record.nextAction = "Inspect the failing tool output.";
   record.artifacts = [{ kind: "workflow_trajectory", path: workflowPath }];
   return record;
@@ -102,6 +114,7 @@ describe("debug bundle export", () => {
         expect.objectContaining({ relativePath: "redacted-config.json" }),
         expect.objectContaining({ relativePath: "tool-summary.json" }),
         expect.objectContaining({ relativePath: "observability-summary.json" }),
+        expect.objectContaining({ relativePath: "triage-summary.json" }),
         expect.objectContaining({ relativePath: "failure-summary.md" }),
       ]),
       missingArtifacts: [],
@@ -110,6 +123,7 @@ describe("debug bundle export", () => {
     const workflow = await readFile(join(bundleDir, "workflow-trajectory.json"), "utf8");
     const config = JSON.parse(await readFile(join(bundleDir, "redacted-config.json"), "utf8"));
     const observability = JSON.parse(await readFile(join(bundleDir, "observability-summary.json"), "utf8"));
+    const triage = JSON.parse(await readFile(join(bundleDir, "triage-summary.json"), "utf8"));
     const failureSummary = await readFile(join(bundleDir, "failure-summary.md"), "utf8");
     expect(serializedRecord).not.toContain("sk-final-secret-123456");
     expect(serializedRecord).not.toContain("sk-blocking-secret-123456");
@@ -141,6 +155,23 @@ describe("debug bundle export", () => {
         modelLatency: { status: "not_recorded" },
       },
       failureTaxonomy: [{ code: "tool_unavailable", layer: "tool", count: 1 }],
+    });
+    expect(triage).toMatchObject({
+      runId: "run_failed",
+      status: "failed",
+      evidenceStatus: "failed",
+      nextAction: "Inspect the failing tool output.",
+      blockingEvidence: ["token=[REDACTED]"],
+      proofBoundary: {
+        proven: ["tool failure captured"],
+        notProven: ["No hidden failures outside token=[REDACTED]"],
+        assumptions: ["The local run store was complete."],
+        evidenceGaps: ["No model latency trace was recorded."],
+      },
+      automation: {
+        scope: "last 20 runs",
+        doesNotProve: ["No hidden failures outside token=[REDACTED]"],
+      },
     });
     expect(failureSummary).toContain("tool_unavailable");
     expect(failureSummary).toContain("Inspect the failing tool output.");

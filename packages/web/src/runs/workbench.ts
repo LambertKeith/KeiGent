@@ -1,20 +1,42 @@
 import { escapeHtml } from "../ui/html.js";
 import { normalizeRunRecord, summarizeRunRecords, type RunRecordCollectionView, type RunRecordDetailView, type RunRecordListItem } from "./model.js";
 
+export interface RunStoreMigrationReportView {
+  schemaVersion: number;
+  totalRecords: number;
+  normalizedRecords: number;
+  legacyRecords: number;
+  unsupportedRecords: number;
+  warnings: Array<{
+    runId?: string;
+    path?: string;
+    code?: string;
+    message?: string;
+    field?: string;
+  }>;
+}
+
 export interface RunWorkbenchStats {
   total: number;
   needsAction: number;
   replayable: number;
   failedOrDegraded: number;
+  schemaWarnings: number;
 }
 
 export interface RunWorkbenchView {
   collection: RunRecordCollectionView;
   selected?: RunRecordDetailView;
   stats: RunWorkbenchStats;
+  migrationReport?: RunStoreMigrationReportView;
 }
 
-export function buildRunWorkbenchView(records: unknown[], selectedRunId?: string): RunWorkbenchView {
+export function buildRunWorkbenchView(
+  records: unknown[],
+  selectedRunId?: string,
+  migrationReport?: unknown,
+): RunWorkbenchView {
+  const normalizedMigrationReport = normalizeMigrationReport(migrationReport);
   const details = records
     .map(normalizeRunRecord)
     .sort((a, b) => b.summary.createdAt.localeCompare(a.summary.createdAt));
@@ -28,8 +50,41 @@ export function buildRunWorkbenchView(records: unknown[], selectedRunId?: string
       needsAction: details.filter((detail) => detail.nextAction.required).length,
       replayable: details.filter((detail) => detail.replay.supported).length,
       failedOrDegraded: details.filter((detail) => ["failed", "degraded", "cancelled"].includes(detail.summary.status)).length,
+      schemaWarnings: normalizedMigrationReport?.warnings.length ?? 0,
     },
+    ...(normalizedMigrationReport ? { migrationReport: normalizedMigrationReport } : {}),
   };
+}
+
+function normalizeMigrationReport(input: unknown): RunStoreMigrationReportView | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const source = input as Record<string, unknown>;
+  return {
+    schemaVersion: numberValue(source.schemaVersion),
+    totalRecords: numberValue(source.totalRecords),
+    normalizedRecords: numberValue(source.normalizedRecords),
+    legacyRecords: numberValue(source.legacyRecords),
+    unsupportedRecords: numberValue(source.unsupportedRecords),
+    warnings: Array.isArray(source.warnings)
+      ? source.warnings.map(normalizeMigrationWarning)
+      : [],
+  };
+}
+
+function normalizeMigrationWarning(input: unknown): RunStoreMigrationReportView["warnings"][number] {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const source = input as Record<string, unknown>;
+  return {
+    ...(typeof source.runId === "string" ? { runId: source.runId } : {}),
+    ...(typeof source.path === "string" ? { path: source.path } : {}),
+    ...(typeof source.code === "string" ? { code: source.code } : {}),
+    ...(typeof source.message === "string" ? { message: source.message } : {}),
+    ...(typeof source.field === "string" ? { field: source.field } : {}),
+  };
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 export function renderRunWorkbench(view: RunWorkbenchView): string {
@@ -47,12 +102,15 @@ export function renderRunWorkbench(view: RunWorkbenchView): string {
       ${renderStat("Needs action", view.stats.needsAction)}
       ${renderStat("Replayable", view.stats.replayable)}
       ${renderStat("Failed/degraded", view.stats.failedOrDegraded)}
+      ${renderStat("Schema warnings", view.stats.schemaWarnings)}
     </section>
+    ${renderSchemaCompatibility(view.migrationReport)}
     <section class="workbench-grid">
       <aside class="panel run-list-panel">${renderRunList(view.collection.runs, view.selected.summary.id)}</aside>
       <section class="run-detail-stack">
         ${renderSummary(view.selected)}
         ${renderRouteAndSkills(view.selected)}
+        ${renderReview(view.selected)}
         ${renderEvidenceAndRisk(view.selected)}
         ${renderProofBoundary(view.selected)}
         ${renderAutonomy(view.selected)}
@@ -61,6 +119,46 @@ export function renderRunWorkbench(view: RunWorkbenchView): string {
         ${renderRawInspector(view.selected)}
       </section>
     </section>
+  `;
+}
+
+function renderSchemaCompatibility(report: RunStoreMigrationReportView | undefined): string {
+  if (!report || report.warnings.length === 0) return "";
+  const warnings = report.warnings.slice(0, 5).map((warning) => `
+    <li><strong>${escapeHtml(warning.code ?? "schema_warning")}</strong><span>${escapeHtml(warning.runId ?? "unknown run")}: ${escapeHtml(warning.message ?? "Run record normalized with safe defaults.")}</span></li>
+  `).join("");
+  return panel("Schema compatibility", `
+    <div class="summary-strip">
+      ${renderFact("RunRecord schema", String(report.schemaVersion))}
+      ${renderFact("Normalized records", `${report.normalizedRecords}/${report.totalRecords}`)}
+      ${renderFact("Legacy records", String(report.legacyRecords))}
+      ${renderFact("Unsupported records", String(report.unsupportedRecords))}
+    </div>
+    <ul class="audit-list">${warnings}</ul>
+  `);
+}
+
+function renderReview(run: RunRecordDetailView): string {
+  if (!run.review) return "";
+  const rubric = run.review.rubric;
+  const issues = run.review.issues.map((issue) => `
+    <li><strong>${escapeHtml(issue.severity)}</strong><span>${escapeHtml(issue.message)} (${escapeHtml(issue.evidenceKind)}, ${escapeHtml(issue.sourceChildRunId)})</span></li>
+  `).join("");
+  return `
+    <div class="split-panels">
+      ${panel("Review rubric", `
+        <div class="summary-strip">
+          ${renderFact("Reviewer run", run.review.reviewerRunId)}
+          ${renderFact("Task goal", rubric.taskGoal)}
+        </div>
+        ${renderListBlock("Success criteria", rubric.successCriteria)}
+        ${renderListBlock("Required evidence", rubric.requiredEvidence)}
+        ${renderListBlock("Forbidden claims", rubric.forbiddenClaims)}
+        ${renderListBlock("False-confidence risks", rubric.falseConfidenceRisks)}
+        ${renderListBlock("Blocking issue rules", rubric.blockingIssueRules)}
+      `)}
+      ${panel("Reviewer issues", `<ul class="audit-list">${issues || "<li>No reviewer issues recorded</li>"}</ul>`)}
+    </div>
   `;
 }
 

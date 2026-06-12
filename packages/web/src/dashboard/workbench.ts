@@ -30,19 +30,18 @@ export function sampleRealWorldEvalDashboardView(): RealWorldEvalReportView {
     durationMs: 42,
     level: "L2",
     datasetId: "local-real-task-v1",
-    totals: { total: 3, passed: 2, failed: 1 },
+    totals: { total: 3, passed: 3, failed: 0 },
     healthClaim: "Fixture-level regression, not product health",
     metrics: {
       routeAccuracy: { value: 1, label: "100.0%" },
-      taskSuccessRate: { value: 2 / 3, label: "66.7%" },
-      evidenceQuality: { value: 2 / 3, label: "66.7%" },
+      taskSuccessRate: { value: 1 / 3, label: "33.3%" },
+      evidenceQuality: { value: 1, label: "100.0%" },
       toolReliability: { value: 1, label: "100.0%" },
-      riskCompliance: { value: 2 / 3, label: "66.7%" },
+      riskCompliance: { value: 1, label: "100.0%" },
     },
-    falseSuccessCount: 1,
+    falseSuccessCount: 0,
     falseConfidenceFindings: [
       { code: "fixture_level", severity: "info", message: "Fixture-level report only." },
-      { code: "false_success", severity: "blocking", caseId: "insufficient-evidence", message: "A non-success case produced success without evidence." },
     ],
     proofBoundary: {
       proven: ["Deterministic L2 fixture cases were evaluated."],
@@ -53,7 +52,7 @@ export function sampleRealWorldEvalDashboardView(): RealWorldEvalReportView {
     cases: [
       caseView("file-summary", "Summarize file with evidence", "run_file-summary", "success", "success", true, true, true, true, true),
       caseView("replay-report", "Replay report boundary", "run_replay-report", "replay", "replay", true, true, true, true, false),
-      caseView("insufficient-evidence", "Insufficient evidence success claim", "run_insufficient-evidence", "failure", "success", false, true, false, false, true, ["false_success"], ["success without evidence"]),
+      caseView("insufficient-evidence-success-claim", "Insufficient evidence success claim", "run_insufficient-evidence-success-claim", "failure", "failure", true, true, true, true, true, ["insufficient_evidence"], ["success claim was downgraded before acceptance"]),
     ],
   };
 }

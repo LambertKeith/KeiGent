@@ -162,7 +162,7 @@ Next Action
 - replay run 明确标记 `freshExecution: false`；
 - failed run 必须突出 blocking evidence。
 
-当前实现备注（2026-06-10）：已新增前端内存事件流 Live Run Console、Web Run Launcher，以及 Run Workbench v1 静态审计 surface。Live Run Console 展示 live/replay 标签、event timeline、pending tool/checkpoint/approval 统计与 selected event inspector；Run Workbench 包含 Run list、Run summary、Route and skills、Evidence、Risk and approvals、Tools and budget、Replay and artifacts、Failures、Raw redacted record。页面使用 `RunRecord` / progress event view model，默认选择最新 run，展示 needs-action / replayable / failed-degraded 队列统计，并在 inspector 中递归脱敏。已新增 `keigent web --api` 本地 API/SSE foundation，支持读取 run store、以 `task.source=web` 发起 run、订阅 run session workflow events 并更新 Live Console；当前仍不是完整交互式 Workbench。
+当前实现备注（2026-06-12）：已新增前端内存事件流 Live Run Console、Web Run Launcher，以及 Run Workbench v1 审计 surface。Live Run Console 展示 live/replay 标签、event timeline、pending tool/checkpoint/approval 统计与 selected event inspector；Run Workbench 包含 Run list、Run summary、Route and skills、Evidence、Risk and approvals、Tools and budget、Replay and artifacts、Failures、Raw redacted record。页面使用 `RunRecord` / progress event view model，默认选择最新 run，展示 needs-action / replayable / failed-degraded 队列统计，并在 inspector 中递归脱敏。已新增 `keigent web --api` 本地 API/SSE foundation，支持读取 run store、读取 latest real-world eval report、以 `task.source=web` 发起 run、订阅 run session workflow events、更新 Live Console，并在收到 `run_finished.recordId` 后 handoff 到 Run Detail；当前仍不是完整交互式 Workbench。
 
 ### 4.4 RunRecord Completeness
 
@@ -207,13 +207,15 @@ childRole?: "worker" | "reviewer" | "verifier" | "judge";
 
 #### Schema compatibility
 
-当前 schemaVersion 为 1。下一阶段必须设计：
+当前 schemaVersion 为 1。兼容读取要求：
 
 - 旧 record 读取；
 - unknown field 容忍；
 - missing field fallback；
 - Web compatibility；
-- migration report 是否需要。
+- migration report。
+
+当前实现备注（2026-06-12）：`readRunStore` 会在兼容归一化的同时生成只读 migration report，区分 missing / unsupported schemaVersion、unknown status 与 missing core fields；报告通过 `runs list --json|--compact` 和本地 Web API 暴露，Run Workbench 显示 Schema compatibility 摘要。该流程不会自动写回或修改历史 RunRecord。
 
 #### 验收标准
 
@@ -271,7 +273,7 @@ interface SkillMatchExplanation {
 - no skill 显示 none；
 - skill match reason 可读。
 
-当前实现备注（2026-06-10）：已新增 Skill Workbench 静态治理 surface，包含 Skill list、Selected skill、Match explanations、Governance、Eval coverage、Recent matches and learning。页面展示 executable / needs-review / blocked-deprecated / eval coverage 队列统计，区分 verified、candidate、blocked、deprecated 等状态，并显示 injected、risk delta、operator message 与 eval coverage 链接。
+当前实现备注（2026-06-12）：已新增 Skill Workbench 治理 surface，包含 Skill list、Selected skill、Match explanations、Governance、Eval coverage、Recent matches and learning。页面展示 executable / needs-review / blocked-deprecated / eval coverage 队列统计，区分 verified、candidate、blocked、deprecated 等状态，并显示 injected、risk delta、operator message、source trajectory 与 eval coverage 链接。Trigger conditions 与 required/allowed tools、permissions、non-goals、dangerous actions 分开展示，避免把安全边界误当成匹配理由。CLI 同步提供只读 `skill list` / `skill inspect` inventory，能查看全部生命周期状态、source、coverage 与安全边界；当前仍是只读审计面，不包含 promotion/apply 操作。
 
 ### 4.6 Stability Hardening Gate
 
@@ -348,7 +350,7 @@ eval case
 - replay 与 fresh execution 明确分离；
 - insufficient evidence 不被记为成功。
 
-当前实现备注（2026-06-10）：已新增 Dashboard real-world eval surface，展示 route accuracy、task success、evidence quality、tool reliability、risk compliance 的分离指标；case table 包含 `runDetailHref` 指向 `#runs/<runId>`；false-confidence findings 独立展示；replay case 显示为 Replay report，不伪装 fresh execution；页面文案明确 fixture-level report 不是 product health。
+当前实现备注（2026-06-12）：已新增 Dashboard real-world eval surface，展示 route accuracy、task success、evidence quality、tool reliability、risk compliance 的分离指标；case table 包含 `runDetailHref` 指向 `#runs/<runId>`；false-confidence findings 独立展示；replay case 显示为 Replay report，不伪装 fresh execution；页面文案明确 fixture-level report 不是 product health。`eval real-world --open` 会持久化每个 L2 case 的 `RunRecord` 和 latest report，Web API 可读取 latest report，产品 E2E 覆盖 `eval case -> saved RunRecord -> Web API -> Workbench Run Detail` 链路。
 
 ---
 
@@ -413,6 +415,8 @@ interface ReviewRubric {
 - Workbench 能区分 worker / reviewer timeline；
 - reviewed-loop 有 real-world L2 fixture。
 
+当前实现备注（2026-06-12）：`reviewed-loop` 已支持 worker + readonly reviewer child run、默认 `ReviewRubric`、`ReviewSummary`、reviewer blocking issue 汇总、RunRecord 持久化与 Run Workbench 的 Review rubric / Reviewer issues 展示。reviewer 的通过不会覆盖 worker failed assertion；review issue 目前由 reviewer checkpoint evidence 派生，后续仍可扩展更细的 reviewer rubric parser。
+
 ### 6.4 Local Automation Triage
 
 #### 产品目标
@@ -460,6 +464,8 @@ Does not prove: no hidden failures outside this scope.
 - stale schema -> migration warning；
 - report contains source run ids。
 
+当前实现备注（2026-06-12）：`automation triage local` 已实现本地 run store 扫描、no-op RunRecord 写入、failed / degraded / missing evidence / stale schema 候选输出。triage 会消费 `readRunStore` 的只读 migration report；即使 legacy record 被兼容归一化为 `succeeded` + `passed`，只要存在 schema migration warning，也会以 `stale_schema` 候选进入报告，并保留 source run id、warning code、blocking schema warning 与 next action。no-op record 继续显式展示 scope 与 doesNotProve，不宣称系统健康。
+
 ### 6.5 Worktree Isolation Foundation
 
 #### 产品目标
@@ -490,6 +496,8 @@ doc/design/14-worktree-isolation-and-parallel-runs.md
 - artifact 能回收；
 - failure 不污染主 workspace。
 
+当前实现备注（2026-06-12）：已新增 worktree isolation foundation utility 与设计事实源 [`../design/14-worktree-isolation-and-parallel-runs.md`](../design/14-worktree-isolation-and-parallel-runs.md)。`createIsolatedWorkspace()` 会生成稳定 workspace id、branch naming 和 parent / child / role manifest；`collectWorkspaceArtifacts()`、`detectWorkspaceConflicts()`、`cleanupIsolatedWorkspace()` 覆盖 artifact 回收、同路径冲突检测、remove / mark-abandoned 清理语义，`canWriteWorkspace()` 明确 reviewer / verifier 不写 worker workspace。当前仍未自动执行 `git worktree add`，也未把 workspace 创建接入所有 workflow child run；因此只证明隔离基础原语和策略可用，不证明 fanout、并行调度、自动 merge 或主 workspace 污染防护已经产品化完成。
+
 ### 6.6 Schema Migration / Redaction Hardening
 
 #### 产品目标
@@ -503,6 +511,8 @@ doc/design/14-worktree-isolation-and-parallel-runs.md
 - unknown status fallback；
 - missing field defaults；
 - migration report。
+
+当前实现备注（2026-06-12）：已实现只读 RunRecord migration diagnostics，CLI / Web API / Workbench 可查看归一化数量、legacy / unsupported 数量与逐条 warning；仍未实现自动重写或批量迁移，避免静默改变历史审计数据。
 
 #### Redaction
 
@@ -546,6 +556,8 @@ keigent eval real-world --open
 - failure code 高亮；
 - next action 可见；
 - 正式 CLI 入口必须减少 pnpm wrapper 噪音。
+
+当前实现备注（2026-06-12）：`runs list/show/open/replay/triage/debug-bundle` 已有 CLI 入口与 `--json|--compact` 输出。`runs triage` 会输出 blocking failure、failed / degraded / cancelled review、missing evidence 与 stale schema 候选；triage 消费只读 migration diagnostics，因此 schema warning 不会因为兼容归一化为 `succeeded` 而从 operator 队列消失。每个候选包含 source run id、reason、blocking 信息与 next action。
 
 ---
 
@@ -599,6 +611,8 @@ approvalPolicy
 - secret 不泄漏；
 - external source 进入 evidence；
 - write path 明确 unsupported。
+
+当前实现备注（2026-06-12）：已新增 readonly connector baseline：`git_status`、`http_get`、`github_repo_read` 均通过 `ToolRegistry` 注册为 `readonly / R0 / sideEffect=none / reversible=true`，并声明 timeout / output limit。Git 与 HTTP / GitHub connector 会输出或保留 source，失败使用 `connector_failure=*`，write-like 参数使用 `write_unsupported=*`，HTTP / GitHub 响应经过 redaction；测试覆盖无需审批、path escape、secret redaction、write-like option 拒绝和 connector failure。该基线不包含认证 GitHub API、任意自定义 headers、外部写 connector 或“connector 文本即可信 evidence”的语义。
 
 ### 7.4 L3 Operator Scenario Eval
 
@@ -655,6 +669,7 @@ workflow-trajectory.json
 eval-case.json
 redacted-config.json
 tool-summary.json
+triage-summary.json
 failure-summary.md
 ```
 
@@ -662,7 +677,7 @@ failure-summary.md
 
 用户可以把一个 debug bundle 发给开发者，开发者不用复现环境也能判断大致问题。
 
-当前实现备注（2026-06-10）：debug bundle 已包含 redacted record/artifacts/config、tool summary、failure summary、observability summary。observability summary 覆盖 structured event timeline、budget/recovery、timeout/abort、failure taxonomy，并对尚未记录的 tool/model latency 显示 `not_recorded`。
+当前实现备注（2026-06-12）：debug bundle 已包含 redacted record/artifacts/config、tool summary、failure summary、observability summary 与 triage summary。observability summary 覆盖 structured event timeline、budget/recovery、timeout/abort、failure taxonomy，并对尚未记录的 tool/model latency 显示 `not_recorded`。triage summary 汇总 status、blocking evidence、failure next actions、proofBoundary、automation scope / doesNotProve 与 replay boundary，让 reviewer 不复现环境也能看到 false-confidence 边界。
 
 ### 7.6 Release / Packaging / Upgrade Path
 
@@ -685,7 +700,7 @@ failure-summary.md
 
 特别要解决：通过 pnpm 启动时，JSON 输出前可能有 wrapper 噪音；正式 CLI 必须提供更干净的入口。
 
-当前实现备注（2026-06-10）：已具备 CLI bin shim、package build metadata、secret-safe sample config、doctor 改进、Node 22+ engine 声明、`configVersion: 1` 兼容边界、Apache-2.0 package metadata 与 `CONTRIBUTING.md`。legacy 无版本 config 在解析时升级为 v1，doctor 会拒绝未知未来版本。first-run guide、config upgrade policy、release checklist、changelog 与版本兼容边界已收敛到 [`doc/product/10-release-and-upgrade.md`](10-release-and-upgrade.md)。
+当前实现备注（2026-06-12）：已具备 CLI bin shim、package build metadata、secret-safe sample config、doctor 改进、Node 22+ engine 声明、`configVersion: 1` 兼容边界、Apache-2.0 package metadata 与 `CONTRIBUTING.md`。legacy 无版本 config 在解析时升级为 v1，doctor 会拒绝未知未来版本。first-run guide、config upgrade policy、release checklist、changelog 与版本兼容边界已收敛到 [`doc/product/10-release-and-upgrade.md`](10-release-and-upgrade.md)。CLI 额外提供只读 `guide first-run [--json|--compact]` 和 `guide release-checklist [--json|--compact]`。first-run guide 输出安装、config show、doctor、smoke / real-world eval、bin JSON 和 Web API print 的可复现步骤；每步带 `gate`、`proves`、`doesNotProve`，并明确不写配置、不跑网络检查、不证明产品健康。release-checklist guide 输出 release gates、manual checks 与边界说明，但不运行 gate、不修改 workspace、不宣称 release ready。
 
 ### 7.7 Performance / Budget Controls
 

@@ -2,7 +2,7 @@ import { once } from "node:events";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RunRecord, WorkflowEvent, WorkflowResult } from "@keigent/engine";
+import type { RealWorldEvalReport, RunRecord, RunStoreReadResult, WorkflowEvent, WorkflowResult } from "@keigent/engine";
 import { createWebApiServer } from "../web-api-server.js";
 
 const servers: Server[] = [];
@@ -26,10 +26,19 @@ describe("web API server", () => {
   });
 
   it("reads saved run records for the Workbench", async () => {
-    const readRunStore = vi.fn(async () => ({
+    const store = {
       records: [{ id: "run_saved", status: "succeeded" } as RunRecord],
       errors: [],
-    }));
+      migrationReport: {
+        schemaVersion: 1,
+        totalRecords: 1,
+        normalizedRecords: 0,
+        legacyRecords: 0,
+        unsupportedRecords: 0,
+        warnings: [],
+      },
+    } satisfies RunStoreReadResult;
+    const readRunStore = vi.fn(async () => store);
     const baseUrl = await serve(createWebApiServer({ executeRun: neverExecute, readRunStore }));
 
     const response = await fetch(`${baseUrl}/api/runs`);
@@ -38,8 +47,60 @@ describe("web API server", () => {
     await expect(response.json()).resolves.toMatchObject({
       records: [{ id: "run_saved", status: "succeeded" }],
       errors: [],
+      migrationReport: {
+        schemaVersion: 1,
+        totalRecords: 1,
+        warnings: [],
+      },
     });
     expect(readRunStore).toHaveBeenCalledOnce();
+  });
+
+  it("serves the latest real-world eval report for the Workbench dashboard", async () => {
+    const report: RealWorldEvalReport = {
+      startedAt: "2026-06-10T00:00:00.000Z",
+      durationMs: 1,
+      level: "L2",
+      datasetId: "local-real-task-v1",
+      totals: { total: 1, passed: 1, failed: 0 },
+      routeAccuracy: 1,
+      taskSuccessRate: 1,
+      evidenceQuality: 1,
+      toolReliability: 1,
+      riskCompliance: 1,
+      falseSuccessCount: 0,
+      falseConfidenceFindings: [],
+      proofBoundary: { proven: [], notProven: [], assumptions: [], evidenceGaps: [] },
+      cases: [],
+    };
+    const readRealWorldEvalReport = vi.fn(async () => report);
+    const baseUrl = await serve(createWebApiServer({ executeRun: neverExecute, readRealWorldEvalReport }));
+
+    const response = await fetch(`${baseUrl}/api/evals/real-world/local-real-task-v1/latest`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      datasetId: "local-real-task-v1",
+      totals: { total: 1 },
+    });
+    expect(readRealWorldEvalReport).toHaveBeenCalledWith(expect.objectContaining({
+      datasetId: "local-real-task-v1",
+    }));
+  });
+
+  it("returns 404 when the requested real-world eval report is missing", async () => {
+    const baseUrl = await serve(createWebApiServer({
+      executeRun: neverExecute,
+      readRealWorldEvalReport: vi.fn(async () => undefined),
+    }));
+
+    const response = await fetch(`${baseUrl}/api/evals/real-world/missing/latest`);
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "eval report not found",
+      datasetId: "missing",
+    });
   });
 
   it("starts a web-sourced run and replays progress events over SSE", async () => {

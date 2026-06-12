@@ -168,6 +168,73 @@ describe("WorkflowRunner", () => {
     expect(result.finalResponse).toContain("review passed");
   });
 
+  it("records reviewed-loop rubric and reviewer issues without letting reviewer override worker evidence", async () => {
+    const reviewedTask = task({
+      successDef: {
+        goal: "Review rubric",
+        assertions: [{ description: "reviewer accepts result", signal: "text" }],
+      },
+    });
+    const workerTrajectory = trajectory({
+      steps: [{
+        iteration: 1,
+        kind: "checkpoint",
+        checkpointDesc: "worker evidence",
+        verdictPassed: true,
+        verdictEvidence: "worker evidence passed",
+        snapshot: { raw: {} },
+      }],
+      finalResponse: "worker done",
+    });
+    const reviewerTrajectory = trajectory({
+      steps: [{
+        iteration: 1,
+        kind: "checkpoint",
+        checkpointDesc: "reviewer accepts result",
+        verdictPassed: false,
+        verdictEvidence: "missing source attribution",
+        snapshot: { raw: {} },
+      }],
+      finalResponse: "review failed",
+    });
+    const runner = new WorkflowRunner({
+      async runChild(child) {
+        return child.role === "worker"
+          ? loopResult({ finalResponse: "worker done", checkpointsPassed: 1, trajectory: workerTrajectory })
+          : loopResult({ finalResponse: "review failed", checkpointsPassed: 0, trajectory: reviewerTrajectory });
+      },
+    });
+
+    const result = await runner.run(createWorkflowSpec({ id: "wf-reviewed-issues", task: reviewedTask, mode: "reviewed-loop" }));
+
+    expect(result.exitReason).toBe("verified_failure");
+    expect(result.review).toMatchObject({
+      reviewerRunId: "wf-reviewed-issues:reviewer-1",
+      rubric: {
+        taskGoal: "Do the thing",
+        successCriteria: ["[signal:text] reviewer accepts result"],
+      },
+      issues: [{
+        severity: "blocking",
+        sourceChildRunId: "wf-reviewed-issues:reviewer-1",
+        message: "missing source attribution",
+        evidenceKind: "checkpoint",
+      }],
+    });
+    expect(result.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "child_result",
+        passed: true,
+        message: "worker exited with success",
+      }),
+      expect.objectContaining({
+        kind: "checkpoint",
+        passed: false,
+        message: "missing source attribution",
+      }),
+    ]));
+  });
+
   it("maps child error, max_iterations, escalated, and thrown errors to deterministic workflow exits", async () => {
     const cases = [
       { child: loopResult({ exitReason: "error" }), expected: "child_error" },

@@ -53,7 +53,7 @@ V1 明确不做：
 
 不能把它做成只有气泡的聊天 UI。
 
-当前实现备注（2026-06-10）：已实现前端内存事件流 Live Run Console view/render 层，支持 live/replay 标签、event timeline、pending tool/checkpoint/approval 统计和 selected event inspector。已新增 Web Run Launcher 与本地 Web API/SSE foundation：`keigent web --api` 启动 API，`POST /api/runs` 以 `task.source=web` 发起 run，`GET /api/runs/:id/events` 推送 workflow progress events，前端可通过 `VITE_KEIGENT_API_URL` 读取 run store、提交 task goal、订阅 run session events 并更新 Live Console。当前仍未提供完整交互式 Workbench。
+当前实现备注（2026-06-12）：已实现前端内存事件流 Live Run Console view/render 层，支持 live/replay 标签、event timeline、pending tool/checkpoint/approval 统计和 selected event inspector。已新增 Web Run Launcher 与本地 Web API/SSE foundation：`keigent web --api` 启动 API，`POST /api/runs` 以 `task.source=web` 发起 run，`GET /api/runs/:id/events` 推送 workflow progress events，`GET /api/evals/real-world/:datasetId/latest` 提供 latest real-world eval report，前端可通过 `VITE_KEIGENT_API_URL` 读取 run store、读取 eval report、提交 task goal、订阅 run session events并在 run 完成后跳转 Run Detail handoff。Run Workbench 还会展示只读 Schema compatibility 摘要，标出 legacy / unsupported / normalized RunRecord；当前仍未提供完整交互式 Workbench。
 
 ## 4. Trajectory Replay
 

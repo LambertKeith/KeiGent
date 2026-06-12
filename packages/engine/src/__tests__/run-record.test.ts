@@ -315,6 +315,65 @@ describe("RunRecord", () => {
     expect(record.autonomy).toEqual(result.autonomy);
   });
 
+  it("persists reviewed-loop rubric and reviewer issues into run records", () => {
+    const result = workflowResult("verified_failure");
+    result.mode = "reviewed-loop";
+    result.workflowId = "wf-reviewed-record";
+    result.childRuns = [
+      result.childRuns[0]!,
+      {
+        id: "wf-reviewed-record:reviewer-1",
+        role: "reviewer",
+        result: loopResult({ finalResponse: "review failed", checkpointsPassed: 0 }),
+        trajectory: loopResult({ finalResponse: "review failed", checkpointsPassed: 0 }).trajectory,
+      },
+    ];
+    result.review = {
+      reviewerRunId: "wf-reviewed-record:reviewer-1",
+      rubric: {
+        taskGoal: "Create hello.txt",
+        successCriteria: ["reviewer accepts result"],
+        requiredEvidence: ["reviewer checkpoint verdict"],
+        forbiddenClaims: ["Do not claim reviewer acceptance without a passed reviewer checkpoint."],
+        falseConfidenceRisks: ["Reviewer approval cannot override failed worker evidence."],
+        blockingIssueRules: ["Any failed reviewer checkpoint is blocking."],
+      },
+      issues: [{
+        severity: "blocking",
+        sourceChildRunId: "wf-reviewed-record:reviewer-1",
+        message: "missing source attribution",
+        evidenceKind: "checkpoint",
+      }],
+    };
+    result.trajectory = {
+      ...result.trajectory,
+      workflowId: result.workflowId,
+      mode: "reviewed-loop",
+      childRuns: result.childRuns,
+      review: result.review,
+    };
+
+    const record = buildRunRecordFromWorkflowResult(result, { id: "run_reviewed" });
+
+    expect(record.review).toMatchObject({
+      reviewerRunId: "wf-reviewed-record:reviewer-1",
+      rubric: {
+        taskGoal: "Create hello.txt",
+        successCriteria: ["reviewer accepts result"],
+      },
+      issues: [{
+        severity: "blocking",
+        sourceChildRunId: "wf-reviewed-record:reviewer-1",
+        message: "missing source attribution",
+      }],
+    });
+    expect(record.childRuns).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: "worker" }),
+      expect.objectContaining({ role: "reviewer" }),
+    ]));
+  });
+
+
   it("marks timeout and replay records without overriding fresh execution semantics", () => {
     const record = buildRunRecordFromWorkflowResult(workflowResult("timeout"), {
       id: "run_timeout",
@@ -452,5 +511,84 @@ describe("RunRecord", () => {
       redaction: { applied: true, rawPayloadStored: false },
     });
     expect(JSON.stringify(record)).not.toContain("sk-legacy-secret-123456");
+  });
+
+  it("reports migration diagnostics for legacy and unsupported run records", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "keigent-run-store-migration-"));
+    await mkdir(join(dir, "legacy"), { recursive: true });
+    await writeFile(join(dir, "legacy", "record.json"), JSON.stringify({
+      id: "legacy",
+      createdAt: "2026-06-10T00:00:00.000Z",
+      status: "mystery",
+      task: { goal: "Legacy run" },
+    }), "utf8");
+    await mkdir(join(dir, "future"), { recursive: true });
+    await writeFile(join(dir, "future", "record.json"), JSON.stringify({
+      schemaVersion: 99,
+      id: "future",
+      createdAt: "2026-06-11T00:00:00.000Z",
+      status: "succeeded",
+      task: { goal: "Future run", source: "cli" },
+    }), "utf8");
+
+    const store = await readRunStore({ runsDir: dir });
+
+    expect(store.migrationReport).toMatchObject({
+      schemaVersion: 1,
+      totalRecords: 2,
+      normalizedRecords: 2,
+      legacyRecords: 1,
+      unsupportedRecords: 1,
+      warnings: expect.arrayContaining([
+        expect.objectContaining({
+          runId: "legacy",
+          code: "missing_schema_version",
+          message: "record schemaVersion is missing; normalized as schemaVersion 1",
+        }),
+        expect.objectContaining({
+          runId: "legacy",
+          code: "unknown_status",
+          field: "status",
+          originalValue: "mystery",
+          normalizedValue: "unknown",
+        }),
+        expect.objectContaining({
+          runId: "future",
+          code: "unsupported_schema_version",
+          originalValue: 99,
+          normalizedValue: 1,
+        }),
+      ]),
+    });
+  });
+
+  it("does not leak secret-like values through migration diagnostics", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "keigent-run-store-migration-redaction-"));
+    await mkdir(join(dir, "hostile"), { recursive: true });
+    await writeFile(join(dir, "hostile", "record.json"), JSON.stringify({
+      schemaVersion: { apiKey: "sk-schema-secret-123456" },
+      id: "hostile",
+      createdAt: "2026-06-11T00:00:00.000Z",
+      status: { authorization: "Bearer status-secret-token" },
+      task: { goal: "Hostile legacy run" },
+    }), "utf8");
+
+    const store = await readRunStore({ runsDir: dir });
+    const serialized = JSON.stringify(store.migrationReport);
+
+    expect(serialized).not.toContain("sk-schema-secret-123456");
+    expect(serialized).not.toContain("status-secret-token");
+    expect(store.migrationReport.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        runId: "hostile",
+        code: "unsupported_schema_version",
+        originalValue: "[non-scalar]",
+      }),
+      expect.objectContaining({
+        runId: "hostile",
+        code: "unknown_status",
+        originalValue: "[non-scalar]",
+      }),
+    ]));
   });
 });

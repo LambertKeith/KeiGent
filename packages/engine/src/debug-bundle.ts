@@ -15,6 +15,7 @@ export type DebugBundleFileKind =
   | "redacted_config"
   | "observability_summary"
   | "tool_summary"
+  | "triage_summary"
   | "failure_summary";
 
 export interface ExportRunDebugBundleOptions {
@@ -54,6 +55,7 @@ export async function exportRunDebugBundle(
   files.push(await writeJsonFile(options.bundleDir, "redacted-config.json", "redacted_config", redactObject(options.config ?? {})));
   files.push(await writeJsonFile(options.bundleDir, "tool-summary.json", "tool_summary", toolSummary(record)));
   files.push(await writeJsonFile(options.bundleDir, "observability-summary.json", "observability_summary", observabilitySummary(record)));
+  files.push(await writeJsonFile(options.bundleDir, "triage-summary.json", "triage_summary", triageSummary(record)));
   files.push(await writeTextFile(options.bundleDir, "failure-summary.md", "failure_summary", failureSummary(record)));
 
   for (const artifact of record.artifacts) {
@@ -175,6 +177,38 @@ function observabilitySummary(record: RunRecord): Record<string, unknown> {
       modelLatency: { status: "not_recorded" },
     },
     failureTaxonomy: [...failureTaxonomy.values()],
+  }) as Record<string, unknown>;
+}
+
+function triageSummary(record: RunRecord): Record<string, unknown> {
+  return redactObject({
+    runId: record.id,
+    status: record.status,
+    task: {
+      source: record.task.source,
+      goal: record.task.goal,
+      resolvedProfile: record.task.resolvedProfile,
+      resolvedWorkflowMode: record.task.resolvedWorkflowMode,
+    },
+    evidenceStatus: record.evidence.status,
+    blockingEvidence: record.evidence.blocking,
+    failures: record.failures.map((failure) => ({
+      code: failure.code,
+      layer: failure.layer,
+      message: failure.message,
+      nextAction: failure.nextAction,
+    })),
+    proofBoundary: record.proofBoundary,
+    automation: record.automation
+      ? {
+          trigger: record.automation.trigger,
+          scope: record.automation.scope,
+          noOpReason: record.automation.noOpReason,
+          doesNotProve: record.automation.doesNotProve,
+        }
+      : undefined,
+    replay: record.replay,
+    nextAction: record.nextAction,
   }) as Record<string, unknown>;
 }
 

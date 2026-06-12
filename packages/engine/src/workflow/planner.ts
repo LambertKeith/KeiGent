@@ -1,5 +1,6 @@
 import type { Task } from "../types.js";
-import type { ExecutionMode, WorkflowBudget, WorkflowPolicy, WorkflowSpec, WorkflowVerificationPolicy } from "./types.js";
+import { describeAssertion } from "../assertions.js";
+import type { ExecutionMode, ReviewRubric, WorkflowBudget, WorkflowPolicy, WorkflowReviewPolicy, WorkflowSpec, WorkflowVerificationPolicy } from "./types.js";
 
 export const DEFAULT_WORKFLOW_BUDGET: WorkflowBudget = {
   maxChildRuns: 1,
@@ -24,6 +25,7 @@ export function createWorkflowSpec(input: {
   budget?: Partial<WorkflowBudget>;
   policy?: WorkflowPolicy;
   verification?: WorkflowVerificationPolicy;
+  review?: WorkflowReviewPolicy;
 }): WorkflowSpec {
   const mode = input.mode ?? chooseExecutionMode(input.task);
   if (mode === "reviewed-loop" && !input.task.successDef?.assertions?.length) {
@@ -51,5 +53,17 @@ export function createWorkflowSpec(input: {
       mode === "verified-loop"
         ? { requirePassedCheckpoint: true, minPassedCheckpoints: 1, ...input.verification }
         : undefined,
+    ...(mode === "reviewed-loop" ? { review: input.review ?? { rubric: defaultReviewRubric(input.task) } } : {}),
+  };
+}
+
+function defaultReviewRubric(task: Task): ReviewRubric {
+  return {
+    taskGoal: task.goal,
+    successCriteria: task.successDef?.assertions.map(describeAssertion) ?? [],
+    requiredEvidence: ["reviewer checkpoint verdict"],
+    forbiddenClaims: ["Do not claim reviewer acceptance without a passed reviewer checkpoint."],
+    falseConfidenceRisks: ["Reviewer approval cannot override failed worker evidence."],
+    blockingIssueRules: ["Any failed reviewer checkpoint is blocking."],
   };
 }

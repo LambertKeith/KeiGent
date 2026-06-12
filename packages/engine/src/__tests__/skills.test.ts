@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import { loadSkillContext } from "../skills.js";
+import { loadSkillCatalog, loadSkillContext } from "../skills.js";
 
 async function writeSkill(root: string, dir: string, content: string): Promise<void> {
   const skillDir = join(root, dir);
@@ -146,5 +146,94 @@ Learning note body.
     await expect(context.loadBody("risky-skill")).resolves.toBeNull();
     await expect(context.loadBody("learned-note")).resolves.toBeNull();
     await expect(context.loadBody("draft-skill")).resolves.toBeNull();
+  });
+});
+
+describe("loadSkillCatalog", () => {
+  it("keeps governance metadata for executable and non-executable skills", async () => {
+    const root = await mkdtemp(join(tmpdir(), "keigent-skill-catalog-"));
+    await writeSkill(root, "verified", `---
+name: web-summarize
+description: Summarize web pages with evidence
+status: verified
+required_tools: [browser.open, browser.read]
+allowed_tools: [browser.open, browser.read]
+non_goals: [submit forms]
+dangerous_actions: [purchase items]
+permissions_expected: [network.read]
+source_type: human-authored
+source_trajectory_id: run-verified
+eval_coverage: [web-summarize-positive]
+---
+Verified body should stay out of catalog output.
+`);
+    await writeSkill(root, "blocked", `---
+name: shell-cleanup
+description: Cleanup with shell
+status: blocked
+blocked_reason: deletes files without approval
+eval_coverage: [shell-cleanup-negative]
+---
+Blocked body.
+`);
+    await writeSkill(root, "deprecated", `---
+name: old-browser
+description: Deprecated browser workflow
+status: deprecated
+deprecated_reason: replaced by web-summarize
+---
+Deprecated body.
+`);
+    await writeSkill(root, "candidate", `---
+name: candidate-web
+description: Candidate web workflow
+status: candidate
+eval_coverage: [candidate-web-positive]
+---
+Candidate body.
+`);
+
+    const catalog = await loadSkillCatalog(root);
+
+    expect(catalog.map((skill) => skill.meta.name).sort()).toEqual([
+      "candidate-web",
+      "old-browser",
+      "shell-cleanup",
+      "web-summarize",
+    ]);
+    expect(catalog.find((skill) => skill.meta.name === "web-summarize")).toMatchObject({
+      executable: true,
+      meta: {
+        status: "verified",
+        requiredTools: ["browser.open", "browser.read"],
+        allowedTools: ["browser.open", "browser.read"],
+        nonGoals: ["submit forms"],
+        dangerousActions: ["purchase items"],
+        permissionsExpected: ["network.read"],
+        source: { type: "human-authored", trajectoryId: "run-verified" },
+        evalCoverage: ["web-summarize-positive"],
+      },
+    });
+    expect(catalog.find((skill) => skill.meta.name === "shell-cleanup")).toMatchObject({
+      executable: false,
+      meta: {
+        status: "blocked",
+        blockedReason: "deletes files without approval",
+      },
+    });
+    expect(catalog.find((skill) => skill.meta.name === "old-browser")).toMatchObject({
+      executable: false,
+      meta: {
+        status: "deprecated",
+        deprecatedReason: "replaced by web-summarize",
+      },
+    });
+    expect(catalog.find((skill) => skill.meta.name === "candidate-web")).toMatchObject({
+      executable: false,
+      meta: {
+        status: "candidate",
+        evalCoverage: ["candidate-web-positive"],
+      },
+    });
   });
 });

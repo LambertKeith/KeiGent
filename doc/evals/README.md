@@ -13,11 +13,14 @@
 ```bash
 corepack pnpm --filter @keigent/engine eval:real-world -- --compact
 corepack pnpm --filter @keigent/cli start eval real-world --compact
+corepack pnpm --filter @keigent/cli start eval real-world --compact --open
 ```
 
 边界：L2 real-world fixture 只证明确定性本地 case 被执行和记录；它不证明产品健康、生产可用性、外部系统状态或真人验收。
 
 L2 report 现在包含 proof boundary：每个 case 必须说明已证明内容、未证明内容、假设和 evidence gaps。新增 self-repair / budget-exhausted fixture 会进入 autonomy summary，用于防止“失败后直接问人”或“repair 失败伪装成功”。
+
+`real-world --open` 会把 L2 fixture 中每个 case 的 `RunRecord` 写入 run store，并把 latest report 写入 `evals/real-world/<dataset>/latest.json`，随后在报告中输出 Workbench dashboard 链接。该入口用于验证 `eval case -> saved RunRecord -> Web API -> Workbench Run Detail` 的复盘链路；它仍然只是 fixture 级证明，不代表生产健康。
 
 当前本地 L3 operator scenario fixture 入口：
 
@@ -39,7 +42,7 @@ corepack pnpm --filter @keigent/cli exec vitest run src/__tests__/product-e2e.te
 corepack pnpm --filter @keigent/web exec vitest run src/__tests__/run-workbench.test.ts
 ```
 
-该链路验证 CLI 持久化的 RunRecord 可通过本地 Web API 被 Workbench 渲染，并展示 proof boundary、autonomy、repair attempts 和 next action。
+该链路验证 CLI 持久化的 RunRecord 和 real-world eval case RunRecord 可通过本地 Web API 被 Workbench 渲染，并展示 proof boundary、autonomy、repair attempts、replay boundary、no-op scope 和 next action。
 
 最小 sign-off 形态：
 

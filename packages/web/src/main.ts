@@ -3,20 +3,22 @@ import { hashForSection, parseHashRoute, type WorkbenchRoute } from "./app/hash-
 import { apiBaseUrlFromEnv, createKeigentApiClient } from "./api/client.js";
 import { appendProgressEvents } from "./conversation/live-console.js";
 import type { NormalizeRunOptions, ProgressEvent } from "./conversation/normalize.js";
-import { progressEventsFromStreamEvent, renderWebRunLauncher, type WebRunStreamEvent } from "./conversation/web-run.js";
+import { auditHandoffFromStreamEvent, progressEventsFromStreamEvent, renderWebRunLauncher, type WebRunAuditHandoff, type WebRunStreamEvent } from "./conversation/web-run.js";
+import { normalizeRealWorldEvalReport } from "./dashboard/report-model.js";
 import { renderRealWorldEvalDashboard, sampleRealWorldEvalDashboardView } from "./dashboard/workbench.js";
 import { SAMPLE_CONFIG_VIEW, deriveConfigStatus } from "./config/config-view.js";
+import { demoRunRecords } from "./runs/demo-records.js";
 import { buildRunWorkbenchView, renderRunWorkbench } from "./runs/workbench.js";
 import { buildSkillWorkbenchView, renderSkillWorkbench, sampleSkillInputs } from "./skills/workbench.js";
 import { escapeHtml } from "./ui/html.js";
 import "./styles.css";
-import type { RunRecord } from "@keigent/engine";
 import type { SkillLibraryInput } from "./skills/model.js";
 
 const apiBaseUrl = apiBaseUrlFromEnv(import.meta.env as Record<string, unknown>);
 const apiClient = apiBaseUrl ? createKeigentApiClient({ baseUrl: apiBaseUrl }) : undefined;
 let activeRunSource: EventSource | undefined;
 let launcherError: string | undefined;
+let latestAuditHandoff: WebRunAuditHandoff | undefined;
 
 const demoEvents: ProgressEvent[] = [
   { kind: "profile_selected", profile: "convergent-exec", via: "rule", ruleId: "skill_match", rationale: "任务匹配执行 skill file-write", signals: ["skill:file-write", "score:17"] },
@@ -35,117 +37,6 @@ let conversationRun: NormalizeRunOptions = {
   mode: "replay",
   task: demoTask,
   events: demoEvents,
-};
-
-const demoRunRecord: RunRecord = {
-  schemaVersion: 1,
-  id: "run_demo",
-  createdAt: "2026-06-10T00:00:00.000Z",
-  updatedAt: "2026-06-10T00:00:01.000Z",
-  status: "succeeded",
-  task: {
-    goal: "Create hello.txt and verify it",
-    source: "cli",
-    requestedProfile: "auto",
-    resolvedProfile: "convergent-exec",
-    requestedWorkflowMode: "verified-loop",
-    resolvedWorkflowMode: "verified-loop",
-  },
-  route: {
-    selectedProfile: "convergent-exec",
-    source: "rule",
-    ruleId: "skill_match",
-    rationale: "matched file-write",
-    matchedSkillIds: ["file-write"],
-  },
-  workflow: {
-    id: "wf_demo",
-    mode: "verified-loop",
-    exitReason: "success",
-    childRuns: 1,
-    budget: {
-      maxChildRuns: 1,
-      maxIterationsPerRun: 3,
-      maxAggregateIterations: 3,
-      maxToolCallsPerRun: 5,
-      maxAggregateToolCalls: 5,
-      maxTokenEstimatePerRun: 8_000,
-      maxAggregateTokenEstimate: 8_000,
-      maxRecoveryAttemptsPerRun: 2,
-      timeoutMs: 120_000,
-    },
-    budgetUsage: {
-      childRuns: 1,
-      iterations: 2,
-      toolCalls: 1,
-      tokenEstimate: 120,
-      providerUsage: {
-        inputTokens: 100,
-        outputTokens: 25,
-        cacheReadTokens: 10,
-        cacheWriteTokens: 5,
-        totalTokens: 140,
-        costUsd: 0.075,
-        costStatus: "priced",
-      },
-      recoveryAttempts: 0,
-      checkpointsPassed: 1,
-      durationMs: 20,
-    },
-    budgetExceeded: false,
-  },
-  execution: {
-    iterations: 2,
-    totalToolCalls: 1,
-    successfulToolCalls: 1,
-    failedToolCalls: 0,
-    checkpointCount: 1,
-    passedCheckpoints: 1,
-    durationMs: 20,
-    exitReason: "success",
-    finalResponseSummary: "hello.txt created",
-    eventCounts: { profile_selected: 1, tool_call: 1, checkpoint: 1 },
-  },
-  evidence: { status: "passed", total: 1, passed: 1, failed: 0, sources: ["checkpoint"], blocking: [] },
-  risk: {
-    highestRiskLevel: "R3",
-    permissionClassesUsed: ["write"],
-    sideEffectsAttempted: 1,
-    sideEffectsSucceeded: 1,
-    externalSideEffects: 0,
-    irreversibleActions: 0,
-    approvalRequired: true,
-  },
-  approvals: [{
-    toolName: "file_write",
-    approved: true,
-    decidedAt: "2026-06-10T00:00:01.000Z",
-    riskLevel: "R3",
-    permission: "write",
-    sideEffect: "local",
-    reversible: true,
-    targetResource: "workspace:hello.txt",
-  }],
-  failures: [],
-  artifacts: [{ kind: "workflow_trajectory", path: "~/.keigent/skills/.trajectories/workflows/wf_demo.json" }],
-  replay: {
-    supported: true,
-    trajectoryPath: "~/.keigent/skills/.trajectories/workflows/wf_demo.json",
-    trajectorySchemaVersion: 1,
-    freshExecution: true,
-  },
-  autonomy: {
-    outcome: "completed_without_escalation",
-    repairAttempts: [],
-    escalations: [],
-  },
-  proofBoundary: {
-    proven: ["Evidence passed: hello.txt exists"],
-    notProven: ["External production health is not proven by this run."],
-    assumptions: ["Demo fixture evidence is representative for this local shell only."],
-    evidenceGaps: [],
-  },
-  redaction: { applied: true, rawPayloadStored: false },
 };
 
 const demoSkillLibrary: SkillLibraryInput = {
@@ -213,13 +104,13 @@ async function renderRuns(selectedRunId?: string): Promise<string> {
   if (apiClient) {
     try {
       const store = await apiClient.fetchRunStore();
-      return renderRunWorkbench(buildRunWorkbenchView(store.records, selectedRunId));
+      return renderRunWorkbench(buildRunWorkbenchView(store.records, selectedRunId, store.migrationReport));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return `${renderRunWorkbench(buildRunWorkbenchView([demoRunRecord], selectedRunId))}<section class="panel warning"><h2>Local API unavailable</h2><p>${escapeHtml(message)}</p></section>`;
+      return `${renderRunWorkbench(buildRunWorkbenchView(demoRunRecords, selectedRunId))}<section class="panel warning"><h2>Local API unavailable</h2><p>${escapeHtml(message)}</p></section>`;
     }
   }
-  return renderRunWorkbench(buildRunWorkbenchView([demoRunRecord], selectedRunId));
+  return renderRunWorkbench(buildRunWorkbenchView(demoRunRecords, selectedRunId));
 }
 
 function renderConversation(): string {
@@ -227,10 +118,21 @@ function renderConversation(): string {
     apiEnabled: Boolean(apiClient),
     run: conversationRun,
     ...(launcherError ? { error: launcherError } : {}),
+    ...(latestAuditHandoff ? { auditHandoff: latestAuditHandoff } : {}),
   });
 }
 
-function renderDashboard(evalDatasetId?: string): string {
+async function renderDashboard(evalDatasetId?: string): Promise<string> {
+  if (evalDatasetId && apiClient) {
+    try {
+      const report = await apiClient.fetchLatestRealWorldEvalReport(evalDatasetId);
+      return renderRealWorldEvalDashboard(normalizeRealWorldEvalReport(report as Parameters<typeof normalizeRealWorldEvalReport>[0]));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return `<section class="panel warning"><h2>Eval report unavailable</h2><p>${escapeHtml(message)}</p></section>${renderRealWorldEvalDashboard(sampleRealWorldEvalDashboardView())}`;
+    }
+  }
+
   const dashboard = renderRealWorldEvalDashboard(sampleRealWorldEvalDashboardView());
   if (!evalDatasetId) return dashboard;
   return `<section class="panel"><h2>Selected eval dataset</h2><p>${escapeHtml(evalDatasetId)}</p></section>${dashboard}`;
@@ -285,6 +187,7 @@ function wireWebRunLauncher(app: HTMLDivElement): void {
 async function startWebRun(goal: string): Promise<void> {
   activeRunSource?.close();
   launcherError = undefined;
+  latestAuditHandoff = undefined;
   conversationRun = { id: "starting", mode: "live", task: { goal }, events: [] };
   void mount({ section: "conversation" });
 
@@ -302,6 +205,11 @@ async function startWebRun(goal: string): Promise<void> {
         if (events.length > 0) {
           conversationRun = appendProgressEvents(conversationRun, events);
           void mount({ section: "conversation" });
+        }
+        const handoff = auditHandoffFromStreamEvent(streamEvent);
+        if (handoff) {
+          latestAuditHandoff = handoff;
+          window.location.hash = handoff.href;
         }
         if (streamEvent.kind === "run_finished" || streamEvent.kind === "run_error") source.close();
       });

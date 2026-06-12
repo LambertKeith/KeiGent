@@ -88,6 +88,33 @@ export interface WorkflowVerificationPolicy {
   minPassedCheckpoints?: number;
 }
 
+export interface ReviewRubric {
+  taskGoal: string;
+  successCriteria: string[];
+  requiredEvidence: string[];
+  forbiddenClaims: string[];
+  falseConfidenceRisks: string[];
+  blockingIssueRules: string[];
+}
+
+export interface ReviewIssue {
+  severity: "blocking" | "non_blocking";
+  sourceChildRunId: string;
+  message: string;
+  evidenceKind: WorkflowEvidence["kind"];
+  assertion?: string;
+}
+
+export interface ReviewSummary {
+  reviewerRunId: string;
+  rubric: ReviewRubric;
+  issues: ReviewIssue[];
+}
+
+export interface WorkflowReviewPolicy {
+  rubric: ReviewRubric;
+}
+
 export interface WorkflowSpec {
   id: string;
   mode: ExecutionMode;
@@ -96,6 +123,7 @@ export interface WorkflowSpec {
   budget: WorkflowBudget;
   policy?: WorkflowPolicy;
   verification?: WorkflowVerificationPolicy;
+  review?: WorkflowReviewPolicy;
 }
 
 export interface ChildRunSpec {
@@ -156,6 +184,7 @@ export interface WorkflowTrajectory {
   budgetUsage: WorkflowBudgetUsage;
   autonomy: AutonomySummary;
   evidence: WorkflowEvidence[];
+  review?: ReviewSummary;
   failure?: FailureSummary;
   events: WorkflowEvent[];
   childRuns: Array<{
@@ -176,6 +205,7 @@ export interface WorkflowResult {
   budget: WorkflowBudget;
   budgetUsage: WorkflowBudgetUsage;
   autonomy: AutonomySummary;
+  review?: ReviewSummary;
   durationMs: number;
   trajectory: WorkflowTrajectory;
   failure?: FailureSummary;

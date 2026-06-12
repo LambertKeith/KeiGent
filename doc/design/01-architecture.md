@@ -274,14 +274,15 @@ Replay 边界：
 |---|---|
 | `single-loop` | 一个 worker child run，使用 `LoopEngine.run()` |
 | `verified-loop` | 一个 worker child run，要求最少通过 checkpoint/assertion 证据 |
-| `reviewed-loop` | worker + readonly reviewer child run，reviewer 审阅 worker 结果 |
+| `reviewed-loop` | worker + readonly reviewer child run，reviewer 按 rubric 审阅 worker 结果 |
 
 Workflow 负责：
 
 - `WorkflowBudget`：child runs、每个 child 最大迭代数/工具数/token estimate/recovery 次数、总迭代数、总工具数、总 token estimate、超时。
 - `WorkflowPolicy`：profile allow-list、最大权限、最大 risk、外部副作用、审批 scope、reviewer/verifier readonly。
 - `WorkflowEvidence`：checkpoint、assertion、policy、budget、child_result。
-- `WorkflowTrajectory`：parent events、child trajectories、budget usage、exit reason。
+- `ReviewSummary`：reviewer run id、rubric、blocking / non-blocking issues。
+- `WorkflowTrajectory`：parent events、child trajectories、budget usage、exit reason、review summary。
 
 Workflow 不负责：
 

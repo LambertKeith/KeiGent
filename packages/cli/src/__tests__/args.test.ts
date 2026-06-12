@@ -19,9 +19,15 @@ describe("parseCliArgs", () => {
     expect(parseCliArgs(["config", "show"])).toEqual({ kind: "config", args: ["show"] });
   });
 
-  it("routes eval, replay, and web commands before task handling", () => {
+  it("routes eval, guide, replay, skill, and web commands before task handling", () => {
     expect(parseCliArgs(["eval", "smoke"])).toEqual({ kind: "eval", args: ["smoke"] });
+    expect(parseCliArgs(["guide", "first-run", "--compact"])).toEqual({ kind: "guide", args: ["first-run", "--compact"] });
     expect(parseCliArgs(["replay", "trajectory.json"])).toEqual({ kind: "replay", args: ["trajectory.json"] });
+    expect(parseCliArgs(["skill", "list", "--compact"])).toEqual({ kind: "skill", args: ["list", "--compact"] });
+    expect(parseCliArgs(["skills", "inspect", "web-summarize"])).toEqual({
+      kind: "skill",
+      args: ["inspect", "web-summarize"],
+    });
     expect(parseCliArgs(["web", "--print"])).toEqual({ kind: "web", args: ["--print"] });
   });
 });

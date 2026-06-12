@@ -1,4 +1,4 @@
-import type { ApprovalSummary, AutonomySummary, ProofBoundary, ProviderUsageSummary, RunRecord, SkillRunSummary, ToolRunSummary } from "@keigent/engine";
+import type { ApprovalSummary, AutonomySummary, ProofBoundary, ProviderUsageSummary, ReviewSummary, RunRecord, SkillRunSummary, ToolRunSummary } from "@keigent/engine";
 import { redactObject, redactText } from "../shared/redaction.js";
 
 export interface RunRecordListItem {
@@ -93,6 +93,7 @@ export interface RunRecordDetailView {
   replay: RunReplayPanel;
   autonomy: AutonomySummary;
   proofBoundary: ProofBoundary;
+  review?: ReviewSummary;
   approvals: Array<{
     toolName: string;
     approved: boolean;
@@ -171,6 +172,7 @@ export function normalizeRunRecord(input: unknown): RunRecordDetailView {
       assumptions: record.proofBoundary.assumptions.map((item) => redactText(item)),
       evidenceGaps: record.proofBoundary.evidenceGaps.map((item) => redactText(item)),
     },
+    ...(record.review ? { review: reviewPanel(record.review) } : {}),
     approvals: record.approvals.map((approval) => ({
       toolName: redactText(approval.toolName),
       approved: approval.approved,
@@ -317,7 +319,29 @@ function normalizeRecordShape(input: unknown): RunRecord {
     autonomy,
     replay: replayCapability,
     proofBoundary,
+    ...(isObject(source.review) ? { review: reviewValue(source.review) } : {}),
     redaction: isObject(source.redaction) ? source.redaction as unknown as RunRecord["redaction"] : { applied: true, rawPayloadStored: false },
+  };
+}
+
+function reviewPanel(review: ReviewSummary): ReviewSummary {
+  return {
+    reviewerRunId: redactText(review.reviewerRunId),
+    rubric: {
+      taskGoal: redactText(review.rubric.taskGoal),
+      successCriteria: review.rubric.successCriteria.map(redactText),
+      requiredEvidence: review.rubric.requiredEvidence.map(redactText),
+      forbiddenClaims: review.rubric.forbiddenClaims.map(redactText),
+      falseConfidenceRisks: review.rubric.falseConfidenceRisks.map(redactText),
+      blockingIssueRules: review.rubric.blockingIssueRules.map(redactText),
+    },
+    issues: review.issues.map((issue) => ({
+      severity: issue.severity,
+      sourceChildRunId: redactText(issue.sourceChildRunId),
+      message: redactText(issue.message),
+      evidenceKind: issue.evidenceKind,
+      ...(issue.assertion ? { assertion: redactText(issue.assertion) } : {}),
+    })),
   };
 }
 
@@ -480,6 +504,40 @@ function proofBoundaryValue(value: unknown): ProofBoundary {
     notProven: stringArray(source.notProven),
     assumptions: stringArray(source.assumptions),
     evidenceGaps: stringArray(source.evidenceGaps),
+  };
+}
+
+function reviewValue(value: unknown): ReviewSummary {
+  const source = objectValue(value);
+  const rubric = objectValue(source.rubric);
+  return {
+    reviewerRunId: stringValue(source.reviewerRunId, "unknown-reviewer"),
+    rubric: {
+      taskGoal: stringValue(rubric.taskGoal, "Unknown review task"),
+      successCriteria: stringArray(rubric.successCriteria),
+      requiredEvidence: stringArray(rubric.requiredEvidence),
+      forbiddenClaims: stringArray(rubric.forbiddenClaims),
+      falseConfidenceRisks: stringArray(rubric.falseConfidenceRisks),
+      blockingIssueRules: stringArray(rubric.blockingIssueRules),
+    },
+    issues: Array.isArray(source.issues) ? source.issues.map(reviewIssueValue) : [],
+  };
+}
+
+function reviewIssueValue(value: unknown): ReviewSummary["issues"][number] {
+  const source = objectValue(value);
+  const evidenceKind = source.evidenceKind === "assertion" ||
+    source.evidenceKind === "policy" ||
+    source.evidenceKind === "budget" ||
+    source.evidenceKind === "child_result"
+    ? source.evidenceKind
+    : "checkpoint";
+  return {
+    severity: source.severity === "non_blocking" ? "non_blocking" : "blocking",
+    sourceChildRunId: stringValue(source.sourceChildRunId, "unknown-reviewer"),
+    message: stringValue(source.message, "Review issue reported."),
+    evidenceKind,
+    ...(typeof source.assertion === "string" ? { assertion: source.assertion } : {}),
   };
 }
 

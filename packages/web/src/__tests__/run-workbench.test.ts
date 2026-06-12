@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RunRecord } from "@keigent/engine";
+import { buildP0RunAuditFixtureRecords, type RunRecord } from "@keigent/engine";
 import { buildRunWorkbenchView, renderRunWorkbench } from "../runs/workbench.js";
 
 function record(overrides: Partial<RunRecord> = {}): RunRecord {
@@ -166,5 +166,108 @@ describe("run workbench page", () => {
     expect(html).toContain("workspace:hello.txt");
     expect(html).not.toContain("sk-secret123456");
     expect(html).toContain("[REDACTED]");
+  });
+
+  it("renders run store schema compatibility diagnostics when provided by the API", () => {
+    const view = buildRunWorkbenchView([record()], undefined, {
+      schemaVersion: 1,
+      totalRecords: 1,
+      normalizedRecords: 1,
+      legacyRecords: 1,
+      unsupportedRecords: 0,
+      warnings: [{
+        runId: "legacy",
+        path: "/tmp/runs/legacy/record.json",
+        code: "missing_schema_version",
+        message: "record schemaVersion is missing; normalized as schemaVersion 1",
+        field: "schemaVersion",
+        normalizedValue: 1,
+      }],
+    });
+
+    const html = renderRunWorkbench(view);
+
+    expect(html).toContain("Schema compatibility");
+    expect(html).toContain("Normalized records");
+    expect(html).toContain("1/1");
+    expect(html).toContain("Legacy records");
+    expect(html).toContain("missing_schema_version");
+    expect(html).toContain("record schemaVersion is missing");
+  });
+
+  it("renders reviewed-loop rubric and reviewer issues", () => {
+    const view = buildRunWorkbenchView([record({
+      id: "run_reviewed",
+      task: {
+        goal: "Draft release notes",
+        source: "cli",
+        requestedWorkflowMode: "reviewed-loop",
+        resolvedWorkflowMode: "reviewed-loop",
+      },
+      workflow: {
+        ...record().workflow!,
+        mode: "reviewed-loop",
+        childRuns: 2,
+      },
+      childRuns: [
+        { id: "run_reviewed:worker-1", role: "worker", exitReason: "success", iterations: 1, toolCalls: 1, checkpointsPassed: 1 },
+        { id: "run_reviewed:reviewer-1", role: "reviewer", exitReason: "success", iterations: 1, toolCalls: 0, checkpointsPassed: 0 },
+      ],
+      review: {
+        reviewerRunId: "run_reviewed:reviewer-1",
+        rubric: {
+          taskGoal: "Draft release notes",
+          successCriteria: ["reviewer accepts result"],
+          requiredEvidence: ["reviewer checkpoint verdict"],
+          forbiddenClaims: ["Do not claim reviewer acceptance without a passed reviewer checkpoint."],
+          falseConfidenceRisks: ["Reviewer approval cannot override failed worker evidence."],
+          blockingIssueRules: ["Any failed reviewer checkpoint is blocking."],
+        },
+        issues: [{
+          severity: "blocking",
+          sourceChildRunId: "run_reviewed:reviewer-1",
+          message: "missing source attribution",
+          evidenceKind: "checkpoint",
+        }],
+      },
+    })], "run_reviewed");
+
+    const html = renderRunWorkbench(view);
+
+    expect(html).toContain("Review rubric");
+    expect(html).toContain("Draft release notes");
+    expect(html).toContain("reviewer accepts result");
+    expect(html).toContain("Reviewer issues");
+    expect(html).toContain("blocking");
+    expect(html).toContain("missing source attribution");
+  });
+
+  it("renders the P0 audit fixture set across success, failure, approval, replay, no-op, and child workflow records", () => {
+    const records = buildP0RunAuditFixtureRecords();
+    const view = buildRunWorkbenchView(records, "run_no-op-automation");
+    const html = renderRunWorkbench(view);
+
+    expect(view.stats).toMatchObject({
+      total: 7,
+      needsAction: 5,
+      replayable: 6,
+      failedOrDegraded: 4,
+    });
+    expect(view.collection.runs.map((run) => run.id)).toEqual([
+      "run_file-summary",
+      "run_failed-assertion",
+      "run_approval-denied",
+      "run_replay-report",
+      "run_insufficient-evidence-success-claim",
+      "run_no-op-automation",
+      "run_parent-timeout-child-success",
+    ]);
+    expect(view.selected?.summary.id).toBe("run_no-op-automation");
+    expect(view.selected?.nextAction.label).toBe("Review automation scope before treating no-op as health.");
+    expect(html).toContain("run_no-op-automation");
+    expect(html).toContain("No hidden failures outside this scope.");
+    expect(renderRunWorkbench(buildRunWorkbenchView(records, "run_replay-report"))).toContain("Replay report, not fresh execution");
+    expect(renderRunWorkbench(buildRunWorkbenchView(records, "run_failed-assertion"))).toContain("missing-output.txt was not found");
+    expect(renderRunWorkbench(buildRunWorkbenchView(records, "run_parent-timeout-child-success"))).toContain("parent workflow timed out before accepting child success");
   });
 });

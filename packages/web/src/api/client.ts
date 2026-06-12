@@ -1,6 +1,14 @@
 export interface RunStorePayload {
   records: unknown[];
   errors: unknown[];
+  migrationReport?: {
+    schemaVersion: number;
+    totalRecords: number;
+    normalizedRecords: number;
+    legacyRecords: number;
+    unsupportedRecords: number;
+    warnings: unknown[];
+  };
 }
 
 export interface RunSessionPayload {
@@ -8,6 +16,8 @@ export interface RunSessionPayload {
   status: "running";
   eventsHref: string;
 }
+
+export type RealWorldEvalReportPayload = unknown;
 
 export type EventSourceConstructor = new (url: string) => EventSource;
 
@@ -19,6 +29,7 @@ export interface KeigentApiClientOptions {
 
 export interface KeigentApiClient {
   fetchRunStore(): Promise<RunStorePayload>;
+  fetchLatestRealWorldEvalReport(datasetId: string): Promise<RealWorldEvalReportPayload>;
   startRun(goal: string): Promise<RunSessionPayload>;
   openRunEvents(runId: string): EventSource;
 }
@@ -42,6 +53,15 @@ export function createKeigentApiClient(options: KeigentApiClientOptions): Keigen
         throw new Error(`Web API request failed: GET /api/runs ${response.status}`);
       }
       return await response.json() as RunStorePayload;
+    },
+    async fetchLatestRealWorldEvalReport(datasetId: string) {
+      const response = await fetcher(`${baseUrl}/api/evals/real-world/${encodeURIComponent(datasetId)}/latest`, {
+        headers: { accept: "application/json" },
+      });
+      if (!response.ok) {
+        throw new Error(`Web API request failed: GET /api/evals/real-world/${datasetId}/latest ${response.status}`);
+      }
+      return await response.json() as RealWorldEvalReportPayload;
     },
     async startRun(goal: string) {
       const response = await fetcher(`${baseUrl}/api/runs`, {

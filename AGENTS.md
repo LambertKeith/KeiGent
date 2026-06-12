@@ -60,6 +60,7 @@ corepack pnpm -r --if-present build
 corepack pnpm --filter @keigent/engine dev
 corepack pnpm --filter @keigent/cli start
 corepack pnpm --filter @keigent/cli start "任务描述"
+corepack pnpm --filter @keigent/cli start web --api --print
 
 # 配置与诊断
 corepack pnpm --filter @keigent/cli start doctor
@@ -68,6 +69,8 @@ corepack pnpm --filter @keigent/cli start doctor --compact
 corepack pnpm --filter @keigent/cli start config show
 corepack pnpm --filter @keigent/cli start config show --json
 corepack pnpm --filter @keigent/cli start config show --compact
+corepack pnpm --filter @keigent/cli start skill list --compact
+corepack pnpm --filter @keigent/cli start skill inspect web-summarize --compact
 
 # Eval / replay
 corepack pnpm --filter @keigent/engine eval:smoke

@@ -164,7 +164,7 @@ keigent skill deprecate old-skill --reason "API outdated"
 keigent skill block risky-skill --reason "unsafe shell command"
 ```
 
-第一版可以不完整实现，但产品语义要稳定。
+当前实现备注（2026-06-12）：CLI 已实现只读 `skill list [--status <status>] [--json|--compact]` 与 `skill inspect <name> [--json|--compact]`，输出 status、source、eval coverage、tool / permission boundaries、non-goals、dangerous actions、blocked / deprecated reason，并包含非执行状态 skill。`promote`、`verify`、`deprecate`、`block` 等写入型治理命令仍未实现，必须等待 eval guard 与 reviewer approval 边界稳定后再进入实现。
 
 ### Web
 

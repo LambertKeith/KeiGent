@@ -78,7 +78,7 @@ KeiGent 是一个 **skill-driven、profile-switchable、evidence-first 的 Agent
 - Evidence：SuccessDef/Assertion、EvidenceBundle、approval/checkpoint/tool 证据进入 workflow/eval 判定；final text 不作为操作成功的唯一证据。
 - Governance：ToolRegistry 具备 permission/risk/sideEffect/reversible 元数据，R3-R5 与 dangerous 工具走审批门，轨迹中保存脱敏审批证据。
 - Skill：skill metadata/status、匹配解释、`learned-note-only` 学习输出和 promotion eval guard 已实现。
-- Web：当前是 Workbench 视图模型 shell + 本地 API/SSE foundation，覆盖 run console、Web Run Launcher、replay、dashboard、config、skill library 的 normalized model，并可通过 `keigent web --api` 暴露 run store、web-sourced run start 与 run session progress stream；完整交互式 UI 仍属后续工作。
+- Web：当前是 Workbench 视图模型 shell + 本地 API/SSE foundation，覆盖 run console、Web Run Launcher、Run Detail、replay、real-world eval dashboard、config、skill library 的 normalized model，并可通过 `keigent web --api` 暴露 run store、latest real-world eval report、web-sourced run start 与 run session progress stream；完整交互式 UI 仍属后续工作。
 
 ## 8. 下一阶段产品主线
 

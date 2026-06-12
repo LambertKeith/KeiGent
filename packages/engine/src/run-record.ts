@@ -3,10 +3,11 @@ import { join } from "node:path";
 import { failureSummaryForWorkflowExit, type FailureSummary } from "./failures.js";
 import { proofBoundaryForRunRecord, proofBoundaryForWorkflowResult, type ProofBoundary } from "./proof-boundary.js";
 import { redactObject, redactText } from "./redaction.js";
+import { addMigrationDiagnostics, emptyMigrationReport, sortMigrationWarnings, type RunStoreMigrationReport } from "./run-store-migration.js";
 import type { ApprovalDecision, PermissionLevel, RiskLevel, SideEffect } from "./tools/types.js";
 import type { SkillMatchExplanation, Task, Trajectory, TrajectoryStep } from "./types.js";
 import { buildAutonomySummary, emptyAutonomySummary } from "./workflow/autonomy.js";
-import type { AutonomySummary, WorkflowChildRole, WorkflowEvidence, WorkflowEvent, WorkflowExitReason, WorkflowResult } from "./workflow/types.js";
+import type { AutonomySummary, ReviewSummary, WorkflowChildRole, WorkflowEvidence, WorkflowEvent, WorkflowExitReason, WorkflowResult } from "./workflow/types.js";
 
 export type RunStatus =
   | "created"
@@ -177,6 +178,7 @@ export interface RunRecord {
   failures: FailureSummary[];
   artifacts: RunArtifact[];
   automation?: AutomationSummary;
+  review?: ReviewSummary;
   nextAction?: string;
   autonomy: AutonomySummary;
   proofBoundary: ProofBoundary;
@@ -219,6 +221,7 @@ export interface RunStoreError {
 export interface RunStoreReadResult {
   records: RunRecord[];
   errors: RunStoreError[];
+  migrationReport: RunStoreMigrationReport;
 }
 
 export function buildRunRecordFromWorkflowResult(
@@ -288,6 +291,7 @@ export function buildRunRecordFromWorkflowResult(
     artifacts,
     ...(nextAction ? { nextAction } : {}),
     autonomy,
+    ...(result.review ? { review: redactObject(result.review) as ReviewSummary } : {}),
     proofBoundary,
     replay,
     redaction: { applied: true, rawPayloadStored: false },
@@ -378,21 +382,25 @@ export async function readRunRecord(path: string): Promise<RunRecord> {
 export async function readRunStore(options: SaveRunRecordOptions): Promise<RunStoreReadResult> {
   const records: RunRecord[] = [];
   const errors: RunStoreError[] = [];
+  const migrationReport = emptyMigrationReport();
   let entries: string[] = [];
   try {
     entries = await readdir(options.runsDir);
   } catch {
-    return { records, errors };
+    return { records, errors, migrationReport };
   }
 
   for (const runId of entries) {
     const path = join(options.runsDir, runId, "record.json");
     try {
-      const record = await readRunRecord(path);
+      const raw = JSON.parse(await readFile(path, "utf8"));
+      const record = normalizeRunRecordShape(raw);
       if (!record || typeof record.id !== "string" || record.id === "unknown") {
         errors.push({ runId, path, code: "invalid_record", message: "record.id must be a string" });
         continue;
       }
+      migrationReport.totalRecords += 1;
+      addMigrationDiagnostics(migrationReport, raw, record, path);
       records.push(record);
     } catch (error) {
       errors.push({
@@ -405,7 +413,8 @@ export async function readRunStore(options: SaveRunRecordOptions): Promise<RunSt
   }
 
   records.sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
-  return { records, errors };
+  sortMigrationWarnings(migrationReport);
+  return { records, errors, migrationReport };
 }
 
 function normalizeRunRecordShape(input: unknown): RunRecord {
@@ -428,6 +437,7 @@ function normalizeRunRecordShape(input: unknown): RunRecord {
   };
   const failures = Array.isArray(source.failures) ? redactObject(source.failures) as FailureSummary[] : [];
   const automation = isObject(source.automation) ? redactObject(source.automation) as unknown as AutomationSummary : undefined;
+  const review = isObject(source.review) ? reviewValue(source.review) : undefined;
   const replayCapability: ReplayCapability = {
     supported: replay.supported === true,
     ...(typeof replay.unsupportedReason === "string" ? { unsupportedReason: redactText(replay.unsupportedReason) } : {}),
@@ -497,6 +507,7 @@ function normalizeRunRecordShape(input: unknown): RunRecord {
     failures,
     artifacts: Array.isArray(source.artifacts) ? redactObject(source.artifacts) as RunArtifact[] : [],
     ...(automation ? { automation } : {}),
+    ...(review ? { review } : {}),
     ...(typeof source.nextAction === "string" ? { nextAction: redactText(source.nextAction) } : {}),
     autonomy: autonomyValue(source.autonomy),
     proofBoundary,
@@ -602,6 +613,45 @@ function proofBoundaryValue(value: unknown): ProofBoundary {
     notProven: stringArray(source.notProven),
     assumptions: stringArray(source.assumptions),
     evidenceGaps: stringArray(source.evidenceGaps),
+  };
+}
+
+function reviewValue(value: unknown): ReviewSummary | undefined {
+  const source = objectValue(value);
+  const rubric = objectValue(source.rubric);
+  const reviewerRunId = stringValue(source.reviewerRunId, "");
+  if (!reviewerRunId) return undefined;
+  return {
+    reviewerRunId,
+    rubric: {
+      taskGoal: stringValue(rubric.taskGoal, "Unknown review task"),
+      successCriteria: stringArray(rubric.successCriteria),
+      requiredEvidence: stringArray(rubric.requiredEvidence),
+      forbiddenClaims: stringArray(rubric.forbiddenClaims),
+      falseConfidenceRisks: stringArray(rubric.falseConfidenceRisks),
+      blockingIssueRules: stringArray(rubric.blockingIssueRules),
+    },
+    issues: Array.isArray(source.issues)
+      ? source.issues.map(reviewIssueValue)
+      : [],
+  };
+}
+
+function reviewIssueValue(value: unknown): ReviewSummary["issues"][number] {
+  const source = objectValue(value);
+  const severity = source.severity === "non_blocking" ? "non_blocking" : "blocking";
+  const evidenceKind = source.evidenceKind === "assertion" ||
+    source.evidenceKind === "policy" ||
+    source.evidenceKind === "budget" ||
+    source.evidenceKind === "child_result"
+    ? source.evidenceKind
+    : "checkpoint";
+  return {
+    severity,
+    sourceChildRunId: stringValue(source.sourceChildRunId, "unknown-reviewer"),
+    message: stringValue(source.message, "Review issue reported."),
+    evidenceKind,
+    ...(typeof source.assertion === "string" ? { assertion: redactText(source.assertion) } : {}),
   };
 }
 

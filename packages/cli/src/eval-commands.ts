@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   DEFAULT_EVAL_CASES,
   DEFAULT_ORCHESTRATOR_EVAL_CASES,
@@ -15,14 +16,19 @@ import {
   runOperatorScenarioEvalCases,
   runOrchestratorEvalCases,
   runRealWorldEvalCases,
+  saveRunRecord,
   type OperatorAcceptanceSignoff,
+  type RealWorldEvalReport,
+  type RunRecord,
   type Trajectory,
 } from "@keigent/engine";
+import { KEIGENT_HOME } from "./config.js";
 import { formatJson } from "./json-output.js";
 
 export interface EvalCommandOptions {
   stdout?: (line: string) => void;
   stderr?: (line: string) => void;
+  runsDir?: string;
 }
 
 function print(options: EvalCommandOptions, line: string): void {
@@ -41,6 +47,8 @@ interface OperatorCommandArgs {
 }
 
 const DEFAULT_WORKBENCH_URL = "http://127.0.0.1:5173";
+const DEFAULT_RUNS_DIR = join(KEIGENT_HOME, "runs");
+const DEFAULT_EVAL_REPORTS_DIR = join(KEIGENT_HOME, "evals");
 
 function parseReplayCommandArgs(args: string[]): ReplayCommandArgs {
   const outputArgs: string[] = [];
@@ -112,10 +120,25 @@ export async function runEvalCommand(
 
   if (subcommand === "real-world") {
     const report = await runRealWorldEvalCases(DEFAULT_REAL_WORLD_L2_CASES, createRealWorldFixtureExecutor());
-    const payload = rest.includes("--open")
-      ? { ...report, workbenchHref: realWorldEvalHref(report.datasetId) }
-      : report;
-    print(options, formatJson(payload, rest));
+    const realWorldArgs = parseRealWorldCommandArgs(rest);
+    const runsDir = options.runsDir ?? DEFAULT_RUNS_DIR;
+    const evalReportsDir = evalReportsDirForRunsDir(runsDir);
+    const persistedRunRecords = realWorldArgs.persistRuns
+      ? await persistEvalRunRecords(report.cases.map((testCase) => testCase.runRecord), runsDir)
+      : undefined;
+    const persistedEvalReport = realWorldArgs.persistRuns
+      ? await persistRealWorldEvalReport(report, evalReportsDir)
+      : undefined;
+    const payload = realWorldArgs.open
+      ? {
+        ...report,
+        workbenchHref: realWorldEvalHref(report.datasetId),
+        ...(persistedRunRecords ? { persistedRunRecords } : {}),
+        ...(persistedEvalReport ? { persistedEvalReport } : {}),
+      }
+      : persistedRunRecords ? { ...report, persistedRunRecords, ...(persistedEvalReport ? { persistedEvalReport } : {}) } : report;
+    const outputArgs = realWorldArgs.outputArgs;
+    print(options, formatJson(payload, outputArgs));
     if (report.totals.failed > 0 || report.falseSuccessCount > 0) process.exitCode = 1;
     return;
   }
@@ -151,6 +174,58 @@ export async function runEvalCommand(
   }
 
   throw new Error("Usage: keigent eval smoke|orchestrator|real-world|operator|replay");
+}
+
+interface RealWorldCommandArgs {
+  outputArgs: string[];
+  open: boolean;
+  persistRuns: boolean;
+}
+
+function parseRealWorldCommandArgs(args: string[]): RealWorldCommandArgs {
+  const outputArgs: string[] = [];
+  let open = false;
+  let persistRuns = false;
+
+  for (const arg of args) {
+    if (arg === "--json" || arg === "--compact" || arg === "--pretty") {
+      outputArgs.push(arg);
+      continue;
+    }
+    if (arg === "--open") {
+      open = true;
+      persistRuns = true;
+      continue;
+    }
+    if (arg === "--persist-runs") {
+      persistRuns = true;
+      continue;
+    }
+    throw new Error(`unknown real-world eval option ${arg}`);
+  }
+
+  return { outputArgs, open, persistRuns };
+}
+
+async function persistEvalRunRecords(records: RunRecord[], runsDir: string): Promise<{ total: number; runsDir: string; runIds: string[] }> {
+  const runIds: string[] = [];
+  for (const record of records) {
+    await saveRunRecord(record, { runsDir });
+    runIds.push(record.id);
+  }
+  return { total: runIds.length, runsDir, runIds };
+}
+
+async function persistRealWorldEvalReport(report: RealWorldEvalReport, evalReportsDir: string): Promise<{ datasetId: string; path: string }> {
+  const reportDir = join(evalReportsDir, "real-world", report.datasetId);
+  await mkdir(reportDir, { recursive: true });
+  const path = join(reportDir, "latest.json");
+  await writeFile(path, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  return { datasetId: report.datasetId, path };
+}
+
+function evalReportsDirForRunsDir(runsDir: string): string {
+  return runsDir === DEFAULT_RUNS_DIR ? DEFAULT_EVAL_REPORTS_DIR : join(runsDir, "..", "evals");
 }
 
 function realWorldEvalHref(datasetId: string, baseUrl = DEFAULT_WORKBENCH_URL): string {

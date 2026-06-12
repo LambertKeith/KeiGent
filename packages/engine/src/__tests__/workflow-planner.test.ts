@@ -49,6 +49,31 @@ describe("workflow planner", () => {
     expect(spec.policy).toMatchObject({ verifierReadonly: true, allowExternalSideEffects: false });
   });
 
+  it("attaches a default review rubric for reviewed-loop", () => {
+    const spec = createWorkflowSpec({
+      id: "wf-reviewed-rubric",
+      task: task({
+        goal: "Draft release notes",
+        successDef: {
+          goal: "Review release notes",
+          assertions: [{ description: "reviewer accepts result", signal: "text" }],
+        },
+      }),
+      mode: "reviewed-loop",
+    });
+
+    expect(spec.review).toMatchObject({
+      rubric: {
+        taskGoal: "Draft release notes",
+        successCriteria: ["[signal:text] reviewer accepts result"],
+        requiredEvidence: ["reviewer checkpoint verdict"],
+        forbiddenClaims: ["Do not claim reviewer acceptance without a passed reviewer checkpoint."],
+        falseConfidenceRisks: ["Reviewer approval cannot override failed worker evidence."],
+        blockingIssueRules: ["Any failed reviewer checkpoint is blocking."],
+      },
+    });
+  });
+
   it("applies default budget values", () => {
     const spec = createWorkflowSpec({ id: "wf-1", task: task() });
 
