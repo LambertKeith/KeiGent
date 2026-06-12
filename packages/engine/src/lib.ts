@@ -38,6 +38,25 @@ export { failureSummaryForLoopExit, failureSummaryForWorkflowExit, recommendedNe
 export type { FailureCode, FailureLayer, FailureSummary } from "./failures.js";
 export { addProviderUsage, normalizeProviderUsage } from "./provider-usage.js";
 export {
+  mergeProofBoundaries,
+  proofBoundaryForRunRecord,
+  proofBoundaryForWorkflowResult,
+} from "./proof-boundary.js";
+export type { ProofBoundary } from "./proof-boundary.js";
+export {
+  loopEventFromProgress,
+  loopEventFromUnknown,
+  loopEventsFromWorkflow,
+} from "./loop-events.js";
+export type { LoopEvent, LoopEventType } from "./loop-events.js";
+export type {
+  AutonomyOutcome,
+  AutonomySummary,
+  EscalationReason,
+  EscalationDecision,
+  RepairAttemptSummary,
+} from "./workflow/types.js";
+export {
   buildNoOpRunRecord,
   buildRunRecordFromWorkflowResult,
   readRunRecord,

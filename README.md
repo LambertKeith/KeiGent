@@ -25,6 +25,7 @@ KeiGent 因此采用：
 - **多个 `LoopProfile`**：切换 attention、terminate、verify、recover、memory 策略。
 - **Skill-driven execution**：skill 负责“怎么做”。
 - **Evidence-first verification**：successDef、checkpoint、verdict、trajectory 负责“怎么验”。
+- **Proof boundary**：每个 trusted run 明确已证明、未证明、假设和证据缺口。
 - **Eval / Replay / Web Workbench**：让 agent 行为可回归、可审计、可调试。
 
 > 详细架构图与系统说明见 [`doc/design/00-system-overview.md`](doc/design/00-system-overview.md)。
@@ -55,6 +56,7 @@ cp .env.example .env.local
 
 # 配置诊断（密钥会脱敏）
 corepack pnpm --filter @keigent/cli start doctor
+corepack pnpm --filter @keigent/cli start doctor --compact
 corepack pnpm --filter @keigent/cli start config show
 corepack pnpm --filter @keigent/cli start config path
 corepack pnpm --filter @keigent/cli start config set modelId gpt-4o-mini
@@ -62,6 +64,10 @@ corepack pnpm --filter @keigent/cli start config unset modelId
 
 # 本地 Workbench（默认 localhost；只打印启动命令）
 corepack pnpm --filter @keigent/cli start web --print
+
+# 最小 starter 验收路径（fixture 结果不证明产品健康或人工接受）
+corepack pnpm --filter @keigent/cli start eval smoke --compact
+corepack pnpm --filter @keigent/cli start eval real-world --compact
 
 # 对话式 REPL
 corepack pnpm --filter @keigent/cli start
@@ -79,6 +85,14 @@ corepack pnpm --filter @keigent/cli start "总结一下 https://example.com"
 | Workspace | `~/.keigent/workspace/` | 文件工具沙箱 |
 | Memory | `~/.keigent/memory/` | 记忆存储；执行 loop 默认不写 |
 | Runs | `~/.keigent/runs/` | 每次 workflow 的 `record.json`，包含 evidence/risk/replay 摘要 |
+
+当前 RunRecord / Workbench 审计面包含：
+
+- Stable Loop Event Protocol：`run_created`、`tool_requested`、`assertion_checked`、`repair_started`、`run_succeeded` 等 provider-neutral 事件可由 CLI、Live Console、reports 复用。
+- Autonomy summary：记录 `completed_without_escalation`、`self_repaired`、`degraded_without_escalation`、`escalated` 以及 repair attempts / escalation reasons。
+- Proof boundary：RunRecord、real-world eval report 与 Workbench Run Detail 展示 `proven`、`notProven`、`assumptions`、`evidenceGaps`。
+- Provider capabilities：配置中显式声明 tool calling、streaming、JSON mode、vision、context window、parallel tool calls；不按供应商品牌授予能力。
+- Acceptance packet：operator L3 `--packet` 只生成审证包，不代表 human acceptance；`--acceptance` 要求 evidence inspected 和 override reason。
 
 ---
 
@@ -236,6 +250,7 @@ git diff --check
 - [文档索引] [`doc/design/README.md`](doc/design/README.md) —— 设计文档状态地图
 - [产品蓝图] [`doc/product/01-product-blueprint.md`](doc/product/01-product-blueprint.md) —— 产品定位、用户、成熟度、模块地图
 - [策略边界] [`doc/strategy/01-architecture-boundaries-and-non-goals.md`](doc/strategy/01-architecture-boundaries-and-non-goals.md) —— 架构边界与非目标
+- [产品方向] [`doc/strategy/02-agent-operations-product-direction.md`](doc/strategy/02-agent-operations-product-direction.md) —— Agent Operations 基线后的产品判断、反 demo 化原则与后续路线
 
 ### 主架构与已实现能力
 

@@ -90,7 +90,18 @@ function runRecord(overrides: Partial<RunRecord> = {}): RunRecord {
       trajectorySchemaVersion: 1,
       freshExecution: true,
     },
+    autonomy: {
+      outcome: "completed_without_escalation",
+      repairAttempts: [],
+      escalations: [],
+    },
     redaction: { applied: true, rawPayloadStored: false },
+    proofBoundary: {
+      proven: ["Evidence passed: file exists"],
+      notProven: ["External production health is not proven by this run."],
+      assumptions: ["Local fixture evidence is representative for this run only."],
+      evidenceGaps: [],
+    },
     ...overrides,
   };
 }
@@ -114,6 +125,7 @@ describe("run record view model", () => {
     expect(view.evidence).toMatchObject({ status: "passed", total: 1, passed: 1 });
     expect(view.risk).toMatchObject({ highestRiskLevel: "R3", approvalRequired: true, sideEffectsSucceeded: 1 });
     expect(view.replay).toMatchObject({ freshExecution: true, label: "Replay available" });
+    expect(view.autonomy).toMatchObject({ outcome: "completed_without_escalation", repairAttempts: [], escalations: [] });
     expect(view.approvals).toEqual([expect.objectContaining({ toolName: "file_write", approved: true })]);
     expect(view.route).toMatchObject({ source: "rule", selectedProfile: "convergent-exec", rationale: "matched file skill" });
     expect(view.skills).toEqual([expect.objectContaining({ name: "file-write", injected: true })]);
@@ -132,6 +144,10 @@ describe("run record view model", () => {
       },
     });
     expect(view.nextAction.label).toBe("No action required");
+    expect(view.proofBoundary).toMatchObject({
+      proven: ["Evidence passed: file exists"],
+      notProven: ["External production health is not proven by this run."],
+    });
     expect(view.timelineFacts.map((fact) => fact.label)).toEqual(["Route", "Workflow", "Budget", "Iterations", "Tools", "Checkpoints", "Events"]);
   });
 
@@ -186,6 +202,10 @@ describe("run record view model", () => {
     expect(view.nextAction).toMatchObject({
       required: true,
       label: "Review run record schema before trusting this result.",
+    });
+    expect(view.proofBoundary).toMatchObject({
+      notProven: ["External production health is not proven by this run.", "Historical replay does not prove fresh execution."],
+      evidenceGaps: ["No verification evidence was checked."],
     });
   });
 

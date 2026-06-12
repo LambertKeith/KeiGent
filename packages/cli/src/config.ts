@@ -13,6 +13,15 @@ export interface ModelPricing {
   cacheWrite: number;
 }
 
+export interface ModelCapabilities {
+  toolCalling: boolean;
+  streaming: boolean;
+  jsonMode: boolean;
+  vision: boolean;
+  maxContextTokens: number;
+  parallelToolCalls: boolean;
+}
+
 export interface KeigentConfig {
   configVersion: 1;
   apiKey: string;
@@ -29,11 +38,14 @@ export interface KeigentConfig {
   maxTokenEstimate: number;
   maxProviderCostUsd: number | null;
   modelPricing: ModelPricing | null;
+  modelCapabilities: ModelCapabilities;
   maxWallTimeMs: number;
   maxRecoveryAttempts: number;
 }
 
-export type KeigentConfigInput = Partial<KeigentConfig>;
+export type KeigentConfigInput = Omit<Partial<KeigentConfig>, "modelCapabilities"> & {
+  modelCapabilities?: Partial<ModelCapabilities>;
+};
 
 const KEIGENT_HOME = join(homedir(), ".keigent");
 
@@ -53,6 +65,14 @@ const DEFAULTS = {
   maxTokenEstimate: 64_000,
   maxProviderCostUsd: null,
   modelPricing: null,
+  modelCapabilities: {
+    toolCalling: true,
+    streaming: true,
+    jsonMode: false,
+    vision: true,
+    maxContextTokens: 128_000,
+    parallelToolCalls: false,
+  },
   maxWallTimeMs: 120_000,
   maxRecoveryAttempts: 3,
 } satisfies Omit<KeigentConfig, "apiKey" | "baseUrl" | "workspace" | "skillsDir" | "memoryDir">;
@@ -95,6 +115,21 @@ export function isModelPricing(value: unknown): value is ModelPricing {
   );
 }
 
+export function isModelCapabilities(value: unknown): value is ModelCapabilities {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Partial<Record<keyof ModelCapabilities, unknown>>;
+  return (
+    typeof candidate.toolCalling === "boolean" &&
+    typeof candidate.streaming === "boolean" &&
+    typeof candidate.jsonMode === "boolean" &&
+    typeof candidate.vision === "boolean" &&
+    typeof candidate.parallelToolCalls === "boolean" &&
+    typeof candidate.maxContextTokens === "number" &&
+    Number.isInteger(candidate.maxContextTokens) &&
+    candidate.maxContextTokens > 0
+  );
+}
+
 export function resolveConfig(
   fileConfig: KeigentConfigInput = {},
   env: NodeJS.ProcessEnv = process.env,
@@ -109,11 +144,16 @@ export function resolveConfig(
   const apiProtocol: ModelApiProtocol = isModelApiProtocol(requestedProtocol) ? requestedProtocol : DEFAULTS.apiProtocol;
   const baseUrl = optionalEnv(env, "KEIGENT_BASE_URL") ?? fileConfig.baseUrl ?? PROTOCOL_DEFAULT_BASE_URLS[apiProtocol];
   const modelId = optionalEnv(env, "KEIGENT_MODEL_ID") ?? fileConfig.modelId ?? DEFAULTS.modelId;
+  const modelCapabilities = {
+    ...DEFAULTS.modelCapabilities,
+    ...(fileConfig.modelCapabilities ?? {}),
+  };
 
   return {
     ...DEFAULTS,
     ...defaultPaths(home),
     ...fileConfig,
+    modelCapabilities,
     apiKey,
     apiProtocol,
     baseUrl,
@@ -190,9 +230,9 @@ export function buildModel(config: KeigentConfig): Model<Api> {
     provider: providerForProtocol(config.apiProtocol),
     baseUrl: normalizeBaseUrlForProtocol(config.baseUrl, config.apiProtocol),
     reasoning: false,
-    input: ["text", "image"],
+    input: config.modelCapabilities.vision ? ["text", "image"] : ["text"],
     cost: { input: cost.input, output: cost.output, cacheRead: cost.cacheRead, cacheWrite: cost.cacheWrite },
-    contextWindow: 128000,
+    contextWindow: config.modelCapabilities.maxContextTokens,
     maxTokens: 16384,
   };
 }

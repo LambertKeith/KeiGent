@@ -14,6 +14,8 @@ describe("real-world L2 eval", () => {
       "browser-read",
       "config-diagnose",
       "failed-assertion",
+      "assertion-repair-success",
+      "repair-budget-exhausted",
       "approval-denied",
       "replay-report",
       "no-op-automation",
@@ -34,11 +36,11 @@ describe("real-world L2 eval", () => {
     expect(report).toMatchObject({
       level: "L2",
       datasetId: "local-real-task-v1",
-      totals: { total: 17, passed: 17, failed: 0 },
+      totals: { total: 19, passed: 19, failed: 0 },
       routeAccuracy: 1,
       falseSuccessCount: 0,
     });
-    expect(report.taskSuccessRate).toBeCloseTo(4 / 17);
+    expect(report.taskSuccessRate).toBeCloseTo(5 / 19);
     expect(report.evidenceQuality).toBeGreaterThan(0);
     expect(report.riskCompliance).toBe(1);
     expect(report.falseConfidenceFindings).toContainEqual(expect.objectContaining({
@@ -52,6 +54,29 @@ describe("real-world L2 eval", () => {
       runRecord: {
         status: "failed",
         evidence: { status: "failed" },
+      },
+    });
+    expect(report.cases.find((testCase) => testCase.id === "assertion-repair-success")).toMatchObject({
+      result: "success",
+      runRecord: {
+        status: "succeeded",
+        autonomy: {
+          outcome: "self_repaired",
+          repairAttempts: [expect.objectContaining({
+            targetAssertion: "fileExists:output.txt",
+            finalVerdict: "passed",
+          })],
+        },
+      },
+    });
+    expect(report.cases.find((testCase) => testCase.id === "repair-budget-exhausted")).toMatchObject({
+      expectedFailureCode: "budget_exceeded",
+      result: "failure",
+      runRecord: {
+        status: "cancelled",
+        autonomy: {
+          outcome: "degraded_without_escalation",
+        },
       },
     });
     expect(report.cases.find((testCase) => testCase.id === "approval-denied")).toMatchObject({

@@ -146,10 +146,13 @@ doc/references/          # 外部参考项目研读
 - Tooling：`ToolRegistry` 统一执行工具，包含 permission/risk/sideEffect/reversible/timeout/output limit。
 - Governance：R3-R5 与 dangerous 工具需要审批；审批结果进入 trajectory。
 - Evidence：SuccessDef、Assertion、EvidenceBundle、checkpoint、verdict、failure code。
-- Workflow：`single-loop`、`verified-loop`、`reviewed-loop` envelope，包含 budget、policy、child evidence、workflow trajectory。
+- Loop Events：`LoopEvent` 是 CLI、Live Console、Workbench 和 reports 的稳定事件协议，不让 UI 解析 raw logs。
+- Workflow：`single-loop`、`verified-loop`、`reviewed-loop` envelope，包含 budget、policy、child evidence、workflow trajectory、autonomy summary 与 self-repair/escalation 记录。
+- Proof Boundary：RunRecord、real-world eval report 与 Workbench Run Detail 必须表达 `proven`、`notProven`、`assumptions`、`evidenceGaps`，final text 不能覆盖 evidence gap。
+- Provider Capabilities：配置通过 `modelCapabilities` 声明 tool calling、streaming、JSON mode、vision、context window、parallel tool calls，不给供应商品牌特权。
 - CLI：REPL、单次执行、config、doctor、eval/replay、web print；机器可读命令支持 `--json` 和 `--compact`。
-- Web：当前已有 Workbench view model、前端内存事件流 Live Run Console、Web Run Launcher、Run Detail v1、Skill Workbench、Eval Dashboard 静态审计 surface 与本地 Web API/SSE foundation；不宣称完整交互式产品已完成。
-- Eval：smoke、orchestrator、replay fixture 与 real-world L2 fixture 作为确定性主干回归门。
+- Web：当前已有 Workbench view model、前端内存事件流 Live Run Console、Web Run Launcher、Run Detail v1、Skill Workbench、Eval Dashboard 静态审计 surface、本地 Web API/SSE foundation，以及 CLI RunRecord -> Web API -> Workbench E2E 回归；不宣称完整交互式产品已完成。
+- Eval：smoke、orchestrator、replay fixture、real-world L2 fixture 与 operator L3 fixture 作为确定性主干回归门；fixture pass 不等于生产健康或真人验收。
 
 ---
 
@@ -161,6 +164,8 @@ doc/references/          # 外部参考项目研读
 - **Workflow 是 parent envelope**：child run 仍通过 `LoopEngine.run()`。
 - **执行 loop 默认不写知识库**：学习结果走 learner 和 skill governance。
 - **危险副作用默认受控**：不要绕过 ToolRegistry、approval gate 或 workflow policy。
+- **Provider capability 不能瞎猜**：工具型任务在 `toolCalling=false` 时必须明确降级或失败，并把原因记录到 evidence/failure。
+- **Acceptance packet 不是验收结论**：operator packet 只辅助人工审证；未检查 evidence 或缺 override reason 时不得 accepted。
 - **Web 当前不是完整产品**：文档和 UI 只能描述已实现 view model、前端内存事件流 Live Run Console、Web Run Launcher、Run Detail v1、Skill Workbench、Eval Dashboard 静态审计能力与本地 Web API/SSE foundation。
 
 ---
@@ -182,6 +187,7 @@ KeiGent 配置层按协议区分：
 
 - 任务涉及架构事实时，先读 `doc/design/01-architecture.md`。
 - 任务涉及产品范围或成熟度时，先读 `doc/product/01-product-blueprint.md`。
+- 任务涉及本轮 agent learning / operations 要求时，先读 `doc/product/11-agent-project-learning-development-requirements.md`。
 - 任务涉及下一阶段开发计划、RunRecord、Workbench V1、operator 旅程或 Loop Engineering 时，先读 `doc/product/09-agent-operations-maturity-roadmap.md`、`doc/product/05-run-record-and-run-lifecycle.md`、`doc/product/07-local-operator-user-journeys.md`、`doc/product/08-loop-engineering-development-requirements.md`。
 - 任务涉及权限、风险、审批时，先读 `doc/design/09-permission-risk-governance.md`。
 - 任务涉及成功证据时，先读 `doc/design/08-success-evidence-model.md`。

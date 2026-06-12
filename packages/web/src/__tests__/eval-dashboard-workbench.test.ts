@@ -22,6 +22,12 @@ function reportView(): RealWorldEvalReportView {
       { code: "fixture_level", severity: "info", message: "Fixture-level report only." },
       { code: "false_success", severity: "blocking", caseId: "case-failed", message: "Fresh success on expected failure." },
     ],
+    proofBoundary: {
+      proven: ["Deterministic L2 fixture cases were evaluated."],
+      notProven: ["Fixture results do not prove product health."],
+      assumptions: ["Fixtures represent selected local acceptance boundaries only."],
+      evidenceGaps: [],
+    },
     cases: [
       {
         id: "case-ok",
@@ -42,6 +48,12 @@ function reportView(): RealWorldEvalReportView {
         replayFreshExecution: true,
         failureCodes: [],
         failures: [],
+        proofBoundary: {
+          proven: ["Case case-ok matched fixture expectation."],
+          notProven: ["Fixture case does not prove product health."],
+          assumptions: ["Fixture evidence is limited to this local report."],
+          evidenceGaps: [],
+        },
       },
       {
         id: "case-failed",
@@ -62,6 +74,12 @@ function reportView(): RealWorldEvalReportView {
         replayFreshExecution: false,
         failureCodes: ["false_success"],
         failures: ["success without evidence"],
+        proofBoundary: {
+          proven: [],
+          notProven: ["Fixture case does not prove product health."],
+          assumptions: ["Fixture evidence is limited to this local report."],
+          evidenceGaps: ["success without evidence"],
+        },
       },
     ],
   };

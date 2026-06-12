@@ -57,6 +57,22 @@ describe("config doctor", () => {
     expect(validateConfig(config).map((issue) => issue.code)).not.toContain("modelPricing.missing_for_cost_budget");
   });
 
+  it("warns when model context capability is lower than runtime budgets need", () => {
+    const config = resolveConfig({
+      apiKey: "file-key",
+      maxTokenEstimate: 8_000,
+      modelCapabilities: { maxContextTokens: 1_024 },
+    }, {}, "/tmp/keigent-home");
+
+    expect(validateConfig(config)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: "modelCapabilities.maxContextTokens.low",
+        severity: "warning",
+        field: "modelCapabilities",
+      }),
+    ]));
+  });
+
   it("rejects insecure remote endpoints but permits localhost development", () => {
     const remote = resolveConfig({ baseUrl: "http://example.com", apiKey: "file-key" }, {}, "/tmp/keigent-home");
     const local = resolveConfig({ baseUrl: "http://127.0.0.1:4000", apiKey: "file-key" }, {}, "/tmp/keigent-home");
@@ -75,6 +91,25 @@ describe("config doctor", () => {
     const config = { ...resolveConfig({ apiKey: "file-key" }, {}, "/tmp/keigent-home"), configVersion: 999 as never };
 
     expect(validateConfig(config).map((issue) => issue.code)).toContain("configVersion.unsupported");
+  });
+
+  it("reports missing Playwright browser cache as an actionable verification risk", () => {
+    const previous = process.env.PLAYWRIGHT_BROWSERS_PATH;
+    delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+    try {
+      const config = resolveConfig({ apiKey: "file-key" }, {}, "/tmp/keigent-home");
+
+      expect(validateConfig(config)).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          code: "browser.playwright_path_unset",
+          severity: "warning",
+          nextAction: expect.stringContaining("PLAYWRIGHT_BROWSERS_PATH"),
+        }),
+      ]));
+    } finally {
+      if (previous === undefined) delete process.env.PLAYWRIGHT_BROWSERS_PATH;
+      else process.env.PLAYWRIGHT_BROWSERS_PATH = previous;
+    }
   });
 
   it("redacts secrets with optional fingerprint", () => {

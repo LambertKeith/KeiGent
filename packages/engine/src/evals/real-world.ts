@@ -1,8 +1,10 @@
 import { buildNoOpRunRecord, buildRunRecordFromWorkflowResult, type RunRecord } from "../run-record.js";
 import { failureSummaryForWorkflowExit, recommendedNextActionFor, type FailureCode, type FailureSummary } from "../failures.js";
+import { mergeProofBoundaries, type ProofBoundary } from "../proof-boundary.js";
 import type { ProfileName } from "../orchestrator.js";
 import type { ApprovalDecision, ApprovalRequest } from "../tools/types.js";
 import type { LoopResult, Task, TrajectoryStep } from "../types.js";
+import { buildAutonomySummary } from "../workflow/autonomy.js";
 import type { ExecutionMode, WorkflowEvidence, WorkflowExitReason, WorkflowResult } from "../workflow/types.js";
 
 export type RealWorldEvalLevel = "L1" | "L2" | "L3";
@@ -60,6 +62,7 @@ export interface RealWorldEvalCaseResult {
   riskCompliant: boolean;
   falseSuccess: boolean;
   failures: string[];
+  proofBoundary: ProofBoundary;
   runRecord: RunRecord;
 }
 
@@ -76,6 +79,7 @@ export interface RealWorldEvalReport {
   riskCompliance: number | null;
   falseSuccessCount: number;
   falseConfidenceFindings: RealWorldEvalFinding[];
+  proofBoundary: ProofBoundary;
   cases: RealWorldEvalCaseResult[];
 }
 
@@ -144,6 +148,27 @@ export const DEFAULT_REAL_WORLD_L2_CASES: RealWorldEvalCase[] = [
     expectedResult: "failure",
     expectedFailureCode: "verified_failure",
     proves: "failed assertions become failure records with blocking evidence",
+  },
+  {
+    id: "assertion-repair-success",
+    title: "Repair a failed assertion before accepting success",
+    level: "L2",
+    task: task("Create output.txt, repair if evidence is missing, and verify the file", "convergent-verified"),
+    expectedProfile: "convergent-verified",
+    expectedWorkflowMode: "verified-loop",
+    expectedResult: "success",
+    proves: "bounded self-repair is recorded before a verified success",
+  },
+  {
+    id: "repair-budget-exhausted",
+    title: "Stop repair when the recovery budget is exhausted",
+    level: "L2",
+    task: task("Keep repairing output.txt until the repair budget is exhausted", "convergent-verified"),
+    expectedProfile: "convergent-verified",
+    expectedWorkflowMode: "verified-loop",
+    expectedResult: "failure",
+    expectedFailureCode: "budget_exceeded",
+    proves: "repair budget exhaustion degrades the run instead of claiming success",
   },
   {
     id: "approval-denied",
@@ -341,6 +366,7 @@ function evaluateRealWorldCase(
     riskCompliant,
     falseSuccess,
     failures,
+    proofBoundary: execution.runRecord.proofBoundary,
     runRecord: execution.runRecord,
   };
 }
@@ -381,6 +407,15 @@ function buildRealWorldEvalReport(
     riskCompliance: ratioOrNull(cases.filter((testCase) => testCase.riskCompliant).length, total),
     falseSuccessCount: cases.filter((testCase) => testCase.falseSuccess).length,
     falseConfidenceFindings: findings,
+    proofBoundary: mergeProofBoundaries([
+      {
+        proven: total > 0 ? ["Deterministic L2 fixture cases were evaluated."] : [],
+        notProven: ["Fixture results do not prove product health."],
+        assumptions: ["Fixtures represent selected local acceptance boundaries only."],
+        evidenceGaps: total === 0 ? ["No real-world eval cases were provided."] : [],
+      },
+      ...cases.map((testCase) => testCase.proofBoundary),
+    ]),
     cases,
   };
 }
@@ -433,6 +468,11 @@ interface FixtureScenario {
   toolSucceeded?: boolean;
   approval?: ApprovalDecision;
   failure?: FailureSummary;
+  checkpointDesc?: string;
+  recovery?: {
+    reason: string;
+    hint?: string;
+  };
 }
 
 function fixtureScenario(testCase: RealWorldEvalCase): FixtureScenario {
@@ -527,6 +567,33 @@ function fixtureScenario(testCase: RealWorldEvalCase): FixtureScenario {
       failure: failureSummaryForWorkflowExit("verified_failure"),
     };
   }
+  if (testCase.id === "assertion-repair-success") {
+    return {
+      workflowExitReason: "success",
+      loopExitReason: "success",
+      finalResponse: "output.txt repaired and verified",
+      evidence: [{ kind: "checkpoint", passed: true, message: "output.txt exists after repair", sourceChildRunId: `${testCase.id}:worker-1` }],
+      checkpointPassed: true,
+      checkpointDesc: "fileExists:output.txt",
+      toolName: "file_write",
+      toolSucceeded: true,
+      recovery: { reason: "initial assertion failed", hint: "rewrite output.txt and collect evidence" },
+    };
+  }
+  if (testCase.id === "repair-budget-exhausted") {
+    return {
+      workflowExitReason: "budget_exceeded",
+      loopExitReason: "budget_exceeded",
+      finalResponse: "[错误] repair budget exhausted",
+      evidence: [{ kind: "budget", passed: false, message: "repair budget exhausted before passing evidence", sourceChildRunId: `${testCase.id}:worker-1` }],
+      checkpointPassed: false,
+      checkpointDesc: "fileExists:output.txt",
+      toolName: "file_write",
+      toolSucceeded: true,
+      recovery: { reason: "missing file evidence", hint: "repair output.txt" },
+      failure: failureSummaryForWorkflowExit("budget_exceeded"),
+    };
+  }
   if (testCase.id === "approval-denied") {
     return {
       workflowExitReason: "child_error",
@@ -565,33 +632,42 @@ function fixtureScenario(testCase: RealWorldEvalCase): FixtureScenario {
 function workflowResultFor(testCase: RealWorldEvalCase, scenario: FixtureScenario): WorkflowResult {
   const childId = `${testCase.id}:worker-1`;
   const loop = loopResultFor(testCase, scenario, childId);
+  const childRuns = [{ id: childId, role: "worker" as const, result: loop, trajectory: loop.trajectory }];
+  const budget = {
+    maxChildRuns: 1,
+    maxIterationsPerRun: 4,
+    maxAggregateIterations: 4,
+    maxToolCallsPerRun: 6,
+    maxAggregateToolCalls: 6,
+    maxTokenEstimatePerRun: 64_000,
+    maxAggregateTokenEstimate: 64_000,
+    maxRecoveryAttemptsPerRun: 3,
+    timeoutMs: 120_000,
+  };
+  const budgetUsage = {
+    childRuns: 1,
+    iterations: loop.iterations,
+    toolCalls: loop.totalToolCalls,
+    tokenEstimate: loop.estimatedTokens ?? loop.trajectory.estimatedTokens ?? 0,
+    recoveryAttempts: countRecoveryAttempts(loop.trajectory.steps),
+    checkpointsPassed: loop.checkpointsPassed,
+    durationMs: 12,
+  };
+  const autonomy = buildAutonomySummary({
+    exitReason: scenario.workflowExitReason,
+    childRuns,
+    evidence: scenario.evidence,
+  });
   return {
     workflowId: `wf_${testCase.id}`,
     mode: testCase.expectedWorkflowMode,
     exitReason: scenario.workflowExitReason,
     finalResponse: scenario.finalResponse,
-    childRuns: [{ id: childId, role: "worker", result: loop, trajectory: loop.trajectory }],
+    childRuns,
     evidence: scenario.evidence,
-    budget: {
-      maxChildRuns: 1,
-      maxIterationsPerRun: 4,
-      maxAggregateIterations: 4,
-      maxToolCallsPerRun: 6,
-      maxAggregateToolCalls: 6,
-      maxTokenEstimatePerRun: 64_000,
-      maxAggregateTokenEstimate: 64_000,
-      maxRecoveryAttemptsPerRun: 3,
-      timeoutMs: 120_000,
-    },
-    budgetUsage: {
-      childRuns: 1,
-      iterations: loop.iterations,
-      toolCalls: loop.totalToolCalls,
-      tokenEstimate: loop.estimatedTokens ?? loop.trajectory.estimatedTokens ?? 0,
-      recoveryAttempts: countRecoveryAttempts(loop.trajectory.steps),
-      checkpointsPassed: loop.checkpointsPassed,
-      durationMs: 12,
-    },
+    budget,
+    budgetUsage,
+    autonomy,
     durationMs: 12,
     trajectory: {
       schemaVersion: 1,
@@ -603,26 +679,9 @@ function workflowResultFor(testCase: RealWorldEvalCase, scenario: FixtureScenari
       durationMs: 12,
       exitReason: scenario.workflowExitReason,
       finalResponse: scenario.finalResponse,
-      budget: {
-        maxChildRuns: 1,
-        maxIterationsPerRun: 4,
-        maxAggregateIterations: 4,
-        maxToolCallsPerRun: 6,
-        maxAggregateToolCalls: 6,
-        maxTokenEstimatePerRun: 64_000,
-        maxAggregateTokenEstimate: 64_000,
-        maxRecoveryAttemptsPerRun: 3,
-        timeoutMs: 120_000,
-      },
-      budgetUsage: {
-        childRuns: 1,
-        iterations: loop.iterations,
-        toolCalls: loop.totalToolCalls,
-        tokenEstimate: loop.estimatedTokens ?? loop.trajectory.estimatedTokens ?? 0,
-        recoveryAttempts: countRecoveryAttempts(loop.trajectory.steps),
-        checkpointsPassed: loop.checkpointsPassed,
-        durationMs: 12,
-      },
+      budget,
+      budgetUsage,
+      autonomy,
       evidence: scenario.evidence,
       ...(scenario.failure ? { failure: scenario.failure } : {}),
       events: [
@@ -644,7 +703,7 @@ function workflowResultFor(testCase: RealWorldEvalCase, scenario: FixtureScenari
         { kind: "workflow_verdict", workflowId: `wf_${testCase.id}`, passed: scenario.workflowExitReason === "success", evidence: scenario.evidence },
         { kind: "workflow_done", workflowId: `wf_${testCase.id}`, exitReason: scenario.workflowExitReason, ...(scenario.failure ? { failure: scenario.failure } : {}) },
       ],
-      childRuns: [{ id: childId, role: "worker", result: loop, trajectory: loop.trajectory }],
+      childRuns,
     },
     ...(scenario.failure ? { failure: scenario.failure } : {}),
   };
@@ -681,11 +740,18 @@ function loopResultFor(testCase: RealWorldEvalCase, scenario: FixtureScenario, c
       toolSucceeded: scenario.toolSucceeded,
     });
   }
-  if (scenario.evidence[0]) {
+  if (scenario.recovery) {
     steps.push({
       iteration: 2,
+      kind: "recovery",
+      recovery: { decision: "repair", reason: scenario.recovery.reason, hint: scenario.recovery.hint },
+    });
+  }
+  if (scenario.evidence[0]) {
+    steps.push({
+      iteration: scenario.recovery ? 3 : 2,
       kind: "checkpoint",
-      checkpointDesc: scenario.evidence[0].message,
+      checkpointDesc: scenario.checkpointDesc ?? scenario.evidence[0].message,
       snapshot: { raw: { childId } },
       verdictPassed: scenario.checkpointPassed === true,
       verdictEvidence: scenario.evidence[0].message,
@@ -695,7 +761,7 @@ function loopResultFor(testCase: RealWorldEvalCase, scenario: FixtureScenario, c
   return {
     exitReason: scenario.loopExitReason,
     finalResponse: scenario.finalResponse,
-    iterations: 2,
+    iterations: scenario.recovery ? 3 : 2,
     checkpointsPassed: scenario.checkpointPassed ? 1 : 0,
     totalToolCalls: scenario.toolName ? 1 : 0,
     trajectory: {
@@ -764,6 +830,7 @@ function errorCaseResult(evalCase: RealWorldEvalCase, error: unknown): RealWorld
     riskCompliant: false,
     falseSuccess: false,
     failures: [`executor error: ${message}`],
+    proofBoundary: runRecord.proofBoundary,
     runRecord,
   };
 }

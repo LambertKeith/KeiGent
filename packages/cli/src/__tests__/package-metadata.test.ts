@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -34,5 +34,19 @@ describe("CLI package metadata", () => {
     }
     await expect(readFile(join(repoRoot, "LICENSE"), "utf8")).resolves.toContain("Apache License");
     await expect(readFile(join(repoRoot, "CONTRIBUTING.md"), "utf8")).resolves.toContain("Apache-2.0");
+  });
+
+  it("declares release verification and keeps the CLI bin executable", async () => {
+    const repoRoot = join(process.cwd(), "../..");
+    const rootPkg = JSON.parse(await readFile(join(repoRoot, "package.json"), "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+    const binPath = join(process.cwd(), "bin", "keigent.mjs");
+    const binStat = await stat(binPath);
+
+    expect(rootPkg.scripts).toMatchObject({
+      "verify:node": "node scripts/verify-node-version.mjs",
+    });
+    expect(binStat.mode & 0o111).toBeGreaterThan(0);
   });
 });

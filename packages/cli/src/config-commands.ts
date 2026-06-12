@@ -44,6 +44,7 @@ const CONFIG_KEYS = new Set<keyof KeigentConfig>([
   "maxTokenEstimate",
   "maxProviderCostUsd",
   "modelPricing",
+  "modelCapabilities",
   "maxWallTimeMs",
   "maxRecoveryAttempts",
 ]);
@@ -78,6 +79,14 @@ function defaultConfigTemplate(): KeigentConfigInput {
     maxTokenEstimate: 64_000,
     maxProviderCostUsd: null,
     modelPricing: null,
+    modelCapabilities: {
+      toolCalling: true,
+      streaming: true,
+      jsonMode: false,
+      vision: true,
+      maxContextTokens: 128_000,
+      parallelToolCalls: false,
+    },
     maxWallTimeMs: 120_000,
     maxRecoveryAttempts: 3,
   };
@@ -200,6 +209,14 @@ function buildSourceAwareConfig(
     maxTokenEstimate: 64_000,
     maxProviderCostUsd: null,
     modelPricing: null,
+    modelCapabilities: {
+      toolCalling: true,
+      streaming: true,
+      jsonMode: false,
+      vision: true,
+      maxContextTokens: 128_000,
+      parallelToolCalls: false,
+    },
     maxWallTimeMs: 120_000,
     maxRecoveryAttempts: 3,
   };

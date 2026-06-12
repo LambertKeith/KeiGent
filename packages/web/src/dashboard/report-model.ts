@@ -1,4 +1,5 @@
 import type {
+  ProofBoundary,
   RealWorldEvalCaseResult,
   RealWorldEvalFinding,
   RealWorldEvalReport,
@@ -79,6 +80,7 @@ export interface RealWorldEvalCaseView {
   replayFreshExecution: boolean;
   failureCodes: string[];
   failures: string[];
+  proofBoundary: ProofBoundary;
 }
 
 export interface RealWorldEvalReportView {
@@ -97,6 +99,7 @@ export interface RealWorldEvalReportView {
   };
   falseSuccessCount: number;
   falseConfidenceFindings: RealWorldEvalFinding[];
+  proofBoundary: ProofBoundary;
   cases: RealWorldEvalCaseView[];
 }
 
@@ -189,6 +192,7 @@ export function normalizeRealWorldEvalReport(report: RealWorldEvalReport): RealW
     },
     falseSuccessCount: report.falseSuccessCount,
     falseConfidenceFindings: report.falseConfidenceFindings,
+    proofBoundary: report.proofBoundary,
     cases: report.cases.map(realWorldCaseView),
   };
 }
@@ -213,6 +217,7 @@ function realWorldCaseView(testCase: RealWorldEvalCaseResult): RealWorldEvalCase
     replayFreshExecution: testCase.runRecord.replay.freshExecution,
     failureCodes: testCase.runRecord.failures.map((failure) => failure.code),
     failures: testCase.failures,
+    proofBoundary: testCase.proofBoundary,
   };
 }
 

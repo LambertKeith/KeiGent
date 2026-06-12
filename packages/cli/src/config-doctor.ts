@@ -1,6 +1,6 @@
 import { access, stat } from "fs/promises";
 import type { KeigentConfig } from "./config.js";
-import { isModelApiProtocol, isModelPricing } from "./config.js";
+import { isModelApiProtocol, isModelCapabilities, isModelPricing } from "./config.js";
 
 export type ConfigIssueSeverity = "info" | "warning" | "error";
 export type ConfigSource = "env" | "file" | "default";
@@ -10,6 +10,7 @@ export interface ConfigIssue {
   severity: ConfigIssueSeverity;
   field?: keyof KeigentConfig;
   message: string;
+  nextAction?: string;
   source?: ConfigSource;
 }
 
@@ -32,7 +33,7 @@ export function redactSecret(value: string | undefined): string {
   return value.length >= 8 ? `[REDACTED:...${value.slice(-4)}]` : "[REDACTED]";
 }
 
-export function validateConfig(config: KeigentConfig): ConfigIssue[] {
+export function validateConfig(config: KeigentConfig, env: NodeJS.ProcessEnv = process.env): ConfigIssue[] {
   const issues: ConfigIssue[] = [];
 
   if (config.configVersion !== 1) {
@@ -97,6 +98,18 @@ export function validateConfig(config: KeigentConfig): ConfigIssue[] {
     issues.push({ code: "modelPricing.missing_for_cost_budget", severity: "warning", field: "modelPricing", message: "maxProviderCostUsd only enforces priced provider usage; configure modelPricing for custom endpoints" });
   }
 
+  if (!isModelCapabilities(config.modelCapabilities)) {
+    issues.push({ code: "modelCapabilities.invalid", severity: "error", field: "modelCapabilities", message: "modelCapabilities must declare boolean feature flags and positive maxContextTokens" });
+  } else if (config.modelCapabilities.maxContextTokens < 8_192 || config.modelCapabilities.maxContextTokens < config.maxTokenEstimate) {
+    issues.push({
+      code: "modelCapabilities.maxContextTokens.low",
+      severity: "warning",
+      field: "modelCapabilities",
+      message: "modelCapabilities.maxContextTokens is lower than the configured runtime token budget or below the supported floor",
+      nextAction: "Choose a larger-context model or lower maxTokenEstimate before running long tasks.",
+    });
+  }
+
   if (!Number.isInteger(config.maxWallTimeMs) || config.maxWallTimeMs < 1) {
     issues.push({ code: "maxWallTimeMs.invalid", severity: "error", field: "maxWallTimeMs", message: "maxWallTimeMs must be an integer >= 1" });
   } else if (config.maxWallTimeMs > 30 * 60 * 1000) {
@@ -111,6 +124,15 @@ export function validateConfig(config: KeigentConfig): ConfigIssue[] {
 
   if (typeof config.headless !== "boolean") {
     issues.push({ code: "headless.invalid", severity: "error", field: "headless", message: "headless must be boolean" });
+  }
+
+  if (!env.PLAYWRIGHT_BROWSERS_PATH?.trim()) {
+    issues.push({
+      code: "browser.playwright_path_unset",
+      severity: "warning",
+      message: "PLAYWRIGHT_BROWSERS_PATH is not set; browser verification may use an unavailable default cache.",
+      nextAction: "Set PLAYWRIGHT_BROWSERS_PATH to the installed Playwright browser cache before running verify:browser.",
+    });
   }
 
   return issues;

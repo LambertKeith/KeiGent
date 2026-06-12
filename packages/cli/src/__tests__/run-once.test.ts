@@ -25,6 +25,15 @@ const mocks = vi.hoisted(() => ({
     maxToolCalls: 7,
     maxTokenEstimate: 8_000,
     maxProviderCostUsd: 0.25,
+    modelPricing: null,
+    modelCapabilities: {
+      toolCalling: true,
+      streaming: true,
+      jsonMode: false,
+      vision: true,
+      maxContextTokens: 128_000,
+      parallelToolCalls: false,
+    },
     maxWallTimeMs: 9_000,
     maxRecoveryAttempts: 1,
   })),
@@ -99,6 +108,11 @@ vi.mock("../renderer.js", () => ({
 }));
 
 function workflowResult(exitReason: WorkflowResult["exitReason"]): WorkflowResult {
+  const autonomy = {
+    outcome: exitReason === "success" ? "completed_without_escalation" as const : "degraded_without_escalation" as const,
+    repairAttempts: [],
+    escalations: [],
+  };
   return {
     workflowId: "cli-test",
     mode: "single-loop",
@@ -116,9 +130,34 @@ function workflowResult(exitReason: WorkflowResult["exitReason"]): WorkflowResul
       timeoutMs: 120_000,
     },
     budgetUsage: { childRuns: 0, iterations: 0, toolCalls: 0, recoveryAttempts: 0, checkpointsPassed: 0, durationMs: 1 },
+    autonomy,
     durationMs: 1,
-    trajectory: {} as WorkflowResult["trajectory"],
-  } as WorkflowResult;
+    trajectory: {
+      schemaVersion: 1,
+      workflowId: "cli-test",
+      mode: "single-loop",
+      goal: "Do the thing",
+      rootTask: { goal: "Do the thing", profile: "auto" },
+      startedAt: "2026-06-10T00:00:00.000Z",
+      durationMs: 1,
+      exitReason,
+      finalResponse: exitReason === "success" ? "done" : "failed",
+      budget: {
+        maxChildRuns: 1,
+        maxIterationsPerRun: 3,
+        maxAggregateIterations: 3,
+        maxToolCallsPerRun: 20,
+        maxAggregateToolCalls: 20,
+        maxRecoveryAttemptsPerRun: 3,
+        timeoutMs: 120_000,
+      },
+      budgetUsage: { childRuns: 0, iterations: 0, toolCalls: 0, recoveryAttempts: 0, checkpointsPassed: 0, durationMs: 1 },
+      autonomy,
+      evidence: [],
+      events: [],
+      childRuns: [],
+    },
+  };
 }
 
 describe("runOnce workflow exit semantics", () => {
@@ -140,6 +179,15 @@ describe("runOnce workflow exit semantics", () => {
       maxToolCalls: 7,
       maxTokenEstimate: 8_000,
       maxProviderCostUsd: 0.25,
+      modelPricing: null,
+      modelCapabilities: {
+        toolCalling: true,
+        streaming: true,
+        jsonMode: false,
+        vision: true,
+        maxContextTokens: 128_000,
+        parallelToolCalls: false,
+      },
       maxWallTimeMs: 9_000,
       maxRecoveryAttempts: 1,
     });
@@ -207,6 +255,50 @@ describe("runOnce workflow exit semantics", () => {
       maxWallTimeMs: 9_000,
       maxRecoveryAttempts: 1,
     });
+  });
+
+  it("returns a structured verification failure when tool calling is disabled for a tool-dependent task", async () => {
+    const { executeWorkflowTask } = await import("../workflow-execution.js");
+
+    const output = await executeWorkflowTask({
+      goal: "read file README.md",
+      config: {
+        apiKey: "test-key",
+        apiProtocol: "openai",
+        baseUrl: "https://example.com/v1",
+        modelId: "text-only-model",
+        workspace: "/tmp/workspace",
+        skillsDir: "/tmp/skills",
+        memoryDir: "/tmp/memory",
+        headless: true,
+        maxIterations: 3,
+        maxChildRuns: 1,
+        maxToolCalls: 7,
+        maxTokenEstimate: 8_000,
+        maxProviderCostUsd: null,
+        modelPricing: null,
+        modelCapabilities: {
+          toolCalling: false,
+          streaming: true,
+          jsonMode: false,
+          vision: false,
+          maxContextTokens: 32_000,
+          parallelToolCalls: false,
+        },
+        maxWallTimeMs: 9_000,
+        maxRecoveryAttempts: 1,
+        configVersion: 1,
+      },
+    });
+
+    expect(output.result).toMatchObject({
+      exitReason: "verified_failure",
+      evidence: [expect.objectContaining({
+        passed: false,
+        message: expect.stringContaining("Provider capability prevented tool execution"),
+      })],
+    });
+    expect(mocks.workflowRun).not.toHaveBeenCalled();
   });
 
   it("sets a non-zero exit code when an unexpected exception escapes the workflow path", async () => {

@@ -189,12 +189,20 @@ export function formatOperatorAcceptancePacket(report: OperatorScenarioEvalRepor
     "",
     "> Fixture results are not human acceptance. A human reviewer must inspect the linked evidence and complete the manual sign-off section.",
     "",
+    "## Proof boundary",
+    "",
+    "- Proven: deterministic L3 operator scenario fixtures were evaluated and linked evidence was listed.",
+    "- Not proven: human acceptance, production health, live operator readiness, or code-owner approval.",
+    "- Evidence inspected: must be checked by the human reviewer before any accepted decision.",
+    "- Override reason: required when a human decision overrides fixture evidence or the expected journey outcome.",
+    "",
     "## Manual Sign-off",
     "",
     "- [ ] Human reviewer name:",
     "- [ ] Review date:",
     "- [ ] Evidence links opened and inspected",
     "- [ ] Human decision matches or overrides fixture decision",
+    "- [ ] Override reason recorded when decision overrides fixture evidence",
     "- [ ] Blocking issues and next actions recorded",
     "- [ ] False-confidence risks accepted or mitigated",
     "",
@@ -227,6 +235,7 @@ export function formatOperatorAcceptancePacket(report: OperatorScenarioEvalRepor
       "",
       "- [ ] Evidence inspected",
       "- [ ] Human decision recorded",
+      "- [ ] Override reason:",
       "- [ ] Notes:",
       "",
     );
@@ -287,8 +296,10 @@ export function buildOperatorAcceptanceRecord(
     if (signed.falseConfidenceRisksAccepted !== true) {
       issues.push({ code: "false_confidence_not_accepted", severity: "blocking", caseId: testCase.id, message: "False-confidence risks must be accepted or mitigated." });
     }
-    if (signed.humanDecision !== testCase.expectedDecision && !signed.overrideReason?.trim()) {
-      issues.push({ code: "override_missing_reason", severity: "blocking", caseId: testCase.id, message: "Human decision overrides the expected journey outcome but has no overrideReason." });
+    const overridesFixtureDecision = signed.humanDecision !== testCase.review.decision;
+    const overridesExpectedDecision = signed.humanDecision !== testCase.expectedDecision;
+    if ((overridesFixtureDecision || overridesExpectedDecision) && !signed.overrideReason?.trim()) {
+      issues.push({ code: "override_missing_reason", severity: "blocking", caseId: testCase.id, message: "Human decision overrides fixture evidence or the expected journey outcome but has no overrideReason." });
     }
     for (const issue of signed.blockingIssues ?? []) {
       if (issue.trim()) {

@@ -27,6 +27,14 @@ describe("CLI config", () => {
     expect(config.maxTokenEstimate).toBe(64_000);
     expect(config.maxProviderCostUsd).toBeNull();
     expect(config.modelPricing).toBeNull();
+    expect(config.modelCapabilities).toEqual({
+      toolCalling: true,
+      streaming: true,
+      jsonMode: false,
+      vision: true,
+      maxContextTokens: 128_000,
+      parallelToolCalls: false,
+    });
     expect(config.maxWallTimeMs).toBe(120_000);
     expect(config.maxRecoveryAttempts).toBe(3);
   });
@@ -43,6 +51,20 @@ describe("CLI config", () => {
 
     expect(config.modelPricing).toEqual(modelPricing);
     expect(buildModel(config).cost).toEqual(modelPricing);
+  });
+
+  it("merges explicit model capabilities without losing defaults", () => {
+    const config = resolveConfig({
+      apiKey: "file-key",
+      modelCapabilities: { toolCalling: false, vision: false, maxContextTokens: 32_000 },
+    }, {}, "/tmp/keigent-home");
+    const model = buildModel(config);
+
+    expect(config.modelCapabilities.toolCalling).toBe(false);
+    expect(config.modelCapabilities.streaming).toBe(true);
+    expect(config.modelCapabilities.vision).toBe(false);
+    expect(model.input).toEqual(["text"]);
+    expect(model.contextWindow).toBe(32_000);
   });
 
   it("does not let an empty KEIGENT_API_KEY shadow a file API key", () => {
@@ -139,6 +161,9 @@ describe("CLI config", () => {
     expect(configExample).toContain('"maxTokenEstimate": 64000');
     expect(configExample).toContain('"maxProviderCostUsd": null');
     expect(configExample).toContain('"modelPricing": null');
+    expect(configExample).toContain('"modelCapabilities"');
+    expect(configExample).toContain('"toolCalling": true');
+    expect(configExample).toContain('"maxContextTokens": 128000');
     expect(configExample).toContain('"maxWallTimeMs": 120000');
     expect(envExample).not.toContain("sk-");
     expect(envExample).toContain("KEIGENT_API_KEY=");

@@ -222,6 +222,32 @@ describe("normalizeConversationRun", () => {
     expect(JSON.stringify(run)).not.toContain("sk-approval-secret");
   });
 
+  it("accepts stable loop protocol events for tool and terminal display", () => {
+    const run = normalizeConversationRun({
+      id: "run-protocol",
+      mode: "live",
+      task: { goal: "Use protocol events" },
+      events: [
+        { kind: "loop_event", event: { type: "run_created", message: "Use protocol events" } },
+        { kind: "loop_event", event: { type: "tool_requested", iteration: 1, toolName: "file_read", status: "requested", payload: { path: "README.md" } } },
+        { kind: "loop_event", event: { type: "tool_completed", iteration: 1, toolName: "file_read", status: "succeeded", message: "ok" } },
+        { kind: "loop_event", event: { type: "run_succeeded", status: "succeeded", message: "done" } },
+      ],
+    });
+
+    expect(run.status).toBe("success");
+    expect(run.timeline).toContainEqual(expect.objectContaining({
+      kind: "tool_activity",
+      toolName: "file_read",
+      state: "succeeded",
+    }));
+    expect(run.timeline).toContainEqual(expect.objectContaining({
+      kind: "done",
+      exitReason: "success",
+      finalResponse: "done",
+    }));
+  });
+
   it("builds an inspectable run console model with success definitions and raw redaction", () => {
     const run = normalizeConversationRun({
       id: "run-console",

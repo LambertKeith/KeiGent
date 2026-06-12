@@ -1,4 +1,4 @@
-import type { ApprovalSummary, ProviderUsageSummary, RunRecord, SkillRunSummary, ToolRunSummary } from "@keigent/engine";
+import type { ApprovalSummary, AutonomySummary, ProofBoundary, ProviderUsageSummary, RunRecord, SkillRunSummary, ToolRunSummary } from "@keigent/engine";
 import { redactObject, redactText } from "../shared/redaction.js";
 
 export interface RunRecordListItem {
@@ -91,6 +91,8 @@ export interface RunRecordDetailView {
   risk: RunRiskPanel;
   budget: RunBudgetPanel;
   replay: RunReplayPanel;
+  autonomy: AutonomySummary;
+  proofBoundary: ProofBoundary;
   approvals: Array<{
     toolName: string;
     approved: boolean;
@@ -149,6 +151,25 @@ export function normalizeRunRecord(input: unknown): RunRecordDetailView {
       ...(record.replay.trajectoryPath ? { trajectoryPath: redactText(record.replay.trajectoryPath) } : {}),
       ...(record.replay.latestReplayReportId ? { latestReplayReportId: redactText(record.replay.latestReplayReportId) } : {}),
       label: replayLabel(record),
+    },
+    autonomy: {
+      outcome: record.autonomy.outcome,
+      repairAttempts: record.autonomy.repairAttempts.map((attempt) => ({
+        targetAssertion: redactText(attempt.targetAssertion),
+        reason: redactText(attempt.reason),
+        attempt: attempt.attempt,
+        finalVerdict: attempt.finalVerdict,
+      })),
+      escalations: record.autonomy.escalations.map((escalation) => ({
+        reason: escalation.reason,
+        message: redactText(escalation.message),
+      })),
+    },
+    proofBoundary: {
+      proven: record.proofBoundary.proven.map((item) => redactText(item)),
+      notProven: record.proofBoundary.notProven.map((item) => redactText(item)),
+      assumptions: record.proofBoundary.assumptions.map((item) => redactText(item)),
+      evidenceGaps: record.proofBoundary.evidenceGaps.map((item) => redactText(item)),
     },
     approvals: record.approvals.map((approval) => ({
       toolName: redactText(approval.toolName),
@@ -214,13 +235,36 @@ function normalizeRecordShape(input: unknown): RunRecord {
   const replay = objectValue(source.replay);
   const execution = objectValue(source.execution);
   const successDef = successDefValue(task.successDef);
+  const status = statusValue(source.status) as RunRecord["status"];
+  const evidenceSummary: RunRecord["evidence"] = {
+    status: evidenceStatusValue(evidence.status),
+    total: numberValue(evidence.total),
+    passed: numberValue(evidence.passed),
+    failed: numberValue(evidence.failed),
+    sources: stringArray(evidence.sources),
+    blocking: stringArray(evidence.blocking),
+  };
+  const failures = Array.isArray(source.failures) ? source.failures as RunRecord["failures"] : [];
+  const automation = isObject(source.automation) ? source.automation as unknown as RunRecord["automation"] : undefined;
+  const replayCapability: RunRecord["replay"] = {
+    supported: replay.supported === true,
+    ...(typeof replay.unsupportedReason === "string" ? { unsupportedReason: replay.unsupportedReason } : {}),
+    ...(typeof replay.trajectoryPath === "string" ? { trajectoryPath: replay.trajectoryPath } : {}),
+    ...(typeof replay.trajectorySchemaVersion === "number" ? { trajectorySchemaVersion: replay.trajectorySchemaVersion } : {}),
+    ...(typeof replay.latestReplayReportId === "string" ? { latestReplayReportId: replay.latestReplayReportId } : {}),
+    freshExecution: replay.freshExecution !== false,
+  };
+  const proofBoundary = isObject(source.proofBoundary)
+    ? proofBoundaryValue(source.proofBoundary)
+    : fallbackProofBoundaryForRecord({ evidence: evidenceSummary, failures, ...(automation ? { automation } : {}), replay: replayCapability });
+  const autonomy = isObject(source.autonomy) ? autonomyValue(source.autonomy) : emptyAutonomy();
 
   return {
     schemaVersion: 1,
     id: stringValue(source.id, "unknown"),
     createdAt: stringValue(source.createdAt, ""),
     updatedAt: stringValue(source.updatedAt, stringValue(source.createdAt, "")),
-    status: statusValue(source.status) as RunRecord["status"],
+    status,
     task: {
       goal: stringValue(task.goal, "Unknown run"),
       source: taskSourceValue(task.source),
@@ -255,14 +299,7 @@ function normalizeRecordShape(input: unknown): RunRecord {
     },
     skills: Array.isArray(source.skills) ? source.skills as SkillRunSummary[] : undefined,
     tools: Array.isArray(source.tools) ? source.tools as ToolRunSummary[] : undefined,
-    evidence: {
-      status: evidenceStatusValue(evidence.status),
-      total: numberValue(evidence.total),
-      passed: numberValue(evidence.passed),
-      failed: numberValue(evidence.failed),
-      sources: stringArray(evidence.sources),
-      blocking: stringArray(evidence.blocking),
-    },
+    evidence: evidenceSummary,
     risk: {
       highestRiskLevel: stringValue(risk.highestRiskLevel, "R0") as RunRecord["risk"]["highestRiskLevel"],
       permissionClassesUsed: stringArray(risk.permissionClassesUsed) as RunRecord["risk"]["permissionClassesUsed"],
@@ -273,18 +310,13 @@ function normalizeRecordShape(input: unknown): RunRecord {
       approvalRequired: risk.approvalRequired === true,
     },
     approvals: Array.isArray(source.approvals) ? source.approvals as RunRecord["approvals"] : [],
-    failures: Array.isArray(source.failures) ? source.failures as RunRecord["failures"] : [],
+    failures,
     artifacts: Array.isArray(source.artifacts) ? source.artifacts as RunRecord["artifacts"] : [],
-    ...(isObject(source.automation) ? { automation: source.automation as unknown as RunRecord["automation"] } : {}),
+    ...(automation ? { automation } : {}),
     ...(typeof source.nextAction === "string" ? { nextAction: source.nextAction } : {}),
-    replay: {
-      supported: replay.supported === true,
-      ...(typeof replay.unsupportedReason === "string" ? { unsupportedReason: replay.unsupportedReason } : {}),
-      ...(typeof replay.trajectoryPath === "string" ? { trajectoryPath: replay.trajectoryPath } : {}),
-      ...(typeof replay.trajectorySchemaVersion === "number" ? { trajectorySchemaVersion: replay.trajectorySchemaVersion } : {}),
-      ...(typeof replay.latestReplayReportId === "string" ? { latestReplayReportId: replay.latestReplayReportId } : {}),
-      freshExecution: replay.freshExecution !== false,
-    },
+    autonomy,
+    replay: replayCapability,
+    proofBoundary,
     redaction: isObject(source.redaction) ? source.redaction as unknown as RunRecord["redaction"] : { applied: true, rawPayloadStored: false },
   };
 }
@@ -439,6 +471,121 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function objectValue(value: unknown): Record<string, unknown> {
   return isObject(value) ? value : {};
+}
+
+function proofBoundaryValue(value: unknown): ProofBoundary {
+  const source = objectValue(value);
+  return {
+    proven: stringArray(source.proven),
+    notProven: stringArray(source.notProven),
+    assumptions: stringArray(source.assumptions),
+    evidenceGaps: stringArray(source.evidenceGaps),
+  };
+}
+
+function autonomyValue(value: unknown): AutonomySummary {
+  const source = objectValue(value);
+  return {
+    outcome: autonomyOutcomeValue(source.outcome),
+    repairAttempts: Array.isArray(source.repairAttempts)
+      ? source.repairAttempts.map(repairAttemptValue)
+      : [],
+    escalations: Array.isArray(source.escalations)
+      ? source.escalations.map(escalationValue)
+      : [],
+  };
+}
+
+function emptyAutonomy(): AutonomySummary {
+  return { outcome: "completed_without_escalation", repairAttempts: [], escalations: [] };
+}
+
+function repairAttemptValue(value: unknown): AutonomySummary["repairAttempts"][number] {
+  const source = objectValue(value);
+  return {
+    targetAssertion: stringValue(source.targetAssertion, "unknown assertion"),
+    reason: stringValue(source.reason, "repair requested"),
+    attempt: numberValue(source.attempt),
+    finalVerdict: repairVerdictValue(source.finalVerdict),
+  };
+}
+
+function escalationValue(value: unknown): AutonomySummary["escalations"][number] {
+  const source = objectValue(value);
+  return {
+    reason: escalationReasonValue(source.reason),
+    message: stringValue(source.message, "Escalation required."),
+  };
+}
+
+function autonomyOutcomeValue(value: unknown): AutonomySummary["outcome"] {
+  const allowed = new Set<AutonomySummary["outcome"]>([
+    "completed_without_escalation",
+    "self_repaired",
+    "degraded_without_escalation",
+    "escalated",
+  ]);
+  return typeof value === "string" && allowed.has(value as AutonomySummary["outcome"])
+    ? value as AutonomySummary["outcome"]
+    : "completed_without_escalation";
+}
+
+function repairVerdictValue(value: unknown): AutonomySummary["repairAttempts"][number]["finalVerdict"] {
+  const allowed = new Set<AutonomySummary["repairAttempts"][number]["finalVerdict"]>(["passed", "failed", "budget_exhausted"]);
+  return typeof value === "string" && allowed.has(value as AutonomySummary["repairAttempts"][number]["finalVerdict"])
+    ? value as AutonomySummary["repairAttempts"][number]["finalVerdict"]
+    : "failed";
+}
+
+function escalationReasonValue(value: unknown): AutonomySummary["escalations"][number]["reason"] {
+  const allowed = new Set<AutonomySummary["escalations"][number]["reason"]>([
+    "permission_required",
+    "risk_confirmation_required",
+    "goal_ambiguity_blocking",
+    "evidence_insufficient_after_retry",
+    "acceptance_failed_after_repair",
+    "budget_exhausted",
+    "external_dependency_blocked",
+  ]);
+  return typeof value === "string" && allowed.has(value as AutonomySummary["escalations"][number]["reason"])
+    ? value as AutonomySummary["escalations"][number]["reason"]
+    : "external_dependency_blocked";
+}
+
+function fallbackProofBoundaryForRecord(record: Pick<RunRecord, "evidence" | "automation" | "replay" | "failures">): ProofBoundary {
+  return normalizeProofBoundary({
+    proven: record.evidence.sources.length > 0 && record.evidence.passed > 0
+      ? record.evidence.sources.map((source) => `Evidence source passed: ${source}`)
+      : [],
+    notProven: [
+      "External production health is not proven by this run.",
+      ...(record.automation?.doesNotProve ?? []),
+      ...(record.replay.freshExecution ? [] : ["Historical replay does not prove fresh execution."]),
+    ],
+    assumptions: [
+      ...(record.automation ? [`Automation scope: ${record.automation.scope}`] : []),
+      "Final response is a communication artifact, not proof.",
+    ],
+    evidenceGaps: [
+      ...(record.evidence.status === "not_checked" ? ["No verification evidence was checked."] : []),
+      ...(record.evidence.status === "insufficient_evidence" ? ["Evidence is insufficient for trusted success."] : []),
+      ...record.evidence.blocking,
+      ...record.failures.map((failure) => failure.message),
+    ],
+  });
+}
+
+function normalizeProofBoundary(boundary: ProofBoundary): ProofBoundary {
+  return {
+    proven: uniqueNonEmpty(boundary.proven),
+    notProven: uniqueNonEmpty(boundary.notProven),
+    assumptions: uniqueNonEmpty(boundary.assumptions),
+    evidenceGaps: uniqueNonEmpty(boundary.evidenceGaps),
+  };
+}
+
+function uniqueNonEmpty(items: string[]): string[] {
+  return [...new Set(items.map((item) => item.trim()).filter(Boolean))];
 }
 
 function statusValue(value: unknown): string {
