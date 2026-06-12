@@ -250,6 +250,7 @@ git diff --check
 - [文档索引] [`doc/design/README.md`](doc/design/README.md) —— 设计文档状态地图
 - [产品蓝图] [`doc/product/01-product-blueprint.md`](doc/product/01-product-blueprint.md) —— 产品定位、用户、成熟度、模块地图
 - [策略边界] [`doc/strategy/01-architecture-boundaries-and-non-goals.md`](doc/strategy/01-architecture-boundaries-and-non-goals.md) —— 架构边界与非目标
+- [产品方向] [`doc/strategy/02-agent-operations-product-direction.md`](doc/strategy/02-agent-operations-product-direction.md) —— Agent Operations 基线后的产品判断、反 demo 化原则与后续路线
 
 ### 主架构与已实现能力
 
