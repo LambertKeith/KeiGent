@@ -13,3 +13,4 @@
 | 成熟路线图 | [09 Agent Operations Maturity Roadmap](09-agent-operations-maturity-roadmap.md) | 下一阶段：Run 可审计、Eval 可复盘、Loop 可治理、Ops 可扩展的任务清单与验收标准 |
 | 发布入口 | [10 Release and Upgrade Path](10-release-and-upgrade.md) | first-run guide、config upgrade policy、release checklist、changelog 与版本兼容边界 |
 | 开发要求 | [11 Agent Project Learning Development Requirements](11-agent-project-learning-development-requirements.md) | 从 OpenAI Agents SDK、Mastra、Microsoft Agent Framework、12-Factor Agents、AG-UI/AgentOps 等项目提炼的新一轮开发要求 |
+| 开发优先级 | [12 Development Priority Backlog](12-development-priority-backlog.md) | P0/P1/P2 开发包、推荐顺序、验收红线与交付模板 |
