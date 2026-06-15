@@ -310,6 +310,35 @@ describe("run workbench page", () => {
     expect(html).toContain("ws_run_workspace_worker_2");
   });
 
+  it("redacts sensitive user directory segments from run detail and raw inspector", () => {
+    const view = buildRunWorkbenchView([record({
+      id: "run_path_redaction",
+      artifacts: [{
+        kind: "log_excerpt",
+        path: "/Users/privateuser/.keigent/runs/run_path/tool.log",
+      }],
+      replay: {
+        supported: true,
+        trajectoryPath: "C:\\Users\\privateuser\\workspace\\workflow.json",
+        trajectorySchemaVersion: 1,
+        freshExecution: false,
+      },
+      failures: [{
+        code: "tool_unavailable",
+        layer: "tool",
+        message: "Read /home/privateuser/.keigent/runs/run_path/tool.log",
+        nextAction: "Open /Users/privateuser/workspace/output.txt",
+      }],
+    })], "run_path_redaction");
+
+    const html = renderRunWorkbench(view);
+
+    expect(html).not.toContain("privateuser");
+    expect(html).toContain("/Users/[REDACTED_USER]/.keigent/runs/run_path/tool.log");
+    expect(html).toContain("C:\\Users\\[REDACTED_USER]\\workspace\\workflow.json");
+    expect(html).toContain("/home/[REDACTED_USER]/.keigent/runs/run_path/tool.log");
+  });
+
   it("renders the P0 audit fixture set across success, failure, approval, replay, no-op, and child workflow records", () => {
     const records = buildP0RunAuditFixtureRecords();
     const view = buildRunWorkbenchView(records, "run_no-op-automation");

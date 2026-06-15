@@ -1,8 +1,13 @@
 const SECRET_KEY = /key|token|secret|password|authorization/i;
 const SECRET_TEXT = /(sk-[A-Za-z0-9._-]{8,}|Bearer\s+[A-Za-z0-9._~-]+|api[_-]?key\s*[:=]\s*[^\s,;]+)/gi;
+const UNIX_USER_HOME_PATH = /(^|\/)((?:Users|home)\/)([^/\s"'<>]+)(?=\/)/g;
+const WINDOWS_USER_HOME_PATH = /([A-Za-z]:[\\/]+Users[\\/]+)([^\\/\s"'<>]+)(?=[\\/])/g;
 
 export function redactText(value: string): string {
-  return value.replace(SECRET_TEXT, "[REDACTED]");
+  return value
+    .replace(SECRET_TEXT, "[REDACTED]")
+    .replace(UNIX_USER_HOME_PATH, "$1$2[REDACTED_USER]")
+    .replace(WINDOWS_USER_HOME_PATH, "$1[REDACTED_USER]");
 }
 
 export function redactValue(key: string, value: unknown): unknown {

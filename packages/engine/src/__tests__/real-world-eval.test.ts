@@ -199,4 +199,31 @@ describe("real-world L2 eval", () => {
       severity: "blocking",
     }));
   });
+
+  it("redacts user directory segments from serialized eval reports", async () => {
+    const report = await runRealWorldEvalCases(
+      [DEFAULT_REAL_WORLD_L2_CASES.find((testCase) => testCase.id === "file-summary")!],
+      {
+        executionMode: "fixture",
+        async run(testCase) {
+          const execution = await createRealWorldFixtureExecutor().run(testCase);
+          execution.runRecord.artifacts = [
+            { kind: "workflow_trajectory", path: "/Users/privateuser/.keigent/runs/run_eval/workflow.json" },
+          ];
+          execution.runRecord.replay = {
+            supported: true,
+            trajectoryPath: "C:\\Users\\privateuser\\workspace\\workflow.json",
+            freshExecution: true,
+          };
+          return execution;
+        },
+      },
+    );
+
+    const serialized = JSON.stringify(report);
+
+    expect(serialized).not.toContain("privateuser");
+    expect(serialized).toContain("/Users/[REDACTED_USER]/.keigent/runs/run_eval/workflow.json");
+    expect(serialized).toContain("C:\\\\Users\\\\[REDACTED_USER]\\\\workspace\\\\workflow.json");
+  });
 });

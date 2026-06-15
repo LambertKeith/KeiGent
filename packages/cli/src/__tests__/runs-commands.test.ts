@@ -110,6 +110,31 @@ describe("runs commands", () => {
     });
   });
 
+  it("redacts sensitive user directory segments from shown run records", async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), "keigent-cli-run-path-redaction-"));
+    const record = noOpRecord("run_path_redaction");
+    record.replay = {
+      supported: true,
+      trajectoryPath: "/Users/privateuser/.keigent/runs/run_path/workflow.json",
+      freshExecution: false,
+    };
+    record.artifacts = [{
+      kind: "log_excerpt",
+      path: "C:\\Users\\privateuser\\workspace\\tool.log",
+    }];
+    record.nextAction = "Open /home/privateuser/.keigent/runs/run_path/tool.log";
+    await saveRunRecord(record, { runsDir });
+    const output = capture();
+
+    await runRunsCommand(["show", "run_path_redaction", "--compact"], { runsDir, stdout: output.stdout });
+
+    const serialized = output.lines[0]!;
+    expect(serialized).not.toContain("privateuser");
+    expect(serialized).toContain("/Users/[REDACTED_USER]/.keigent/runs/run_path/workflow.json");
+    expect(serialized).toContain("C:\\\\Users\\\\[REDACTED_USER]\\\\workspace\\\\tool.log");
+    expect(serialized).toContain("/home/[REDACTED_USER]/.keigent/runs/run_path/tool.log");
+  });
+
   it("opens a run by printing the Workbench run detail URL", async () => {
     const runsDir = await mkdtemp(join(tmpdir(), "keigent-cli-run-open-"));
     await saveRunRecord(noOpRecord("run_noop"), { runsDir });

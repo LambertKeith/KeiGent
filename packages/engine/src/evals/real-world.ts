@@ -1,6 +1,7 @@
 import { buildNoOpRunRecord, buildRunRecordFromWorkflowResult, type RunRecord } from "../run-record.js";
 import { failureSummaryForWorkflowExit, recommendedNextActionFor, type FailureCode, type FailureSummary } from "../failures.js";
 import { mergeProofBoundaries, type ProofBoundary } from "../proof-boundary.js";
+import { redactObject } from "../redaction.js";
 import type { ProfileName } from "../orchestrator.js";
 import type { ApprovalDecision, ApprovalRequest } from "../tools/types.js";
 import type { LoopResult, Task, TrajectoryStep } from "../types.js";
@@ -324,20 +325,21 @@ function evaluateRealWorldCase(
   evalCase: RealWorldEvalCase,
   execution: RealWorldEvalExecution,
 ): RealWorldEvalCaseResult {
+  const runRecord = redactObject(execution.runRecord) as RunRecord;
   const routeMatched = execution.selectedProfile === evalCase.expectedProfile
     && execution.workflowMode === evalCase.expectedWorkflowMode;
   const expectedFailureCode = evalCase.expectedFailureCode;
-  const observedFailureCodes = execution.runRecord.failures.map((failure) => failure.code);
+  const observedFailureCodes = runRecord.failures.map((failure) => failure.code);
   const failureMatched = expectedFailureCode === undefined || observedFailureCodes.includes(expectedFailureCode);
   const resultMatched = execution.result === evalCase.expectedResult;
-  const evidenceChecked = execution.runRecord.evidence.status === "passed"
-    || execution.runRecord.evidence.status === "failed"
-    || (evalCase.expectedResult === "failure" && execution.runRecord.evidence.status === "insufficient_evidence")
-    || (evalCase.expectedResult === "no_op" && execution.runRecord.status === "no_op");
-  const riskCompliant = riskMatchesExpectation(evalCase, execution.runRecord);
-  const falseSuccess = execution.runRecord.replay.freshExecution
+  const evidenceChecked = runRecord.evidence.status === "passed"
+    || runRecord.evidence.status === "failed"
+    || (evalCase.expectedResult === "failure" && runRecord.evidence.status === "insufficient_evidence")
+    || (evalCase.expectedResult === "no_op" && runRecord.status === "no_op");
+  const riskCompliant = riskMatchesExpectation(evalCase, runRecord);
+  const falseSuccess = runRecord.replay.freshExecution
     && evalCase.expectedResult !== "success"
-    && execution.runRecord.status === "succeeded";
+    && runRecord.status === "succeeded";
   const failures = [
     ...(!routeMatched ? [`expected ${evalCase.expectedProfile}/${evalCase.expectedWorkflowMode}, got ${execution.selectedProfile}/${execution.workflowMode}`] : []),
     ...(!resultMatched ? [`expected result ${evalCase.expectedResult}, got ${execution.result}`] : []),
@@ -349,7 +351,7 @@ function evaluateRealWorldCase(
 
   return {
     id: evalCase.id,
-    runId: execution.runRecord.id,
+    runId: runRecord.id,
     title: evalCase.title,
     level: evalCase.level,
     expectedProfile: evalCase.expectedProfile,
@@ -366,8 +368,8 @@ function evaluateRealWorldCase(
     riskCompliant,
     falseSuccess,
     failures,
-    proofBoundary: execution.runRecord.proofBoundary,
-    runRecord: execution.runRecord,
+    proofBoundary: runRecord.proofBoundary,
+    runRecord,
   };
 }
 

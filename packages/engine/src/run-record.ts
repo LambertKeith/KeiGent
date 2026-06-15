@@ -238,23 +238,23 @@ export function buildRunRecordFromWorkflowResult(
   const evidence = summarizeEvidence(result.evidence, result.exitReason);
   const artifacts = buildArtifacts(options);
   const route = summarizeRoute(result.trajectory.events, trajectory);
-  const failures = collectFailures(result);
+  const failures = redactObject(collectFailures(result)) as FailureSummary[];
   const nextAction = failures[0]?.nextAction ?? failureSummaryForWorkflowExit(result.exitReason)?.nextAction;
 
-  const replay = {
+  const replay = redactObject({
     supported: true,
     trajectoryPath: options.workflowTrajectoryPath ?? options.trajectoryPath,
     trajectorySchemaVersion: result.trajectory.schemaVersion,
     freshExecution: true,
     ...options.replay,
-  };
+  }) as ReplayCapability;
   const partial = {
     status: statusForWorkflowExit(result.exitReason),
     evidence,
     replay,
     failures,
   };
-  const proofBoundary = mergeRecordProof(proofBoundaryForWorkflowResult(result), proofBoundaryForRunRecord(partial));
+  const proofBoundary = redactObject(mergeRecordProof(proofBoundaryForWorkflowResult(result), proofBoundaryForRunRecord(partial))) as ProofBoundary;
   const autonomy = result.autonomy ?? result.trajectory.autonomy ?? buildAutonomySummary({
     exitReason: result.exitReason,
     childRuns: result.childRuns,
@@ -290,7 +290,7 @@ export function buildRunRecordFromWorkflowResult(
     approvals: approvals.map(summarizeApproval),
     failures,
     artifacts,
-    ...(nextAction ? { nextAction } : {}),
+    ...(nextAction ? { nextAction: redactText(nextAction) } : {}),
     autonomy,
     ...(result.review ? { review: redactObject(result.review) as ReviewSummary } : {}),
     proofBoundary,
@@ -369,10 +369,12 @@ export async function saveRunRecord(record: RunRecord, options: SaveRunRecordOpt
   const dir = join(options.runsDir, record.id);
   await mkdir(dir, { recursive: true });
   const path = join(dir, "record.json");
-  if (!record.artifacts.some((artifact) => artifact.kind === "record" && artifact.path === path)) {
-    record.artifacts.push({ kind: "record", path });
+  const redactedRecord = redactObject(record) as RunRecord;
+  const redactedPath = redactText(path);
+  if (!redactedRecord.artifacts.some((artifact) => artifact.kind === "record" && artifact.path === redactedPath)) {
+    redactedRecord.artifacts.push({ kind: "record", path: redactedPath });
   }
-  await writeFile(path, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+  await writeFile(path, `${JSON.stringify(redactedRecord, null, 2)}\n`, "utf8");
   return path;
 }
 
@@ -397,16 +399,16 @@ export async function readRunStore(options: SaveRunRecordOptions): Promise<RunSt
       const raw = JSON.parse(await readFile(path, "utf8"));
       const record = normalizeRunRecordShape(raw);
       if (!record || typeof record.id !== "string" || record.id === "unknown") {
-        errors.push({ runId, path, code: "invalid_record", message: "record.id must be a string" });
+        errors.push({ runId, path: redactText(path), code: "invalid_record", message: "record.id must be a string" });
         continue;
       }
       migrationReport.totalRecords += 1;
-      addMigrationDiagnostics(migrationReport, raw, record, path);
+      addMigrationDiagnostics(migrationReport, raw, record, redactText(path));
       records.push(record);
     } catch (error) {
       errors.push({
         runId,
-        path,
+        path: redactText(path),
         code: error instanceof SyntaxError ? "invalid_json" : "missing_record",
         message: error instanceof Error ? error.message : String(error),
       });
@@ -778,14 +780,14 @@ function summarizeTask(
   source: RunTaskSource,
 ): RunTaskSnapshot {
   return {
-    goal: task?.goal ?? result.finalResponse,
+    goal: redactText(task?.goal ?? result.finalResponse),
     source,
-    requestedProfile: task?.profile,
-    resolvedProfile: trajectory?.profile,
-    requestedWorkflowMode: result.mode,
-    resolvedWorkflowMode: result.mode,
+    ...(task?.profile ? { requestedProfile: redactText(task.profile) } : {}),
+    ...(trajectory?.profile ? { resolvedProfile: redactText(trajectory.profile) } : {}),
+    requestedWorkflowMode: redactText(result.mode),
+    resolvedWorkflowMode: redactText(result.mode),
     ...(task?.successDef
-      ? { successDef: { goal: task.successDef.goal, assertionCount: task.successDef.assertions.length } }
+      ? { successDef: { goal: redactText(task.successDef.goal), assertionCount: task.successDef.assertions.length } }
       : {}),
   };
 }
@@ -797,13 +799,13 @@ function summarizeRoute(events: WorkflowEvent[], trajectory?: Trajectory): Route
   const matchedSkillIds = trajectory?.skillsUsed ?? [];
   const via = profileEvent?.via;
   return {
-    selectedProfile: profileEvent?.profile ?? trajectory?.profile,
+    ...(profileEvent?.profile ?? trajectory?.profile ? { selectedProfile: redactText((profileEvent?.profile ?? trajectory?.profile)!) } : {}),
     source: profileEvent?.guardApplied ? "guard" : via === "rule" ? "rule" : via === "llm" ? "llm" : "unknown",
-    ruleId: profileEvent?.ruleId,
-    rationale: profileEvent?.rationale,
+    ...(profileEvent?.ruleId ? { ruleId: redactText(profileEvent.ruleId) } : {}),
+    ...(profileEvent?.rationale ? { rationale: redactText(profileEvent.rationale) } : {}),
     guardApplied: profileEvent?.guardApplied,
-    unguardedProfile: profileEvent?.unguardedProfile,
-    matchedSkillIds,
+    ...(profileEvent?.unguardedProfile ? { unguardedProfile: redactText(profileEvent.unguardedProfile) } : {}),
+    matchedSkillIds: matchedSkillIds.map(redactText),
   };
 }
 
@@ -820,7 +822,7 @@ function summarizeExecution(result: WorkflowResult, trajectory?: Trajectory): Ex
     passedCheckpoints: checkpointSteps.filter((step) => step.verdictPassed).length,
     durationMs: result.durationMs,
     exitReason: result.exitReason,
-    finalResponseSummary: oneLine(result.finalResponse, 240),
+    finalResponseSummary: redactText(oneLine(result.finalResponse, 240)),
     eventCounts: countEvents(result.trajectory.events, steps),
   };
 }
@@ -870,12 +872,12 @@ function summarizeSkills(result: WorkflowResult): SkillRunSummary[] {
     if (!byName.has(match.name)) byName.set(match.name, match);
   }
   return [...byName.values()].map((match) => ({
-    name: match.name,
-    status: match.status,
-    reason: match.matchedBy?.join(", ") || match.signals.join(", ") || "matched",
+    name: redactText(match.name),
+    ...(match.status ? { status: redactText(match.status) } : {}),
+    reason: redactText(match.matchedBy?.join(", ") || match.signals.join(", ") || "matched"),
     injected: match.injected,
     riskDelta: parseRiskDelta(match.riskDelta),
-    evalCoverage: match.evalCoverage ?? [],
+    evalCoverage: (match.evalCoverage ?? []).map(redactText),
   }));
 }
 
@@ -886,27 +888,27 @@ function summarizeTools(result: WorkflowResult, approvals: ApprovalDecision[]): 
   const summaries: ToolRunSummary[] = toolSteps.map((step) => {
     const approval = approvalByTool.get(step.toolName!);
     return {
-      name: step.toolName!,
+      name: redactText(step.toolName!),
       attempted: true,
       succeeded: step.toolSucceeded === true,
       ...(approval ? {
         permission: approval.request.permission,
         riskLevel: approval.request.riskLevel,
         sideEffect: approval.request.sideEffect,
-        targetResource: approval.request.targetResource,
+        targetResource: redactText(approval.request.targetResource),
       } : {}),
     };
   });
   for (const approval of approvals) {
     if (!summaries.some((tool) => tool.name === approval.request.toolName)) {
       summaries.push({
-        name: approval.request.toolName,
+        name: redactText(approval.request.toolName),
         attempted: false,
         succeeded: false,
         permission: approval.request.permission,
         riskLevel: approval.request.riskLevel,
         sideEffect: approval.request.sideEffect,
-        targetResource: approval.request.targetResource,
+        targetResource: redactText(approval.request.targetResource),
       });
     }
   }
@@ -925,8 +927,8 @@ function summarizeEvidence(evidence: WorkflowEvidence[], exitReason: WorkflowExi
     total,
     passed,
     failed,
-    sources: [...new Set(evidence.map((item) => item.kind))],
-    blocking: evidence.filter((item) => !item.passed).map((item) => item.message),
+    sources: [...new Set(evidence.map((item) => item.kind))].map(redactText),
+    blocking: evidence.filter((item) => !item.passed).map((item) => redactText(item.message)),
   };
 }
 
@@ -946,14 +948,14 @@ function summarizeRisk(approvals: ApprovalDecision[]): RiskSummary {
 
 function summarizeApproval(approval: ApprovalDecision): ApprovalSummary {
   return {
-    toolName: approval.request.toolName,
+    toolName: redactText(approval.request.toolName),
     approved: approval.approved,
     decidedAt: approval.decidedAt,
     riskLevel: approval.request.riskLevel,
     permission: approval.request.permission,
     sideEffect: approval.request.sideEffect,
     reversible: approval.request.reversible,
-    targetResource: approval.request.targetResource,
+    targetResource: redactText(approval.request.targetResource),
   };
 }
 
@@ -994,8 +996,8 @@ function collectFailures(result: WorkflowResult): FailureSummary[] {
 
 function buildArtifacts(options: BuildRunRecordOptions): RunArtifact[] {
   return [
-    ...(options.trajectoryPath ? [{ kind: "trajectory" as const, path: options.trajectoryPath }] : []),
-    ...(options.workflowTrajectoryPath ? [{ kind: "workflow_trajectory" as const, path: options.workflowTrajectoryPath }] : []),
+    ...(options.trajectoryPath ? [{ kind: "trajectory" as const, path: redactText(options.trajectoryPath) }] : []),
+    ...(options.workflowTrajectoryPath ? [{ kind: "workflow_trajectory" as const, path: redactText(options.workflowTrajectoryPath) }] : []),
   ];
 }
 

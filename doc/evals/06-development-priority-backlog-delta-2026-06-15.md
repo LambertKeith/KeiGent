@@ -1,6 +1,6 @@
 # Development Priority Backlog Delta - 2026-06-15
 
-> 范围：`P0-02 Workbench Run Detail v1` 与 `P1-03 Worktree Isolation Foundation` 的增量交付。
+> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation` 与 `P1-04 Schema Migration / Redaction Hardening` 的增量交付。
 >
 > 依据：`doc/product/12-development-priority-backlog.md`。
 
@@ -86,3 +86,47 @@
 - blocking：无。
 - non-blocking：默认 workflow 仍不启用隔离，避免改变 CLI / REPL 工作目录语义。
 - next action：后续可把特定 fanout / automation spawned workflow 显式接入 `workspaceIsolation`。
+
+## Backlog Item
+
+- 编号：P1-04
+- 开发包：Schema Migration / Redaction Hardening
+- 目标：RunRecord、CLI、Workbench 与 eval report 不暴露本机用户目录路径敏感部分。
+- 非目标：不引入迁移文件，不改变真实文件系统读写路径，不实现全量 PII 检测。
+
+## Changed Files
+
+- `packages/engine/src/redaction.ts`
+- `packages/engine/src/run-record.ts`
+- `packages/engine/src/evals/real-world.ts`
+- `packages/engine/src/__tests__/run-record.test.ts`
+- `packages/engine/src/__tests__/real-world-eval.test.ts`
+- `packages/cli/src/__tests__/runs-commands.test.ts`
+- `packages/web/src/shared/redaction.ts`
+- `packages/web/src/__tests__/run-workbench.test.ts`
+
+## Tests / Evals
+
+- `corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/run-record.test.ts`
+- `corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/real-world-eval.test.ts`
+- `corepack pnpm --filter @keigent/cli exec vitest run src/__tests__/runs-commands.test.ts`
+- `corepack pnpm --filter @keigent/web exec vitest run src/__tests__/run-workbench.test.ts`
+- `corepack pnpm -r check`
+- `corepack pnpm -r test`
+- `corepack pnpm -r --if-present build`
+- `git diff --check`
+- 结果：全部通过。
+
+## Evidence
+
+- 已证明：`/Users/<user>/...`、`/home/<user>/...`、`C:\Users\<user>\...` 在 RunRecord 读取、落盘、summary、failure、artifact、replay path 中替换为 `[REDACTED_USER]`。
+- 已证明：run store migration warning 与 malformed record error 的 diagnostic path 不暴露用户目录名。
+- 已证明：CLI `runs show --compact`、Workbench Run Detail/raw inspector 与 real-world eval report 序列化输出均覆盖路径脱敏断言。
+- 已证明：实际保存路径返回值不被脱敏，调用方仍可定位 `record.json`。
+- 未证明：任意自然语言 PII、组织内部路径命名、非 home 目录项目名。
+
+## Risks / Follow-ups
+
+- blocking：无。
+- non-blocking：engine 与 web 仍各有一份同构 redaction helper；后续可抽成共享包避免漂移。
+- next action：继续按 backlog 审计 P1-01 / P1-02 / P1-05 与 P2 项。

@@ -480,6 +480,67 @@ describe("RunRecord", () => {
     expect(summary).toContain("Risk: R3");
   });
 
+  it("redacts sensitive user directory segments before writing record.json", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "keigent-runs-save-redaction-"));
+    const runsDir = join(tempRoot, "C:\\Users\\privateuser\\keigent\\runs");
+    const record = buildNoOpRunRecord({
+      id: "run_save_path_redaction",
+      goal: "Inspect local logs",
+      trigger: "manual",
+      scope: "last 20 runs",
+      noOpReason: "No triage candidates found.",
+      doesNotProve: ["No hidden failures outside this scope."],
+    });
+    record.replay = {
+      supported: true,
+      trajectoryPath: "/Users/privateuser/.keigent/runs/run_save/workflow.json",
+      freshExecution: false,
+    };
+    record.artifacts = [{
+      kind: "log_excerpt",
+      path: "C:\\Users\\privateuser\\workspace\\tool.log",
+    }];
+    record.nextAction = "Open /home/privateuser/.keigent/runs/run_save/tool.log";
+
+    const path = await saveRunRecord(record, { runsDir });
+    const raw = await readFile(path, "utf8");
+
+    expect(path).toContain("privateuser");
+    expect(raw).not.toContain("privateuser");
+    expect(raw).toContain("/Users/[REDACTED_USER]/.keigent/runs/run_save/workflow.json");
+    expect(raw).toContain("C:\\\\Users\\\\[REDACTED_USER]\\\\workspace\\\\tool.log");
+    expect(raw).toContain("/home/[REDACTED_USER]/.keigent/runs/run_save/tool.log");
+  });
+
+  it("redacts sensitive user directory segments in freshly built run records", () => {
+    const result = workflowResult("child_error");
+    result.failure = {
+      code: "tool_unavailable",
+      layer: "tool",
+      message: "See /Users/privateuser/.keigent/runs/run_fresh/tool.log",
+      nextAction: "Open C:\\Users\\privateuser\\workspace\\tool.log",
+    };
+    result.trajectory.failure = result.failure;
+    result.evidence = [{
+      kind: "child_result",
+      passed: false,
+      message: "Read /home/privateuser/.keigent/runs/run_fresh/evidence.log",
+      sourceChildRunId: "wf-run-record:worker-1",
+    }];
+    result.trajectory.evidence = result.evidence;
+
+    const record = buildRunRecordFromWorkflowResult(result, {
+      id: "run_fresh_path_redaction",
+      workflowTrajectoryPath: "/Users/privateuser/.keigent/runs/run_fresh/workflow.json",
+    });
+    const serialized = JSON.stringify(record);
+
+    expect(serialized).not.toContain("privateuser");
+    expect(record.failures[0]?.message).toBe("See /Users/[REDACTED_USER]/.keigent/runs/run_fresh/tool.log");
+    expect(record.nextAction).toBe("Open C:\\Users\\[REDACTED_USER]\\workspace\\tool.log");
+    expect(summarizeRunRecord(record)).not.toContain("privateuser");
+  });
+
   it("preserves provider usage in run records and summaries", () => {
     const result = workflowResult();
     result.budgetUsage.providerUsage = {
@@ -636,5 +697,64 @@ describe("RunRecord", () => {
         originalValue: "[non-scalar]",
       }),
     ]));
+  });
+
+  it("redacts sensitive user directory segments from run store diagnostics paths", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "keigent-run-store-path-redaction-"));
+    const runsDir = join(dir, "Users", "privateuser", ".keigent", "runs");
+    await mkdir(join(runsDir, "legacy"), { recursive: true });
+    await writeFile(join(runsDir, "legacy", "record.json"), JSON.stringify({
+      id: "legacy",
+      createdAt: "2026-06-10T00:00:00.000Z",
+      status: "mystery",
+      task: { goal: "Legacy run" },
+    }), "utf8");
+    await mkdir(join(runsDir, "bad"), { recursive: true });
+    await writeFile(join(runsDir, "bad", "record.json"), "{bad json", "utf8");
+
+    const store = await readRunStore({ runsDir });
+    const serialized = JSON.stringify(store);
+
+    expect(serialized).not.toContain("privateuser");
+    expect(store.errors[0]?.path).toContain("/Users/[REDACTED_USER]/.keigent/runs/bad/record.json");
+    expect(store.migrationReport.warnings[0]?.path).toContain("/Users/[REDACTED_USER]/.keigent/runs/legacy/record.json");
+  });
+
+  it("redacts sensitive user directory segments in legacy record paths", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "keigent-run-path-redaction-"));
+    const recordPath = join(dir, "path-leak", "record.json");
+    await mkdir(join(dir, "path-leak"), { recursive: true });
+    await writeFile(recordPath, JSON.stringify({
+      schemaVersion: 1,
+      id: "path-leak",
+      createdAt: "2026-06-10T00:00:00.000Z",
+      status: "failed",
+      task: { goal: "Inspect local artifacts", source: "cli" },
+      replay: {
+        supported: true,
+        trajectoryPath: "/Users/privateuser/.keigent/runs/run_path/workflow.json",
+        freshExecution: false,
+      },
+      artifacts: [
+        { kind: "log_excerpt", path: "/home/privateuser/.keigent/runs/run_path/tool.log" },
+        { kind: "generated_file", path: "C:\\Users\\privateuser\\workspace\\output.txt" },
+      ],
+      failures: [{
+        code: "tool_unavailable",
+        layer: "tool",
+        message: "See /Users/privateuser/.keigent/runs/run_path/tool.log",
+        nextAction: "Open C:\\Users\\privateuser\\workspace\\output.txt",
+      }],
+    }), "utf8");
+
+    const record = await readRunRecord(recordPath);
+    const serialized = JSON.stringify(record);
+
+    expect(serialized).not.toContain("privateuser");
+    expect(record.replay.trajectoryPath).toBe("/Users/[REDACTED_USER]/.keigent/runs/run_path/workflow.json");
+    expect(record.artifacts).toEqual([
+      { kind: "log_excerpt", path: "/home/[REDACTED_USER]/.keigent/runs/run_path/tool.log" },
+      { kind: "generated_file", path: "C:\\Users\\[REDACTED_USER]\\workspace\\output.txt" },
+    ]);
   });
 });
