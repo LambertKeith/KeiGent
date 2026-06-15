@@ -131,14 +131,32 @@ describe("real-world L2 eval", () => {
         evidence: { status: "insufficient_evidence" },
       },
     });
-    expect(report.cases.find((testCase) => testCase.id === "budget-exceeded")).toMatchObject({
+    const budgetExceededCase = report.cases.find((testCase) => testCase.id === "budget-exceeded");
+    expect(budgetExceededCase).toMatchObject({
       expectedFailureCode: "budget_exceeded",
       result: "failure",
       runRecord: {
         status: "cancelled",
-        workflow: { budgetExceeded: true },
+        workflow: {
+          budgetExceeded: true,
+          budgetUsage: { childRuns: 1, iterations: 2, toolCalls: 1, recoveryAttempts: 0 },
+        },
+        failures: [expect.objectContaining({ code: "budget_exceeded", layer: "budget" })],
+        evidence: {
+          status: "failed",
+          blocking: expect.arrayContaining(["budget exceeded: maxToolCallsPerRun"]),
+        },
       },
     });
+    expect(budgetExceededCase?.proofBoundary.notProven).toContain(
+      "External production health is not proven by this run.",
+    );
+    expect(budgetExceededCase?.proofBoundary.evidenceGaps).toEqual(
+      expect.arrayContaining([
+        "Evidence failed: budget exceeded: maxToolCallsPerRun",
+        "Workflow did not finish with success: budget_exceeded",
+      ]),
+    );
   });
 
   it("exports the P0 run audit fixture records used by Workbench acceptance", () => {

@@ -56,4 +56,17 @@ describe("ToolRegistry AbortSignal handling", () => {
     expect(result.isError).toBe(true);
     expect(result.content).toContain("aborted");
   });
+
+  it("enforces each tool timeoutMs before returning control", async () => {
+    const execute = vi.fn(() => new Promise<never>(() => {}));
+    const registry = new ToolRegistry().register(tool(execute, 5));
+    const startedAt = Date.now();
+
+    const result = await registry.execute("slow_tool", {}, ctx());
+
+    expect(Date.now() - startedAt).toBeLessThan(500);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("超时（5ms）");
+  });
 });

@@ -1,6 +1,6 @@
 # Development Priority Backlog Delta - 2026-06-15
 
-> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening`、`P1-01 Reviewed-loop v1`、`P1-02 Local Automation Triage`、`P1-05 CLI Operator Ergonomics`、`P2-01 Readonly Connector Baseline`、`P2-02 L3 Operator Scenario Eval`、`P2-03 Observability / Debug Package` 与 `P2-04 Release / Packaging / Upgrade Path` 的增量交付。
+> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening`、`P1-01 Reviewed-loop v1`、`P1-02 Local Automation Triage`、`P1-05 CLI Operator Ergonomics`、`P2-01 Readonly Connector Baseline`、`P2-02 L3 Operator Scenario Eval`、`P2-03 Observability / Debug Package`、`P2-04 Release / Packaging / Upgrade Path` 与 `P2-05 Performance / Budget Controls` 的增量交付。
 >
 > 依据：`doc/product/12-development-priority-backlog.md`。
 
@@ -437,3 +437,45 @@
 - blocking：无。
 - non-blocking：当前 upgrade-check 是只读指南，后续如引入真实迁移器，需要新增显式 migration plan / dry-run / rollback evidence，而不能复用本指南暗示已迁移。
 - next action：继续按 backlog 推进 P2-05。
+
+## Backlog Item
+
+- 编号：P2-05
+- 开发包：Performance / Budget Controls
+- 目标：确认 loop、workflow、RunRecord、Workbench 与 eval 的预算边界已覆盖 backlog 要求，并补齐 per-tool timeout 与 budget fixture 的验收钉子。
+- 非目标：不新增远程价格表同步、不把 `pricing_not_configured` 解释为免费、不把 fixture pass 等同生产健康。
+
+## Changed Files
+
+- `packages/engine/src/__tests__/tool-registry-abort.test.ts`
+- `packages/engine/src/__tests__/real-world-eval.test.ts`
+- `doc/product/09-agent-operations-maturity-roadmap.md`
+
+## Tests / Evals
+
+- `corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/tool-registry-abort.test.ts`
+- `corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/real-world-eval.test.ts`
+- `corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/engine-budget.test.ts src/__tests__/workflow-runner.test.ts src/__tests__/run-record.test.ts src/__tests__/tool-registry-abort.test.ts src/__tests__/real-world-eval.test.ts`
+- `corepack pnpm --filter @keigent/web exec vitest run src/__tests__/runs-view.test.ts src/__tests__/run-workbench.test.ts`
+- `corepack pnpm --filter @keigent/cli start eval real-world --compact`
+- `corepack pnpm -r check`
+- `corepack pnpm -r test`
+- `corepack pnpm -r --if-present build`
+- `git diff --check`
+- `rg "P2-05|Performance / Budget Controls|budget-exceeded|pricing_not_configured|timeoutMs" doc/product/09-agent-operations-maturity-roadmap.md doc/evals/06-development-priority-backlog-delta-2026-06-15.md packages/engine/src/__tests__/real-world-eval.test.ts packages/engine/src/__tests__/tool-registry-abort.test.ts`
+- 结果：全部通过。
+
+## Evidence
+
+- 已证明：ToolRegistry 按每个 tool 的 `timeoutMs` 返回超时错误，不会无限等待慢工具。
+- 已证明：LoopEngine 单测覆盖 max tool calls、max wall time、max token estimate、recovery budget、priced provider cost ceiling，以及未配置价格时的 `pricing_not_configured` 非强制行为。
+- 已证明：WorkflowRunner 单测覆盖 max child runs、per-run / aggregate iterations、tool calls、token estimate、recovery attempts、provider cost、timeout abort，并保持 parent / child budget 分离。
+- 已证明：real-world L2 `budget-exceeded` case 的 RunRecord 包含 `workflow.budgetExceeded=true`、预算用量、`budget_exceeded` failure、blocking evidence 与 proof boundary；`repair-budget-exhausted` case 防止 repair 预算耗尽伪装成功。
+- 已证明：RunRecord / Workbench 预算视图展示 iterations、tool calls、token estimate、provider tokens、provider cost 与 recovery usage，provider usage 与估算 token budget 分开。
+- 未证明：生产环境长时间运行一定稳定、未配置价格的 provider 免费、外部服务状态健康或 operator 已完成真人验收。
+
+## Risks / Follow-ups
+
+- blocking：无。
+- non-blocking：当前 latency 仍由 debug bundle 显示 `not_recorded`；后续若加入真实 model/tool latency instrumentation，应继续保持缺失数据不伪造。
+- next action：P0-P2 backlog 增量已完成，进入最终审计与提交状态确认。
