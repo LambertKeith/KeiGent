@@ -96,6 +96,13 @@ export interface RunRecordDetailView {
   autonomy: AutonomySummary;
   proofBoundary: ProofBoundary;
   review?: ReviewSummary;
+  automation?: {
+    trigger: string;
+    scope: string;
+    noOpReason?: string;
+    doesNotProve: string[];
+    sourceRunIds: string[];
+  };
   approvals: Array<{
     toolName: string;
     approved: boolean;
@@ -176,6 +183,7 @@ export function normalizeRunRecord(input: unknown): RunRecordDetailView {
       evidenceGaps: record.proofBoundary.evidenceGaps.map((item) => redactText(item)),
     },
     ...(record.review ? { review: reviewPanel(record.review) } : {}),
+    ...(record.automation ? { automation: automationPanel(record.automation) } : {}),
     approvals: record.approvals.map((approval) => ({
       toolName: redactText(approval.toolName),
       approved: approval.approved,
@@ -326,6 +334,16 @@ function normalizeRecordShape(input: unknown): RunRecord {
     proofBoundary,
     ...(isObject(source.review) ? { review: reviewValue(source.review) } : {}),
     redaction: isObject(source.redaction) ? source.redaction as unknown as RunRecord["redaction"] : { applied: true, rawPayloadStored: false },
+  };
+}
+
+function automationPanel(automation: NonNullable<RunRecord["automation"]>): NonNullable<RunRecordDetailView["automation"]> {
+  return {
+    trigger: typeof automation.trigger === "string" ? automation.trigger : "manual",
+    scope: redactText(typeof automation.scope === "string" ? automation.scope : "scope_not_recorded"),
+    ...(automation.noOpReason ? { noOpReason: redactText(automation.noOpReason) } : {}),
+    doesNotProve: Array.isArray(automation.doesNotProve) ? automation.doesNotProve.map(redactText) : [],
+    sourceRunIds: Array.isArray(automation.sourceRunIds) ? automation.sourceRunIds.map(redactText) : [],
   };
 }
 

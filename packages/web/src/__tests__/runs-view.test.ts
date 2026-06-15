@@ -237,6 +237,24 @@ describe("run record view model", () => {
     });
   });
 
+  it("normalizes legacy automation records without leaking undefined labels", () => {
+    const view = normalizeRunRecord(runRecord({
+      status: "no_op",
+      automation: {
+        classification: "no_op",
+        scope: "fixture workspace only",
+        doesNotProve: ["No hidden failures outside this scope."],
+      } as unknown as RunRecord["automation"],
+    }));
+
+    expect(view.automation).toEqual({
+      trigger: "manual",
+      scope: "fixture workspace only",
+      doesNotProve: ["No hidden failures outside this scope."],
+      sourceRunIds: [],
+    });
+  });
+
   it("surfaces provider usage separately from estimated token budget", () => {
     const view = normalizeRunRecord(runRecord({
       workflow: {

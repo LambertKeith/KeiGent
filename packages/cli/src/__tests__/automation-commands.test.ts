@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -49,19 +49,38 @@ describe("automation commands", () => {
       scope: "last 20 runs",
       totalScanned: 1,
       totalCandidates: 0,
+      sourceRunIds: [],
       candidates: [],
       automationRecord: {
         status: "no_op",
         noOpReason: "No triage candidates found.",
         doesNotProve: ["No hidden failures outside this scope."],
+        reportPath: expect.stringContaining("triage-report.json"),
+        trajectoryPath: expect.stringContaining("trajectory.json"),
       },
     });
     const store = await readRunStore({ runsDir });
     expect(store.records).toContainEqual(expect.objectContaining({
       id: payload.automationRecord.id,
       status: "no_op",
-      automation: expect.objectContaining({ scope: "last 20 runs" }),
+      automation: expect.objectContaining({ scope: "last 20 runs", sourceRunIds: [] }),
+      artifacts: expect.arrayContaining([
+        expect.objectContaining({ kind: "triage_report", path: expect.stringContaining("triage-report.json") }),
+        expect.objectContaining({ kind: "trajectory", path: expect.stringContaining("trajectory.json") }),
+      ]),
     }));
+    await expect(readFile(payload.automationRecord.reportPath, "utf8").then(JSON.parse)).resolves.toMatchObject({
+      kind: "local-run-triage",
+      status: "no_op",
+      sourceRunIds: [],
+    });
+    await expect(readFile(payload.automationRecord.trajectoryPath, "utf8").then(JSON.parse)).resolves.toMatchObject({
+      schemaVersion: 1,
+      kind: "automation-triage",
+      runId: payload.automationRecord.id,
+      status: "no_op",
+      sourceRunIds: [],
+    });
   });
 
   it("reports failed, degraded, unknown, and missing-evidence runs with source ids", async () => {
@@ -92,8 +111,19 @@ describe("automation commands", () => {
       status: "attention_required",
       totalScanned: 4,
       totalCandidates: 4,
+      sourceRunIds: expect.arrayContaining([
+        "run_failed",
+        "run_degraded",
+        "run_missing_evidence",
+        "run_unknown",
+      ]),
+      nextAction: "Review 4 triage candidates before retrying or accepting affected runs.",
+      automationRecord: {
+        status: "degraded",
+        reportPath: expect.stringContaining("triage-report.json"),
+        trajectoryPath: expect.stringContaining("trajectory.json"),
+      },
     });
-    expect(payload.automationRecord).toBeUndefined();
     expect(payload.candidates).toEqual(expect.arrayContaining([
       expect.objectContaining({
         runId: "run_failed",
@@ -105,6 +135,41 @@ describe("automation commands", () => {
       expect.objectContaining({ runId: "run_missing_evidence", reason: "missing_evidence" }),
       expect.objectContaining({ runId: "run_unknown", reason: "stale_schema" }),
     ]));
+    const store = await readRunStore({ runsDir });
+    expect(store.records).toContainEqual(expect.objectContaining({
+      id: payload.automationRecord.id,
+      status: "degraded",
+      task: expect.objectContaining({ source: "automation" }),
+      automation: expect.objectContaining({
+        scope: "last 20 runs",
+        sourceRunIds: expect.arrayContaining([
+          "run_failed",
+          "run_degraded",
+          "run_missing_evidence",
+          "run_unknown",
+        ]),
+      }),
+      artifacts: expect.arrayContaining([
+        expect.objectContaining({ kind: "triage_report", path: expect.stringContaining("triage-report.json") }),
+        expect.objectContaining({ kind: "trajectory", path: expect.stringContaining("trajectory.json") }),
+      ]),
+      nextAction: "Review 4 triage candidates before retrying or accepting affected runs.",
+      proofBoundary: expect.objectContaining({
+        notProven: expect.arrayContaining(["No hidden failures outside this scope."]),
+      }),
+    }));
+    await expect(readFile(payload.automationRecord.reportPath, "utf8").then(JSON.parse)).resolves.toMatchObject({
+      status: "attention_required",
+      totalCandidates: 4,
+      sourceRunIds: expect.arrayContaining(["run_failed", "run_degraded", "run_missing_evidence", "run_unknown"]),
+    });
+    await expect(readFile(payload.automationRecord.trajectoryPath, "utf8").then(JSON.parse)).resolves.toMatchObject({
+      schemaVersion: 1,
+      kind: "automation-triage",
+      runId: payload.automationRecord.id,
+      status: "attention_required",
+      sourceRunIds: expect.arrayContaining(["run_failed", "run_degraded", "run_missing_evidence", "run_unknown"]),
+    });
   });
 
   it("triages legacy records with migration warnings even when normalized as successful", async () => {
@@ -167,6 +232,49 @@ describe("automation commands", () => {
         }),
       ],
     });
-    expect(payload.automationRecord).toBeUndefined();
+    expect(payload.automationRecord).toMatchObject({
+      status: "degraded",
+      reportPath: expect.stringContaining("triage-report.json"),
+      trajectoryPath: expect.stringContaining("trajectory.json"),
+    });
+  });
+
+  it("does not recursively triage prior local triage automation records", async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), "keigent-automation-self-triage-"));
+    await saveRunRecord(record("run_ok"), { runsDir });
+    await saveRunRecord(record("automation_triage_previous", {
+      status: "degraded",
+      task: {
+        goal: "Triage local run store",
+        source: "automation",
+        requestedWorkflowMode: "single-loop",
+        resolvedWorkflowMode: "single-loop",
+      },
+      route: {
+        source: "rule",
+        ruleId: "local_run_triage",
+        rationale: "Prior local triage automation",
+        matchedSkillIds: [],
+      },
+      evidence: {
+        status: "insufficient_evidence",
+        total: 1,
+        passed: 0,
+        failed: 1,
+        sources: ["run-store-triage"],
+        blocking: ["run_old: blocking_failure"],
+      },
+    }), { runsDir });
+    const output = capture();
+
+    await runAutomationCommand(["triage", "local", "--compact"], { runsDir, stdout: output.stdout });
+
+    const payload = JSON.parse(output.lines[0]!);
+    expect(payload).toMatchObject({
+      status: "no_op",
+      totalScanned: 1,
+      totalCandidates: 0,
+      sourceRunIds: [],
+    });
   });
 });

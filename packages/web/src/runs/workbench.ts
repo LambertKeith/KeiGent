@@ -112,6 +112,7 @@ export function renderRunWorkbench(view: RunWorkbenchView): string {
         ${renderTimeline(view.selected)}
         ${renderChildRunTimeline(view.selected)}
         ${renderChildWorkspaces(view.selected)}
+        ${renderAutomation(view.selected)}
         ${renderRouteAndSkills(view.selected)}
         ${renderReview(view.selected)}
         ${renderEvidenceAndRisk(view.selected)}
@@ -123,6 +124,22 @@ export function renderRunWorkbench(view: RunWorkbenchView): string {
       </section>
     </section>
   `;
+}
+
+function renderAutomation(run: RunRecordDetailView): string {
+  if (!run.automation) return "";
+  return panel("Automation triage", `
+    <div class="summary-strip">
+      ${renderFact("Trigger", run.automation.trigger)}
+      ${renderFact("Scope", run.automation.scope)}
+      ${renderFact("Source runs", String(run.automation.sourceRunIds.length))}
+      ${renderFact("No-op reason", run.automation.noOpReason ?? "Not a no-op")}
+    </div>
+    <div class="split-panels">
+      ${renderListBlock("Source run ids", run.automation.sourceRunIds)}
+      ${renderListBlock("Does not prove", run.automation.doesNotProve)}
+    </div>
+  `);
 }
 
 function renderSchemaCompatibility(report: RunStoreMigrationReportView | undefined): string {

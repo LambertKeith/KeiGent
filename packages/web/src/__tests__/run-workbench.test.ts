@@ -372,4 +372,46 @@ describe("run workbench page", () => {
     expect(renderRunWorkbench(buildRunWorkbenchView(records, "run_failed-assertion"))).toContain("missing-output.txt was not found");
     expect(renderRunWorkbench(buildRunWorkbenchView(records, "run_parent-timeout-child-success"))).toContain("parent workflow timed out before accepting child success");
   });
+
+  it("renders P1-02 automation triage source runs and report artifacts", () => {
+    const triageRecord = record({
+      id: "run_triage_attention",
+      status: "degraded",
+      task: { goal: "Triage local run store", source: "automation" },
+      evidence: {
+        status: "insufficient_evidence",
+        total: 2,
+        passed: 0,
+        failed: 2,
+        sources: ["run-store-triage"],
+        blocking: ["run_failed: blocking_failure", "run_missing: missing_evidence"],
+      },
+      artifacts: [
+        { kind: "triage_report", path: "/tmp/runs/run_triage_attention/triage-report.json" },
+      ],
+      automation: {
+        trigger: "manual",
+        scope: "last 20 runs",
+        doesNotProve: ["No hidden failures outside this scope."],
+        sourceRunIds: ["run_failed", "run_missing"],
+      },
+      nextAction: "Review 2 triage candidates before retrying or accepting affected runs.",
+      proofBoundary: {
+        proven: ["Scanned 3 RunRecords inside the declared scope."],
+        notProven: ["No hidden failures outside this scope."],
+        assumptions: ["Automation scope: last 20 runs"],
+        evidenceGaps: ["run_failed: blocking_failure"],
+      },
+    });
+
+    const html = renderRunWorkbench(buildRunWorkbenchView([triageRecord], "run_triage_attention"));
+
+    expect(html).toContain("Automation triage");
+    expect(html).toContain("last 20 runs");
+    expect(html).toContain("run_failed");
+    expect(html).toContain("run_missing");
+    expect(html).toContain("triage_report");
+    expect(html).toContain("triage-report.json");
+    expect(html).toContain("Review 2 triage candidates before retrying or accepting affected runs.");
+  });
 });

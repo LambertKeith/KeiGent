@@ -1,6 +1,6 @@
 # Development Priority Backlog Delta - 2026-06-15
 
-> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening` 与 `P1-01 Reviewed-loop v1` 的增量交付。
+> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening`、`P1-01 Reviewed-loop v1` 与 `P1-02 Local Automation Triage` 的增量交付。
 >
 > 依据：`doc/product/12-development-priority-backlog.md`。
 
@@ -174,4 +174,49 @@
 
 - blocking：无。
 - non-blocking：当前 Web child timeline 是静态审计面，不提供 child run drill-down 跳转。
-- next action：继续按 backlog 推进 P1-02 / P1-05 与 P2 项。
+- next action：继续按 backlog 推进 P1-05 与 P2 项。
+
+## Backlog Item
+
+- 编号：P1-02
+- 开发包：Local Automation Triage
+- 目标：本地 run store triage automation 具备 no-op / attention-required 两条可审计闭环。
+- 非目标：不实现定时调度器、外部账号 connector、自动修复、fanout 或高风险副作用。
+
+## Changed Files
+
+- `packages/engine/src/automation-triage.ts`
+- `packages/engine/src/__tests__/automation-triage.test.ts`
+- `packages/engine/src/run-record.ts`
+- `packages/engine/src/debug-bundle.ts`
+- `packages/engine/src/lib.ts`
+- `packages/cli/src/automation-commands.ts`
+- `packages/cli/src/__tests__/automation-commands.test.ts`
+- `packages/web/src/runs/model.ts`
+- `packages/web/src/runs/workbench.ts`
+- `packages/web/src/__tests__/run-workbench.test.ts`
+
+## Tests / Evals
+
+- `corepack pnpm --filter @keigent/cli exec vitest run src/__tests__/automation-commands.test.ts`
+- `corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/automation-triage.test.ts src/__tests__/debug-bundle.test.ts`
+- `corepack pnpm --filter @keigent/web exec vitest run src/__tests__/run-workbench.test.ts`
+- `corepack pnpm -r check`
+- `corepack pnpm -r test`
+- `corepack pnpm -r --if-present build`
+- `git diff --check`
+- 结果：全部通过。
+
+## Evidence
+
+- 已证明：`automation triage local --compact` 在无候选时保存 `no_op` automation RunRecord、`triage-report.json` 与 `trajectory.json`。
+- 已证明：存在 failed / degraded / missing evidence / stale schema 候选时保存 `degraded` automation RunRecord，包含 source run ids、next action、triage report artifact、trajectory artifact 与 proof boundary。
+- 已证明：旧 local triage automation RunRecord 不会在下一轮被递归当作 triage candidate。
+- 已证明：Debug bundle 支持 `triage_report` artifact，Workbench Run Detail 展示 Automation triage scope、source run ids 与 does-not-prove 边界。
+- 未证明：定时触发、跨仓库 triage、自动修复、真实 operator 已人工处理候选。
+
+## Risks / Follow-ups
+
+- blocking：无。
+- non-blocking：`runs triage` 仍是轻量候选列表；产品级 automation record/report 闭环在 `automation triage local`。
+- next action：继续按 backlog 推进 P1-05 与 P2 项。

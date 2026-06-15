@@ -58,6 +58,22 @@ export type {
   RepairAttemptSummary,
 } from "./workflow/types.js";
 export {
+  buildAutomationTriageReport,
+  buildAutomationTriageRunRecord,
+  saveAutomationTriageReport,
+  saveAutomationTriageTrajectory,
+} from "./automation-triage.js";
+export type {
+  AutomationTriageCandidate,
+  AutomationTriageTrajectory,
+  AutomationTriageReason,
+  AutomationTriageReport,
+  AutomationTriageStatus,
+  BuildAutomationTriageReportOptions,
+  BuildAutomationTriageRunRecordOptions,
+  SaveAutomationTriageReportOptions,
+} from "./automation-triage.js";
+export {
   buildNoOpRunRecord,
   buildRunRecordFromWorkflowResult,
   readRunRecord,

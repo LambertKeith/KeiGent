@@ -1,8 +1,14 @@
 import { join } from "node:path";
 import {
-  buildNoOpRunRecord,
+  buildAutomationTriageReport,
+  buildAutomationTriageRunRecord,
   readRunStore,
   saveRunRecord,
+  saveAutomationTriageReport,
+  saveAutomationTriageTrajectory,
+  type AutomationTriageCandidate,
+  type AutomationTriageReason,
+  type AutomationTriageReport,
   type RunRecord,
   type RunStoreError,
   type RunStoreMigrationWarning,
@@ -15,32 +21,14 @@ export interface AutomationCommandOptions {
   stdout?: (line: string) => void;
 }
 
-type TriageReportStatus = "no_op" | "attention_required";
-type TriageReason = "blocking_failure" | "review_needed" | "missing_evidence" | "stale_schema";
-
-interface LocalTriageCandidate {
-  runId: string;
-  status: string;
-  evidenceStatus: string;
-  reason: TriageReason;
-  blocking: string[];
-  nextAction: string;
-  schemaWarnings?: string[];
-}
-
-interface LocalTriageReport {
-  kind: "local-run-triage";
-  status: TriageReportStatus;
-  scope: string;
-  totalScanned: number;
-  totalCandidates: number;
-  candidates: LocalTriageCandidate[];
-  errors: RunStoreError[];
-  automationRecord?: {
+interface LocalTriageCommandReport extends AutomationTriageReport {
+  automationRecord: {
     id: string;
-    status: "no_op";
+    status: "no_op" | "degraded";
     path: string;
-    noOpReason: string;
+    reportPath: string;
+    trajectoryPath: string;
+    noOpReason?: string;
     doesNotProve: string[];
   };
 }
@@ -63,51 +51,45 @@ export async function runAutomationCommand(
     const limit = triageLimit(rest);
     const scope = `last ${limit} runs`;
     const store = await readRunStore({ runsDir });
-    const scanned = store.records.slice(0, limit);
+    const scanned = store.records.filter((record) => !isLocalTriageAutomationRecord(record)).slice(0, limit);
     const migrationWarnings = migrationWarningsByRunId(store.migrationReport.warnings);
     const candidates = scanned.map((record) => triageCandidate(record, migrationWarnings.get(record.id) ?? []))
-      .filter((item): item is LocalTriageCandidate => Boolean(item));
-    const report: LocalTriageReport = {
-      kind: "local-run-triage",
-      status: candidates.length === 0 ? "no_op" : "attention_required",
+      .filter((item): item is AutomationTriageCandidate => Boolean(item));
+    const report = buildAutomationTriageReport({
       scope,
       totalScanned: scanned.length,
-      totalCandidates: candidates.length,
       candidates,
       errors: store.errors,
+    });
+    const automationRecordId = automationRunId();
+    const reportPath = await saveAutomationTriageReport(report, { runsDir, runId: automationRecordId });
+    const trajectoryPath = await saveAutomationTriageTrajectory(report, { runsDir, runId: automationRecordId });
+    const record = buildAutomationTriageRunRecord(report, { id: automationRecordId, reportPath, trajectoryPath });
+    const recordPath = await saveRunRecord(record, { runsDir });
+    const outputReport: LocalTriageCommandReport = {
+      ...report,
+      automationRecord: {
+        id: record.id,
+        status: record.status === "no_op" ? "no_op" : "degraded",
+        path: recordPath,
+        reportPath,
+        trajectoryPath,
+        ...(record.automation?.noOpReason ? { noOpReason: record.automation.noOpReason } : {}),
+        doesNotProve: record.automation?.doesNotProve ?? [],
+      },
     };
 
-    if (candidates.length === 0) {
-      const noOpReason = "No triage candidates found.";
-      const doesNotProve = ["No hidden failures outside this scope."];
-      const record = buildNoOpRunRecord({
-        id: automationRunId(),
-        goal: "Triage local run store",
-        trigger: "manual",
-        scope,
-        noOpReason,
-        doesNotProve,
-      });
-      const path = await saveRunRecord(record, { runsDir });
-      report.automationRecord = {
-        id: record.id,
-        status: "no_op",
-        path,
-        noOpReason,
-        doesNotProve,
-      };
-    }
-
     if (outputFormat.json) {
-      print(options, formatJson(report, rest));
+      print(options, formatJson(outputReport, rest));
       return;
     }
 
-    if (report.status === "no_op") {
+    if (outputReport.status === "no_op") {
       print(options, "No triage candidates found.");
       print(options, `Status: no-op`);
       print(options, `Scope: ${scope}`);
-      print(options, `Does not prove: ${report.automationRecord?.doesNotProve.join("; ") ?? "No hidden failures outside this scope."}`);
+      print(options, `Report: ${reportPath}`);
+      print(options, `Does not prove: ${outputReport.automationRecord.doesNotProve.join("; ")}`);
       return;
     }
 
@@ -120,7 +102,11 @@ export async function runAutomationCommand(
   throw new Error("Usage: keigent automation triage local [--json|--compact] [--limit N]");
 }
 
-function triageCandidate(record: RunRecord, schemaWarnings: RunStoreMigrationWarning[] = []): LocalTriageCandidate | undefined {
+function isLocalTriageAutomationRecord(record: RunRecord): boolean {
+  return record.task.source === "automation" && record.route.ruleId === "local_run_triage";
+}
+
+function triageCandidate(record: RunRecord, schemaWarnings: RunStoreMigrationWarning[] = []): AutomationTriageCandidate | undefined {
   if (schemaWarnings.length > 0) {
     return candidate(
       record,
@@ -153,10 +139,10 @@ function triageCandidate(record: RunRecord, schemaWarnings: RunStoreMigrationWar
 
 function candidate(
   record: RunRecord,
-  reason: TriageReason,
+  reason: AutomationTriageReason,
   fallbackNextAction: string,
   schemaWarnings: string[] = [],
-): LocalTriageCandidate {
+): AutomationTriageCandidate {
   return {
     runId: record.id,
     status: record.status,
