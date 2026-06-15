@@ -1,3 +1,7 @@
+import { access, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { LoopResult, ProgressEvent, Task, Trajectory } from "../types.js";
 import { createWorkflowSpec } from "../workflow/planner.js";
@@ -588,6 +592,66 @@ describe("WorkflowRunner", () => {
       maxWallTimeMs: 5_000,
       maxRecoveryAttempts: 2,
     });
+  });
+
+  it("creates and cleans isolated workspaces when workflow isolation is enabled", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "keigent-workflow-isolation-"));
+    let childWorkspace: string | undefined;
+    const runner = new WorkflowRunner({
+      async runChild(_child, options) {
+        childWorkspace = options?.workspacePath;
+        await writeFile(join(childWorkspace!, "result.txt"), "ok", "utf8");
+        return loopResult({ trajectory: trajectory({ steps: [{ iteration: 1, kind: "text_output", text: "done" }] }) });
+      },
+    });
+
+    const result = await runner.run(createWorkflowSpec({
+      id: "wf-isolated-success",
+      task: task(),
+      workspaceIsolation: { rootDir, cleanupMode: "remove" },
+    }));
+
+    expect(childWorkspace).toContain("ws_wf_isolated_success_worker_1");
+    expect(result.childRuns[0]?.workspace).toMatchObject({
+      workspaceId: "ws_wf_isolated_success_worker_1",
+      status: "active",
+      cleanupMode: "remove",
+      artifacts: [expect.objectContaining({ relativePath: "result.txt" })],
+      conflicts: [],
+    });
+    await expect(access(childWorkspace!)).rejects.toThrow();
+  });
+
+  it("marks isolated workspaces abandoned when a child times out", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "keigent-workflow-abandoned-"));
+    let childWorkspace: string | undefined;
+    const runner = new WorkflowRunner({
+      async runChild(_child, options) {
+        childWorkspace = options?.workspacePath;
+        await writeFile(join(childWorkspace!, "partial.txt"), "partial", "utf8");
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return loopResult();
+      },
+    });
+
+    const result = await runner.run(createWorkflowSpec({
+      id: "wf-isolated-timeout",
+      task: task(),
+      budget: { timeoutMs: 1 },
+      workspaceIsolation: { rootDir, cleanupMode: "mark_abandoned" },
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(result.exitReason).toBe("timeout");
+    expect(result.childRuns[0]?.workspace).toMatchObject({
+      workspaceId: "ws_wf_isolated_timeout_worker_1",
+      status: "abandoned",
+      cleanupMode: "mark_abandoned",
+      abandonedReason: "workflow timeout",
+      artifacts: [expect.objectContaining({ relativePath: "partial.txt" })],
+    });
+    await expect(access(childWorkspace!)).resolves.toBeUndefined();
+    await expect(readFile(join(childWorkspace!, ".keigent-workspace.json"), "utf8")).resolves.toContain("\"status\": \"abandoned\"");
   });
 
   it("marks budget_exceeded when aggregate priced provider cost exceeds the workflow budget", async () => {

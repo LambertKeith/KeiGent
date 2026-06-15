@@ -149,7 +149,7 @@ async function runTask(goal: string, deps: TaskDeps): Promise<void> {
         registry,
         skillContext: replState.skillContext,
         stateCapture,
-        createEngine(maxIterations, budget) {
+        createEngine(maxIterations, budget, workspacePath) {
           return new LoopEngine({
             model,
             apiKey: config.apiKey,
@@ -160,7 +160,7 @@ async function runTask(goal: string, deps: TaskDeps): Promise<void> {
             maxWallTimeMs: budget?.maxWallTimeMs ?? config.maxWallTimeMs,
             maxRecoveryAttempts: budget?.maxRecoveryAttempts ?? config.maxRecoveryAttempts,
             registry,
-            workspace: config.workspace,
+            workspace: workspacePath ?? config.workspace,
             approval,
             headless: replState.headless,
             askUser: async (q) => (await rl.question(`\n${c.yellow}? ${q}${c.reset}\n  ❯ `)).trim(),

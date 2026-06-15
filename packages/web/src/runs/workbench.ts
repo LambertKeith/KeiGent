@@ -109,6 +109,8 @@ export function renderRunWorkbench(view: RunWorkbenchView): string {
       <aside class="panel run-list-panel">${renderRunList(view.collection.runs, view.selected.summary.id)}</aside>
       <section class="run-detail-stack">
         ${renderSummary(view.selected)}
+        ${renderTimeline(view.selected)}
+        ${renderChildWorkspaces(view.selected)}
         ${renderRouteAndSkills(view.selected)}
         ${renderReview(view.selected)}
         ${renderEvidenceAndRisk(view.selected)}
@@ -167,8 +169,10 @@ function renderRunList(runs: RunRecordListItem[], selectedId: string | undefined
     <button class="run-row ${run.id === selectedId ? "selected" : ""}" data-run-id="${escapeHtml(run.id)}">
       <span><strong>${escapeHtml(run.id)}</strong><small>${escapeHtml(run.createdAt)}</small></span>
       <span>${escapeHtml(run.status)}</span>
+      <span>${escapeHtml(run.profile)} / ${escapeHtml(run.workflowMode)}</span>
       <span>${escapeHtml(run.evidenceLabel)}</span>
       <span>${escapeHtml(run.riskLabel)}</span>
+      <span>${escapeHtml(run.durationLabel)} / ${escapeHtml(run.replayLabel)}</span>
     </button>
   `).join("");
   return `<h2>Run list</h2>${rows || "<p>No run records saved</p>"}`;
@@ -185,6 +189,44 @@ function renderSummary(run: RunRecordDetailView): string {
       ${renderFact("Next action", run.nextAction.label)}
     </div>
     <p class="run-goal">${escapeHtml(run.summary.goal)}</p>
+  `);
+}
+
+function renderTimeline(run: RunRecordDetailView): string {
+  const facts = run.timelineFacts.map((fact) => renderFact(fact.label, fact.value)).join("");
+  return panel("Timeline", `<div class="summary-strip">${facts}</div>`);
+}
+
+function renderChildWorkspaces(run: RunRecordDetailView): string {
+  const childRuns = run.childRuns.filter((child) => child.workspace);
+  if (childRuns.length === 0) return "";
+
+  const rows = childRuns.map((child) => {
+    const workspace = child.workspace!;
+    const artifacts = workspace.artifacts.map((artifact) =>
+      `${artifact.kind}:${artifact.relativePath} (${artifact.sizeBytes} bytes)`,
+    );
+    const conflicts = workspace.conflicts.map((conflict) =>
+      `${conflict.relativePath}: ${conflict.workspaceIds.join(", ")}`,
+    );
+    return `
+      <li>
+        <strong>${escapeHtml(child.id)} / ${escapeHtml(child.role)}</strong>
+        <span>${escapeHtml(workspace.workspaceId)} | ${escapeHtml(workspace.status)} | ${escapeHtml(workspace.cleanupMode ?? "cleanup_not_recorded")}</span>
+        <span>${escapeHtml(workspace.branchName ?? "branch_not_recorded")}</span>
+        <span>${escapeHtml(artifacts.join("; ") || "No artifacts collected")}</span>
+        <span>${escapeHtml(conflicts.join("; ") || "No conflicts detected")}</span>
+      </li>
+    `;
+  }).join("");
+
+  return panel("Child workspaces", `
+    <div class="summary-strip">
+      ${renderFact("Workspace-backed children", String(childRuns.length))}
+      ${renderFact("Collected artifacts", String(childRuns.reduce((sum, child) => sum + (child.workspace?.artifacts.length ?? 0), 0)))}
+      ${renderFact("Conflicts", String(childRuns.reduce((sum, child) => sum + (child.workspace?.conflicts.length ?? 0), 0)))}
+    </div>
+    <ul class="audit-list">${rows}</ul>
   `);
 }
 

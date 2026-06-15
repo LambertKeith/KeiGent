@@ -111,6 +111,40 @@ export interface ReviewSummary {
   issues: ReviewIssue[];
 }
 
+export type ChildWorkspaceStatus = "active" | "abandoned";
+export type ChildWorkspaceCleanupMode = "remove" | "mark_abandoned";
+export type ChildWorkspaceArtifactKind = "generated_file" | "diff" | "log_excerpt";
+
+export interface ChildWorkspaceArtifact {
+  kind: ChildWorkspaceArtifactKind;
+  path: string;
+  relativePath: string;
+  sizeBytes: number;
+}
+
+export interface ChildWorkspaceConflict {
+  relativePath: string;
+  workspaceIds: string[];
+  childRunIds: string[];
+}
+
+export interface ChildWorkspaceSummary {
+  workspaceId: string;
+  branchName?: string;
+  workspacePath?: string;
+  manifestPath?: string;
+  status: ChildWorkspaceStatus;
+  cleanupMode?: ChildWorkspaceCleanupMode;
+  abandonedReason?: string;
+  artifacts: ChildWorkspaceArtifact[];
+  conflicts: ChildWorkspaceConflict[];
+}
+
+export interface WorkflowWorkspaceIsolation {
+  rootDir: string;
+  cleanupMode?: ChildWorkspaceCleanupMode;
+}
+
 export interface WorkflowReviewPolicy {
   rubric: ReviewRubric;
 }
@@ -124,6 +158,7 @@ export interface WorkflowSpec {
   policy?: WorkflowPolicy;
   verification?: WorkflowVerificationPolicy;
   review?: WorkflowReviewPolicy;
+  workspaceIsolation?: WorkflowWorkspaceIsolation;
 }
 
 export interface ChildRunSpec {
@@ -150,6 +185,7 @@ export interface ChildRunResult {
   role: WorkflowChildRole;
   result: LoopResult;
   trajectory?: Trajectory;
+  workspace?: ChildWorkspaceSummary;
 }
 
 export type WorkflowEvent =
@@ -192,6 +228,7 @@ export interface WorkflowTrajectory {
     role: WorkflowChildRole;
     result: LoopResult;
     trajectory?: Trajectory;
+    workspace?: ChildWorkspaceSummary;
   }>;
 }
 

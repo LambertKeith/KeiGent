@@ -21,7 +21,11 @@ export interface EngineWorkflowRunner {
 
 export interface EngineWorkflowChildRunnerOptions {
   orchestrator: EngineEvalOrchestrator;
-  createEngine(maxIterations?: number, budget?: Pick<WorkflowChildRunOptions, "maxToolCalls" | "maxTokenEstimate" | "maxProviderCostUsd" | "maxWallTimeMs" | "maxRecoveryAttempts">): EngineWorkflowRunner | LoopEngine;
+  createEngine(
+    maxIterations?: number,
+    budget?: Pick<WorkflowChildRunOptions, "maxToolCalls" | "maxTokenEstimate" | "maxProviderCostUsd" | "maxWallTimeMs" | "maxRecoveryAttempts">,
+    workspacePath?: string,
+  ): EngineWorkflowRunner | LoopEngine;
   registry: ToolRegistry;
   skillContext: SkillContext;
   stateCapture: StateCapture;
@@ -54,7 +58,7 @@ export function createEngineWorkflowChildRunner(opts: EngineWorkflowChildRunnerO
         maxProviderCostUsd: options?.maxProviderCostUsd,
         maxWallTimeMs: options?.maxWallTimeMs,
         maxRecoveryAttempts: options?.maxRecoveryAttempts,
-      });
+      }, options?.workspacePath);
 
       return engine.run(
         taskForRun,

@@ -373,6 +373,52 @@ describe("RunRecord", () => {
     ]));
   });
 
+  it("persists child workspace audit summaries into run records", () => {
+    const result = workflowResult();
+    result.childRuns[0] = {
+      ...result.childRuns[0]!,
+      workspace: {
+        workspaceId: "ws_wf_run_record_worker_1",
+        branchName: "keigent/wf-run-record-worker-1",
+        workspacePath: "/tmp/keigent/workspaces/ws_wf_run_record_worker_1",
+        status: "abandoned",
+        cleanupMode: "mark_abandoned",
+        artifacts: [{
+          kind: "generated_file",
+          path: "/tmp/keigent/workspaces/ws_wf_run_record_worker_1/src/result.txt",
+          relativePath: "src/result.txt",
+          sizeBytes: 12,
+        }],
+        conflicts: [{
+          relativePath: "src/result.txt",
+          workspaceIds: ["ws_wf_run_record_worker_1", "ws_wf_run_record_worker_2"],
+          childRunIds: ["wf-run-record:worker-1", "wf-run-record:worker-2"],
+        }],
+      },
+    };
+    result.trajectory.childRuns = result.childRuns;
+
+    const record = buildRunRecordFromWorkflowResult(result, { id: "run_workspace" });
+
+    expect(record.childRuns).toEqual([expect.objectContaining({
+      id: "wf-run-record:worker-1",
+      workspace: expect.objectContaining({
+        workspaceId: "ws_wf_run_record_worker_1",
+        branchName: "keigent/wf-run-record-worker-1",
+        status: "abandoned",
+        cleanupMode: "mark_abandoned",
+        artifacts: [expect.objectContaining({
+          relativePath: "src/result.txt",
+          kind: "generated_file",
+        })],
+        conflicts: [expect.objectContaining({
+          relativePath: "src/result.txt",
+          workspaceIds: ["ws_wf_run_record_worker_1", "ws_wf_run_record_worker_2"],
+        })],
+      }),
+    })]);
+  });
+
 
   it("marks timeout and replay records without overriding fresh execution semantics", () => {
     const record = buildRunRecordFromWorkflowResult(workflowResult("timeout"), {

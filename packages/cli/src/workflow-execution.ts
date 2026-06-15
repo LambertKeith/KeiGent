@@ -72,7 +72,7 @@ export async function executeWorkflowTask(options: ExecuteWorkflowTaskOptions): 
         registry,
         skillContext,
         stateCapture,
-        createEngine(maxIterations, budget) {
+        createEngine(maxIterations, budget, workspacePath) {
           return new LoopEngine({
             model,
             apiKey: config.apiKey,
@@ -83,7 +83,7 @@ export async function executeWorkflowTask(options: ExecuteWorkflowTaskOptions): 
             maxWallTimeMs: budget?.maxWallTimeMs ?? config.maxWallTimeMs,
             maxRecoveryAttempts: budget?.maxRecoveryAttempts ?? config.maxRecoveryAttempts,
             registry,
-            workspace: config.workspace,
+            workspace: workspacePath ?? config.workspace,
             approval: new DenyByDefaultGate(),
             headless: config.headless,
           });

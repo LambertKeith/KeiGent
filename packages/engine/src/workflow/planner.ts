@@ -1,6 +1,6 @@
 import type { Task } from "../types.js";
 import { describeAssertion } from "../assertions.js";
-import type { ExecutionMode, ReviewRubric, WorkflowBudget, WorkflowPolicy, WorkflowReviewPolicy, WorkflowSpec, WorkflowVerificationPolicy } from "./types.js";
+import type { ExecutionMode, ReviewRubric, WorkflowBudget, WorkflowPolicy, WorkflowReviewPolicy, WorkflowSpec, WorkflowVerificationPolicy, WorkflowWorkspaceIsolation } from "./types.js";
 
 export const DEFAULT_WORKFLOW_BUDGET: WorkflowBudget = {
   maxChildRuns: 1,
@@ -26,6 +26,7 @@ export function createWorkflowSpec(input: {
   policy?: WorkflowPolicy;
   verification?: WorkflowVerificationPolicy;
   review?: WorkflowReviewPolicy;
+  workspaceIsolation?: WorkflowWorkspaceIsolation;
 }): WorkflowSpec {
   const mode = input.mode ?? chooseExecutionMode(input.task);
   if (mode === "reviewed-loop" && !input.task.successDef?.assertions?.length) {
@@ -54,6 +55,7 @@ export function createWorkflowSpec(input: {
         ? { requirePassedCheckpoint: true, minPassedCheckpoints: 1, ...input.verification }
         : undefined,
     ...(mode === "reviewed-loop" ? { review: input.review ?? { rubric: defaultReviewRubric(input.task) } } : {}),
+    ...(input.workspaceIsolation ? { workspaceIsolation: input.workspaceIsolation } : {}),
   };
 }
 

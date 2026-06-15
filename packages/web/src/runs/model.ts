@@ -1,5 +1,6 @@
 import type { ApprovalSummary, AutonomySummary, ProofBoundary, ProviderUsageSummary, ReviewSummary, RunRecord, SkillRunSummary, ToolRunSummary } from "@keigent/engine";
 import { redactObject, redactText } from "../shared/redaction.js";
+import { childRunsFor, type RunChildRunPanel } from "./child-workspaces.js";
 
 export interface RunRecordListItem {
   id: string;
@@ -15,6 +16,7 @@ export interface RunRecordListItem {
   durationLabel: string;
   approvalRequired: boolean;
   replayAvailable: boolean;
+  replayLabel: string;
 }
 
 export interface RunEvidencePanel {
@@ -100,6 +102,7 @@ export interface RunRecordDetailView {
     riskLevel: string;
     targetResource: string;
   }>;
+  childRuns: RunChildRunPanel[];
   artifacts: Array<{ kind: string; path: string }>;
   failures: Array<{ code: string; layer: string; message: string; nextAction: string }>;
   nextAction: {
@@ -179,6 +182,7 @@ export function normalizeRunRecord(input: unknown): RunRecordDetailView {
       riskLevel: approval.riskLevel,
       targetResource: redactText(approval.targetResource),
     })),
+    childRuns: childRunsFor(record),
     artifacts: record.artifacts.map((artifact) => ({
       kind: artifact.kind,
       path: redactText(artifact.path),
@@ -225,6 +229,7 @@ function listItemFor(record: RunRecord): RunRecordListItem {
     durationLabel: durationLabel(record.execution.durationMs),
     approvalRequired: record.risk.approvalRequired,
     replayAvailable: record.replay.supported && Boolean(record.replay.trajectoryPath),
+    replayLabel: replayLabel(record),
   };
 }
 
@@ -398,7 +403,7 @@ function durationLabel(durationMs: number): string {
 }
 
 function replayLabel(record: RunRecord): string {
-  if (!record.replay.supported) return record.replay.unsupportedReason ?? "Replay unavailable";
+  if (!record.replay.supported) return redactText(record.replay.unsupportedReason ?? "Replay unavailable");
   if (!record.replay.freshExecution) return "Replay report, not fresh execution";
   return record.replay.trajectoryPath ? "Replay available" : "Replay metadata pending";
 }

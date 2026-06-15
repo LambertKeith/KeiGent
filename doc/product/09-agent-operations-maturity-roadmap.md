@@ -162,7 +162,7 @@ Next Action
 - replay run 明确标记 `freshExecution: false`；
 - failed run 必须突出 blocking evidence。
 
-当前实现备注（2026-06-12）：已新增前端内存事件流 Live Run Console、Web Run Launcher，以及 Run Workbench v1 审计 surface。Live Run Console 展示 live/replay 标签、event timeline、pending tool/checkpoint/approval 统计与 selected event inspector；Run Workbench 包含 Run list、Run summary、Route and skills、Evidence、Risk and approvals、Tools and budget、Replay and artifacts、Failures、Raw redacted record。页面使用 `RunRecord` / progress event view model，默认选择最新 run，展示 needs-action / replayable / failed-degraded 队列统计，并在 inspector 中递归脱敏。已新增 `keigent web --api` 本地 API/SSE foundation，支持读取 run store、读取 latest real-world eval report、以 `task.source=web` 发起 run、订阅 run session workflow events、更新 Live Console，并在收到 `run_finished.recordId` 后 handoff 到 Run Detail；当前仍不是完整交互式 Workbench。
+当前实现备注（2026-06-15）：已新增前端内存事件流 Live Run Console、Web Run Launcher，以及 Run Workbench v1 审计 surface。Live Run Console 展示 live/replay 标签、event timeline、pending tool/checkpoint/approval 统计与 selected event inspector；Run Workbench 包含 Run list、Run summary、Timeline、Route and skills、Evidence、Risk and approvals、Tools and budget、Replay and artifacts、Failures、Raw redacted record。Run list 已展示 run id、status、createdAt、profile、workflow mode、risk、evidence summary、duration 与 replay status。页面使用 `RunRecord` / progress event view model，默认选择最新 run，展示 needs-action / replayable / failed-degraded 队列统计，并在 inspector 中递归脱敏。已新增 `keigent web --api` 本地 API/SSE foundation，支持读取 run store、读取 latest real-world eval report、以 `task.source=web` 发起 run、订阅 run session workflow events、更新 Live Console，并在收到 `run_finished.recordId` 后 handoff 到 Run Detail；当前仍不是完整交互式 Workbench。
 
 ### 4.4 RunRecord Completeness
 

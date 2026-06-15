@@ -7,7 +7,7 @@ import { addMigrationDiagnostics, emptyMigrationReport, sortMigrationWarnings, t
 import type { ApprovalDecision, PermissionLevel, RiskLevel, SideEffect } from "./tools/types.js";
 import type { SkillMatchExplanation, Task, Trajectory, TrajectoryStep } from "./types.js";
 import { buildAutonomySummary, emptyAutonomySummary } from "./workflow/autonomy.js";
-import type { AutonomySummary, ReviewSummary, WorkflowChildRole, WorkflowEvidence, WorkflowEvent, WorkflowExitReason, WorkflowResult } from "./workflow/types.js";
+import type { AutonomySummary, ChildWorkspaceSummary, ReviewSummary, WorkflowChildRole, WorkflowEvidence, WorkflowEvent, WorkflowExitReason, WorkflowResult } from "./workflow/types.js";
 
 export type RunStatus =
   | "created"
@@ -109,6 +109,7 @@ export interface ChildRunSummary {
   iterations: number;
   toolCalls: number;
   checkpointsPassed: number;
+  workspace?: ChildWorkspaceSummary;
 }
 
 export interface SkillRunSummary {
@@ -833,7 +834,31 @@ function summarizeChildRuns(result: WorkflowResult): ChildRunSummary[] {
     iterations: child.result.iterations,
     toolCalls: child.result.totalToolCalls,
     checkpointsPassed: child.result.checkpointsPassed,
+    ...(child.workspace ? { workspace: summarizeChildWorkspace(child.workspace) } : {}),
   }));
+}
+
+function summarizeChildWorkspace(workspace: ChildWorkspaceSummary): ChildWorkspaceSummary {
+  return {
+    workspaceId: redactText(workspace.workspaceId),
+    ...(workspace.branchName ? { branchName: redactText(workspace.branchName) } : {}),
+    ...(workspace.workspacePath ? { workspacePath: redactText(workspace.workspacePath) } : {}),
+    ...(workspace.manifestPath ? { manifestPath: redactText(workspace.manifestPath) } : {}),
+    status: workspace.status,
+    ...(workspace.cleanupMode ? { cleanupMode: workspace.cleanupMode } : {}),
+    ...(workspace.abandonedReason ? { abandonedReason: redactText(workspace.abandonedReason) } : {}),
+    artifacts: workspace.artifacts.map((artifact) => ({
+      kind: artifact.kind,
+      path: redactText(artifact.path),
+      relativePath: redactText(artifact.relativePath),
+      sizeBytes: artifact.sizeBytes,
+    })),
+    conflicts: workspace.conflicts.map((conflict) => ({
+      relativePath: redactText(conflict.relativePath),
+      workspaceIds: conflict.workspaceIds.map(redactText),
+      childRunIds: conflict.childRunIds.map(redactText),
+    })),
+  };
 }
 
 function summarizeSkills(result: WorkflowResult): SkillRunSummary[] {

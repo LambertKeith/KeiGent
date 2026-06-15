@@ -71,6 +71,21 @@ artifact collection 默认跳过：
 - `.git/`
 - `node_modules/`
 
+当前 `WorkflowRunner` 已支持显式 opt-in：
+
+```ts
+createWorkflowSpec({
+  id: "wf-example",
+  task,
+  workspaceIsolation: {
+    rootDir: "/tmp/keigent-workspaces",
+    cleanupMode: "remove" // 或 "mark_abandoned"
+  }
+})
+```
+
+启用后，每个 child run 会获得独立 `workspacePath`，production `createEngineWorkflowChildRunner()` 会把该路径传给 `LoopEngine` 作为 child workspace sandbox。默认不启用隔离，避免改变现有 CLI / REPL 工作目录语义。
+
 ## 4. Policy
 
 基础写入策略：
@@ -116,13 +131,13 @@ abandoned workspace 是产品对象，不应静默丢弃。后续 debug bundle �
 
 ## 7. Integration Path
 
-后续接入顺序：
+接入状态：
 
-1. RunRecord child summary 增加 `workspaceId`。
-2. Workflow child runner 在 fanout / automation spawned work 前创建 workspace。
-3. ToolRegistry file tools 将 child workspace 作为 sandbox root。
+1. RunRecord child summary 增加 `workspaceId`。（已完成：child summary 可携带 workspace id、branch、cleanup state、artifact 与 conflict 摘要。）
+2. Workflow child runner 在显式 `workspaceIsolation` 配置下创建 workspace。（已完成：成功可 remove，失败/超时可 mark abandoned。）
+3. ToolRegistry file tools 将 child workspace 作为 sandbox root。（已完成：production child adapter 将 workspace path 传给 `LoopEngine`。）
 4. Reviewer 通过 artifact / diff / test report 审查，不写 worker workspace。
-5. Workbench Run Detail 展示 workspace id、artifacts、conflicts、cleanup state。
+5. Workbench Run Detail 展示 workspace id、artifacts、conflicts、cleanup state。（已完成：Run Detail 的 Child workspaces 面板展示这些审计字段。）
 
 ## 8. 验收证据
 

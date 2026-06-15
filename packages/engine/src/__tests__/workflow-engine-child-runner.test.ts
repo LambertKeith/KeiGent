@@ -113,6 +113,7 @@ describe("createEngineWorkflowChildRunner", () => {
   it("selects a profile, filters tools, and runs the engine with child maxIterations", async () => {
     const selectedProfiles: string[] = [];
     const engineMaxIterations: Array<number | undefined> = [];
+    const engineWorkspacePaths: Array<string | undefined> = [];
     const engineTasks: Task[] = [];
     const progressEvents: unknown[] = [];
     const registry = {
@@ -140,8 +141,9 @@ describe("createEngineWorkflowChildRunner", () => {
           return selection;
         },
       },
-      createEngine(maxIterations) {
+      createEngine(maxIterations, _budget, workspacePath) {
         engineMaxIterations.push(maxIterations);
+        engineWorkspacePaths.push(workspacePath);
         return {
           async run(runTask, _skills, _profile, _stateCapture, availableTools, onProgress) {
             engineTasks.push(runTask);
@@ -160,6 +162,7 @@ describe("createEngineWorkflowChildRunner", () => {
       { id: "wf-1:worker-1", role: "worker", task: task(), policy: undefined },
       {
         maxIterations: 3,
+        workspacePath: "/tmp/keigent/workspaces/ws_wf_1_worker_1",
         onProgress: (event) => progressEvents.push(event),
       },
     );
@@ -167,6 +170,7 @@ describe("createEngineWorkflowChildRunner", () => {
     expect(childResult.exitReason).toBe("success");
     expect(selectedProfiles).toEqual(["auto"]);
     expect(engineMaxIterations).toEqual([3]);
+    expect(engineWorkspacePaths).toEqual(["/tmp/keigent/workspaces/ws_wf_1_worker_1"]);
     expect(engineTasks).toHaveLength(1);
     expect(engineTasks[0]).toMatchObject({ goal: "Do the thing", profile: "convergent-exec" });
     expect(progressEvents).toEqual([

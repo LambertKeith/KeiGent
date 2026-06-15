@@ -168,6 +168,32 @@ describe("run workbench page", () => {
     expect(html).toContain("[REDACTED]");
   });
 
+  it("renders P0-02 run list metadata required for audit triage", () => {
+    const view = buildRunWorkbenchView([record({
+      execution: {
+        ...record().execution,
+        durationMs: 1530,
+      },
+    })]);
+    const html = renderRunWorkbench(view);
+
+    expect(html).toContain("convergent-exec");
+    expect(html).toContain("verified-loop");
+    expect(html).toContain("1.5s");
+    expect(html).toContain("Replay available");
+  });
+
+  it("renders a P0-02 timeline panel from RunRecord execution facts", () => {
+    const view = buildRunWorkbenchView([record()]);
+    const html = renderRunWorkbench(view);
+
+    expect(html).toContain("Timeline");
+    expect(html).toContain("rule:convergent-exec");
+    expect(html).toContain("verified-loop:success");
+    expect(html).toContain("1/1");
+    expect(html).toContain("2");
+  });
+
   it("renders run store schema compatibility diagnostics when provided by the API", () => {
     const view = buildRunWorkbenchView([record()], undefined, {
       schemaVersion: 1,
@@ -240,6 +266,48 @@ describe("run workbench page", () => {
     expect(html).toContain("Reviewer issues");
     expect(html).toContain("blocking");
     expect(html).toContain("missing source attribution");
+  });
+
+  it("renders P1-03 child workspace audit details", () => {
+    const view = buildRunWorkbenchView([record({
+      id: "run_workspace",
+      childRuns: [{
+        id: "run_workspace:worker-1",
+        role: "worker",
+        profile: "convergent-exec",
+        exitReason: "success",
+        iterations: 1,
+        toolCalls: 1,
+        checkpointsPassed: 1,
+        workspace: {
+          workspaceId: "ws_run_workspace_worker_1",
+          branchName: "keigent/run-workspace-worker-1",
+          workspacePath: "/tmp/keigent/workspaces/ws_run_workspace_worker_1",
+          status: "abandoned",
+          cleanupMode: "mark_abandoned",
+          artifacts: [{
+            kind: "generated_file",
+            path: "/tmp/keigent/workspaces/ws_run_workspace_worker_1/src/result.txt",
+            relativePath: "src/result.txt",
+            sizeBytes: 12,
+          }],
+          conflicts: [{
+            relativePath: "src/result.txt",
+            workspaceIds: ["ws_run_workspace_worker_1", "ws_run_workspace_worker_2"],
+            childRunIds: ["run_workspace:worker-1", "run_workspace:worker-2"],
+          }],
+        },
+      }],
+    })], "run_workspace");
+
+    const html = renderRunWorkbench(view);
+
+    expect(html).toContain("Child workspaces");
+    expect(html).toContain("ws_run_workspace_worker_1");
+    expect(html).toContain("abandoned");
+    expect(html).toContain("mark_abandoned");
+    expect(html).toContain("src/result.txt");
+    expect(html).toContain("ws_run_workspace_worker_2");
   });
 
   it("renders the P0 audit fixture set across success, failure, approval, replay, no-op, and child workflow records", () => {

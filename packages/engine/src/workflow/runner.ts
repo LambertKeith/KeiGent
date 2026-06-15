@@ -3,8 +3,16 @@ import { buildEvidenceBundle } from "../evidence.js";
 import { failureSummaryForWorkflowExit } from "../failures.js";
 import type { Assertion, LoopResult, ProgressEvent, ProviderUsageSummary, Task, Trajectory } from "../types.js";
 import { addProviderUsage } from "../provider-usage.js";
+import {
+  cleanupIsolatedWorkspace,
+  collectWorkspaceArtifacts,
+  createIsolatedWorkspace,
+  detectWorkspaceConflicts,
+} from "../worktree-isolation.js";
 import { buildAutonomySummary } from "./autonomy.js";
 import type {
+  ChildWorkspaceCleanupMode,
+  ChildWorkspaceSummary,
   ChildRunResult,
   ChildRunSpec,
   ReviewSummary,
@@ -33,6 +41,7 @@ export interface WorkflowChildRunOptions {
   maxProviderCostUsd?: number;
   maxWallTimeMs?: number;
   maxRecoveryAttempts?: number;
+  workspacePath?: string;
   signal?: AbortSignal;
 }
 
@@ -193,6 +202,15 @@ export class WorkflowRunner {
     emit: (event: WorkflowEvent) => void,
   ): Promise<{ childRun: ChildRunResult; timedOut: boolean }> {
     emit({ kind: "child_start", workflowId: spec.id, childRunId: child.id, role: child.role });
+    const workspace = spec.workspaceIsolation
+      ? await createIsolatedWorkspace({
+          rootDir: spec.workspaceIsolation.rootDir,
+          parentRunId: spec.id,
+          childRunId: child.id,
+          childRole: child.role,
+          taskGoal: child.task.goal,
+        })
+      : undefined;
 
     let childResult: LoopResult;
     let timedOut = false;
@@ -206,6 +224,7 @@ export class WorkflowRunner {
           maxProviderCostUsd: spec.budget.maxProviderCostUsdPerRun ?? spec.budget.maxAggregateProviderCostUsd,
           maxWallTimeMs: spec.budget.timeoutMs,
           maxRecoveryAttempts: spec.budget.maxRecoveryAttemptsPerRun,
+          ...(workspace ? { workspacePath: workspace.workspacePath } : {}),
           signal: abortController.signal,
           onProgress: (event) => emit({ kind: "child_event", workflowId: spec.id, childRunId: child.id, event }),
         }),
@@ -216,12 +235,19 @@ export class WorkflowRunner {
       timedOut = isTimeoutError(error);
       childResult = makeSyntheticErrorLoopResult(child.task, timedOut ? "[workflow] timeout" : errorMessage(error));
     }
+    const workspaceSummary = workspace
+      ? await summarizeChildWorkspace(workspace, {
+          cleanupMode: cleanupModeFor(spec.workspaceIsolation?.cleanupMode, childResult.exitReason, timedOut),
+          reason: timedOut ? "workflow timeout" : childResult.exitReason === "success" ? undefined : `child exited with ${childResult.exitReason}`,
+        })
+      : undefined;
 
     const childRun: ChildRunResult = {
       id: child.id,
       role: child.role,
       result: childResult,
       trajectory: childResult.trajectory,
+      ...(workspaceSummary ? { workspace: workspaceSummary } : {}),
     };
 
     emit({ kind: "child_done", workflowId: spec.id, childRunId: child.id, exitReason: childResult.exitReason });
@@ -271,6 +297,7 @@ export class WorkflowRunner {
         role: child.role,
         result: child.result,
         trajectory: child.trajectory,
+        ...(child.workspace ? { workspace: child.workspace } : {}),
       })),
     };
 
@@ -290,6 +317,51 @@ export class WorkflowRunner {
       ...(failure ? { failure } : {}),
     };
   }
+}
+
+async function summarizeChildWorkspace(
+  workspace: Awaited<ReturnType<typeof createIsolatedWorkspace>>,
+  options: { cleanupMode: ChildWorkspaceCleanupMode; reason?: string },
+): Promise<ChildWorkspaceSummary> {
+  const artifacts = await collectWorkspaceArtifacts(workspace);
+  const workspaceWithArtifacts = { ...workspace, artifacts };
+  const conflicts = detectWorkspaceConflicts([{ workspace: workspaceWithArtifacts, artifacts }]);
+
+  if (options.cleanupMode === "remove") {
+    await cleanupIsolatedWorkspace(workspaceWithArtifacts, { mode: "remove" });
+    return {
+      workspaceId: workspace.workspaceId,
+      branchName: workspace.branchName,
+      workspacePath: workspace.workspacePath,
+      manifestPath: workspace.manifestPath,
+      status: workspace.status,
+      cleanupMode: "remove",
+      artifacts,
+      conflicts,
+    };
+  }
+
+  await cleanupIsolatedWorkspace(workspaceWithArtifacts, { mode: "mark_abandoned", reason: options.reason });
+  return {
+    workspaceId: workspace.workspaceId,
+    branchName: workspace.branchName,
+    workspacePath: workspace.workspacePath,
+    manifestPath: workspace.manifestPath,
+    status: "abandoned",
+    cleanupMode: "mark_abandoned",
+    ...(options.reason ? { abandonedReason: options.reason } : {}),
+    artifacts,
+    conflicts,
+  };
+}
+
+function cleanupModeFor(
+  configured: ChildWorkspaceCleanupMode | undefined,
+  exitReason: LoopResult["exitReason"],
+  timedOut: boolean,
+): ChildWorkspaceCleanupMode {
+  if (configured) return configured;
+  return timedOut || exitReason !== "success" ? "mark_abandoned" : "remove";
 }
 
 function evaluateVerification(spec: WorkflowSpec, childRun: ChildRunResult): { passed: boolean; evidence: WorkflowEvidence[] } {
