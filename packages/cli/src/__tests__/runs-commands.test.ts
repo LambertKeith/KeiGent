@@ -389,11 +389,16 @@ describe("runs commands", () => {
     const runsDir = await mkdtemp(join(tmpdir(), "keigent-cli-run-debug-"));
     const bundleDir = await mkdtemp(join(tmpdir(), "keigent-cli-debug-bundle-"));
     const workflowPath = join(runsDir, "workflow.json");
+    const evalCasePath = join(runsDir, "eval-case.json");
     await writeFile(workflowPath, JSON.stringify({ finalResponse: "api_key=sk-workflow-secret-123456" }), "utf8");
+    await writeFile(evalCasePath, JSON.stringify({ id: "case", token: "sk-eval-case-secret-123456" }), "utf8");
     const failed = noOpRecord("run_failed");
     failed.status = "failed";
     failed.execution.finalResponseSummary = "api_key=sk-record-secret-123456";
-    failed.artifacts = [{ kind: "workflow_trajectory", path: workflowPath }];
+    failed.artifacts = [
+      { kind: "workflow_trajectory", path: workflowPath },
+      { kind: "eval_case", path: evalCasePath },
+    ];
     await saveRunRecord(failed, { runsDir });
     const output = capture();
 
@@ -406,11 +411,13 @@ describe("runs commands", () => {
       files: expect.arrayContaining([
         expect.objectContaining({ relativePath: "record.json" }),
         expect.objectContaining({ relativePath: "workflow-trajectory.json" }),
+        expect.objectContaining({ relativePath: "eval-case.json" }),
         expect.objectContaining({ relativePath: "tool-summary.json" }),
         expect.objectContaining({ relativePath: "failure-summary.md" }),
       ]),
     });
     expect(await readFile(join(bundleDir, "record.json"), "utf8")).not.toContain("sk-record-secret-123456");
     expect(await readFile(join(bundleDir, "workflow-trajectory.json"), "utf8")).not.toContain("sk-workflow-secret-123456");
+    expect(await readFile(join(bundleDir, "eval-case.json"), "utf8")).not.toContain("sk-eval-case-secret-123456");
   });
 });

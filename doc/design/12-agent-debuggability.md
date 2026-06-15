@@ -91,11 +91,13 @@ corepack pnpm --filter @keigent/cli start runs debug-bundle <run-id> --out /tmp/
 | `record.json` | RunRecord | redacted run 产品事实源 |
 | `trajectory.json` | `trajectory` artifact | 存在时复制并 redaction |
 | `workflow-trajectory.json` | `workflow_trajectory` artifact | 存在时复制并 redaction |
+| `eval-case.json` | `eval_case` artifact | 存在时复制并 redaction，用于复盘单个 eval case 输入 |
 | `eval-report.json` | `eval_report` artifact | 存在时复制并 redaction |
 | `replay-report.json` | `replay_report` artifact | 存在时复制并 redaction |
 | `redacted-config.json` | 显式传入 config | 默认 `{}`，禁止 raw secret |
 | `tool-summary.json` | RunRecord execution/tools/approvals | 工具调用与审批摘要 |
 | `observability-summary.json` | RunRecord execution/workflow/failures | timeline、budget、provider usage/cost、recovery、timeout/abort、latency 记录状态与 failure taxonomy |
+| `triage-summary.json` | RunRecord evidence/failures/proof boundary | triage、automation scope、replay 与 next action 摘要 |
 | `failure-summary.md` | RunRecord evidence/failures/nextAction | 人类可读失败摘要 |
 
 Redaction 规则：

@@ -7,6 +7,7 @@ export type DebugBundleFileKind =
   | "record"
   | "trajectory"
   | "workflow_trajectory"
+  | "eval_case"
   | "eval_report"
   | "replay_report"
   | "triage_report"
@@ -111,6 +112,8 @@ function artifactRelativePath(artifact: RunArtifact): string {
       return "trajectory.json";
     case "workflow_trajectory":
       return "workflow-trajectory.json";
+    case "eval_case":
+      return "eval-case.json";
     case "eval_report":
       return "eval-report.json";
     case "replay_report":

@@ -97,10 +97,14 @@ describe("debug bundle export", () => {
     const artifactDir = join(dir, "artifacts");
     await mkdir(artifactDir, { recursive: true });
     const workflowPath = join(artifactDir, "workflow.json");
+    const evalCasePath = join(artifactDir, "eval-case.json");
     await writeFile(workflowPath, JSON.stringify({ finalResponse: "Bearer workflow-secret-token" }), "utf8");
+    await writeFile(evalCasePath, JSON.stringify({ id: "case-secret", apiKey: "sk-eval-case-secret-123456" }), "utf8");
     const bundleDir = join(dir, "bundle");
+    const record = failedRecord(workflowPath);
+    record.artifacts.push({ kind: "eval_case", path: evalCasePath });
 
-    const result = await exportRunDebugBundle(failedRecord(workflowPath), {
+    const result = await exportRunDebugBundle(record, {
       bundleDir,
       config: { apiKey: "sk-config-secret-123456", modelId: "test-model" },
     });
@@ -111,6 +115,7 @@ describe("debug bundle export", () => {
       files: expect.arrayContaining([
         expect.objectContaining({ relativePath: "record.json" }),
         expect.objectContaining({ relativePath: "workflow-trajectory.json" }),
+        expect.objectContaining({ relativePath: "eval-case.json" }),
         expect.objectContaining({ relativePath: "redacted-config.json" }),
         expect.objectContaining({ relativePath: "tool-summary.json" }),
         expect.objectContaining({ relativePath: "observability-summary.json" }),
@@ -121,6 +126,7 @@ describe("debug bundle export", () => {
     });
     const serializedRecord = await readFile(join(bundleDir, "record.json"), "utf8");
     const workflow = await readFile(join(bundleDir, "workflow-trajectory.json"), "utf8");
+    const evalCase = await readFile(join(bundleDir, "eval-case.json"), "utf8");
     const config = JSON.parse(await readFile(join(bundleDir, "redacted-config.json"), "utf8"));
     const observability = JSON.parse(await readFile(join(bundleDir, "observability-summary.json"), "utf8"));
     const triage = JSON.parse(await readFile(join(bundleDir, "triage-summary.json"), "utf8"));
@@ -128,6 +134,7 @@ describe("debug bundle export", () => {
     expect(serializedRecord).not.toContain("sk-final-secret-123456");
     expect(serializedRecord).not.toContain("sk-blocking-secret-123456");
     expect(workflow).not.toContain("workflow-secret-token");
+    expect(evalCase).not.toContain("sk-eval-case-secret-123456");
     expect(config).toMatchObject({ apiKey: "[REDACTED:...3456]", modelId: "test-model" });
     expect(observability).toMatchObject({
       runId: "run_failed",

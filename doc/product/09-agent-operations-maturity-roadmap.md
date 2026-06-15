@@ -677,7 +677,7 @@ failure-summary.md
 
 用户可以把一个 debug bundle 发给开发者，开发者不用复现环境也能判断大致问题。
 
-当前实现备注（2026-06-12）：debug bundle 已包含 redacted record/artifacts/config、tool summary、failure summary、observability summary 与 triage summary。observability summary 覆盖 structured event timeline、budget/recovery、timeout/abort、failure taxonomy，并对尚未记录的 tool/model latency 显示 `not_recorded`。triage summary 汇总 status、blocking evidence、failure next actions、proofBoundary、automation scope / doesNotProve 与 replay boundary，让 reviewer 不复现环境也能看到 false-confidence 边界。
+当前实现备注（2026-06-15）：debug bundle 已包含 redacted record/artifacts/config、`eval-case.json` artifact、tool summary、failure summary、observability summary 与 triage summary。observability summary 覆盖 structured event timeline、budget/recovery、timeout/abort、failure taxonomy，并对尚未记录的 tool/model latency 显示 `not_recorded`。triage summary 汇总 status、blocking evidence、failure next actions、proofBoundary、automation scope / doesNotProve 与 replay boundary，让 reviewer 不复现环境也能看到 false-confidence 边界。
 
 ### 7.6 Release / Packaging / Upgrade Path
 

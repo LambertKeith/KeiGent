@@ -1,6 +1,6 @@
 # Development Priority Backlog Delta - 2026-06-15
 
-> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening`、`P1-01 Reviewed-loop v1`、`P1-02 Local Automation Triage`、`P1-05 CLI Operator Ergonomics`、`P2-01 Readonly Connector Baseline` 与 `P2-02 L3 Operator Scenario Eval` 的增量交付。
+> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening`、`P1-01 Reviewed-loop v1`、`P1-02 Local Automation Triage`、`P1-05 CLI Operator Ergonomics`、`P2-01 Readonly Connector Baseline`、`P2-02 L3 Operator Scenario Eval` 与 `P2-03 Observability / Debug Package` 的增量交付。
 >
 > 依据：`doc/product/12-development-priority-backlog.md`。
 
@@ -354,3 +354,45 @@
 - blocking：无。
 - non-blocking：当前 L3 scenario 仍是 deterministic fixture reviewer；后续可把 acceptance artifact 接入 Workbench Run Detail 或 debug bundle 下载入口。
 - next action：继续按 backlog 推进 P2-03 / P2-04 / P2-05。
+
+## Backlog Item
+
+- 编号：P2-03
+- 开发包：Observability / Debug Package
+- 目标：debug bundle 支持 backlog 要求的 `eval-case.json` 单 case artifact，并保持 redaction、observability summary、failure summary、budget/recovery/timeout/latency 边界。
+- 非目标：不实现 zip/tar 打包、自动上传、自动复现或自动 judge 结论。
+
+## Changed Files
+
+- `packages/engine/src/run-record.ts`
+- `packages/engine/src/debug-bundle.ts`
+- `packages/engine/src/__tests__/debug-bundle.test.ts`
+- `packages/cli/src/__tests__/runs-commands.test.ts`
+- `doc/design/12-agent-debuggability.md`
+- `doc/product/09-agent-operations-maturity-roadmap.md`
+
+## Tests / Evals
+
+- `corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/debug-bundle.test.ts`
+- `corepack pnpm --filter @keigent/cli exec vitest run src/__tests__/runs-commands.test.ts`
+- `corepack pnpm --filter @keigent/engine exec tsc --noEmit`
+- `corepack pnpm -r check`
+- `corepack pnpm -r test`
+- `corepack pnpm -r --if-present build`
+- `git diff --check`
+- `rg "eval-case.json|P2-03|Observability / Debug Package" doc/design/12-agent-debuggability.md doc/product/09-agent-operations-maturity-roadmap.md doc/evals/06-development-priority-backlog-delta-2026-06-15.md`
+- 结果：全部通过。
+
+## Evidence
+
+- 已证明：`RunArtifact.kind` 支持 `eval_case`，debug bundle 将其标准化导出为 `eval-case.json`。
+- 已证明：engine 级 `exportRunDebugBundle()` 会复制 `eval_case` artifact，并对其中 secret-like 内容脱敏。
+- 已证明：CLI `runs debug-bundle <run-id> --out <dir> --compact` 会通过正式入口导出脱敏 `eval-case.json`。
+- 已证明：现有 `observability-summary.json` 仍覆盖 structured event timeline、budget/recovery、timeout/abort、failure taxonomy，并在缺失 tool/model latency 时显示 `not_recorded`。
+- 未证明：真实线上故障无需复现即可完成根因定位、自动打包上传、自动复现或自动 judge。
+
+## Risks / Follow-ups
+
+- blocking：无。
+- non-blocking：`eval_case` artifact 由调用方附加到 RunRecord；后续可把 real-world / operator eval 保存路径自动补齐为一等 artifact。
+- next action：继续按 backlog 推进 P2-04 / P2-05。

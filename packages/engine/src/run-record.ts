@@ -132,7 +132,7 @@ export interface ToolRunSummary {
 }
 
 export interface RunArtifact {
-  kind: "trajectory" | "workflow_trajectory" | "record" | "eval_report" | "replay_report" | "triage_report" | "generated_file" | "diff" | "log_excerpt";
+  kind: "trajectory" | "workflow_trajectory" | "record" | "eval_case" | "eval_report" | "replay_report" | "triage_report" | "generated_file" | "diff" | "log_excerpt";
   path: string;
 }
 
