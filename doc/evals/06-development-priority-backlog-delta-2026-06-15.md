@@ -1,6 +1,6 @@
 # Development Priority Backlog Delta - 2026-06-15
 
-> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening`、`P1-01 Reviewed-loop v1`、`P1-02 Local Automation Triage`、`P1-05 CLI Operator Ergonomics` 与 `P2-01 Readonly Connector Baseline` 的增量交付。
+> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening`、`P1-01 Reviewed-loop v1`、`P1-02 Local Automation Triage`、`P1-05 CLI Operator Ergonomics`、`P2-01 Readonly Connector Baseline` 与 `P2-02 L3 Operator Scenario Eval` 的增量交付。
 >
 > 依据：`doc/product/12-development-priority-backlog.md`。
 
@@ -313,3 +313,44 @@
 - blocking：无。
 - non-blocking：browser `get_text` / `screenshot` source 目前记录为 `current_page`，后续可从 BrowserSession 暴露实际 URL 提升审计精度。
 - next action：继续按 backlog 推进 P2-02 / P2-03 / P2-04 / P2-05。
+
+## Backlog Item
+
+- 编号：P2-02
+- 开发包：L3 Operator Scenario Eval
+- 目标：L3 operator scenario fixture、packet 与 human sign-off artifact 保留结构化 proof boundary、evidence links、false-confidence risks 和人工审证边界。
+- 非目标：不把 fixture pass、packet 输出或 sign-off JSON 校验等同真人实际审证，不引入自动 judge 替代 human reviewer。
+
+## Changed Files
+
+- `packages/engine/src/evals/operator-scenarios.ts`
+- `packages/engine/src/__tests__/operator-scenario-eval.test.ts`
+- `packages/cli/src/__tests__/eval-commands.test.ts`
+
+## Tests / Evals
+
+- `corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/operator-scenario-eval.test.ts`
+- `corepack pnpm --filter @keigent/cli exec vitest run src/__tests__/eval-commands.test.ts`
+- `corepack pnpm --filter @keigent/engine exec tsc --noEmit`
+- `corepack pnpm --filter @keigent/cli start eval operator --compact`
+- `corepack pnpm --filter @keigent/cli start eval operator --packet`
+- `corepack pnpm -r check`
+- `corepack pnpm -r test`
+- `corepack pnpm -r --if-present build`
+- `git diff --check`
+- 结果：全部通过。
+
+## Evidence
+
+- 已证明：L3 report 顶层包含结构化 `proofBoundary`，明确 fixture 只证明 deterministic scenario review，不证明 human acceptance、live operator readiness 或 production health。
+- 已证明：每个 scenario case 包含 case 级 `proofBoundary`，把 fixture decision、evidence links、blocking issue 和 expected operator decision 显式纳入证据边界。
+- 已证明：`operator-human-acceptance` artifact 保留 `proofBoundary`，并把 fixture 的 `evidenceLinks` 与 `falseConfidenceRisks` 复制到每个 case record，供后续 Workbench / debug bundle / 验收报告复用。
+- 已证明：完整 sign-off 也不会抹掉 deferred / rejected scenario 的 blocking evidence gaps，符合 human acceptance 不能覆盖事实失败的边界。
+- 已证明：CLI `eval operator --compact` 输出 report 级和 case 级 proof boundary；`eval operator --packet` 仍输出人工 reviewer checklist。
+- 未证明：真人 reviewer 已经打开并审查 evidence links、真实生产健康、真实外部系统状态、完整交互式 operator 产品成熟度。
+
+## Risks / Follow-ups
+
+- blocking：无。
+- non-blocking：当前 L3 scenario 仍是 deterministic fixture reviewer；后续可把 acceptance artifact 接入 Workbench Run Detail 或 debug bundle 下载入口。
+- next action：继续按 backlog 推进 P2-03 / P2-04 / P2-05。

@@ -134,8 +134,15 @@ describe("eval and replay commands", () => {
       totals: { total: 7, failed: 0 },
       decisions: { accepted: 3, deferred: 3, rejected: 1 },
       healthClaim: "Manual-review scenario fixture, not autonomous product certification",
+      proofBoundary: {
+        notProven: expect.arrayContaining(["Human acceptance is not proven by fixture review."]),
+      },
     });
-    expect(report.cases.map((testCase: { id: string }) => testCase.id)).toContain("failure-triage");
+    expect(report.cases.find((testCase: { id: string }) => testCase.id === "failure-triage")).toMatchObject({
+      proofBoundary: {
+        evidenceGaps: expect.arrayContaining(["Blocking issue: Failure owner needs to inspect debug bundle before retry."]),
+      },
+    });
   });
 
   it("prints a human operator acceptance packet for L3 eval when requested", async () => {
@@ -165,8 +172,16 @@ describe("eval and replay commands", () => {
       finalDecision: "accepted",
       accepted: true,
       totals: { total: 7, signedOff: 7, blockingIssues: 0 },
+      proofBoundary: {
+        proven: expect.arrayContaining(["Human sign-off file was validated for all L3 scenarios."]),
+        notProven: expect.arrayContaining(["Sign-off validation does not prove the reviewer actually inspected evidence content."]),
+      },
     });
     expect(record.fixtureOnly).toBe(false);
+    expect(record.cases.find((testCase: { caseId: string }) => testCase.caseId === "connector-readonly-review")).toMatchObject({
+      evidenceLinks: expect.arrayContaining([expect.objectContaining({ kind: "tool", ref: "github_repo_read" })]),
+      falseConfidenceRisks: expect.arrayContaining(["Readonly connector evidence may still become stale."]),
+    });
   });
 
   it("adds a Workbench deep link for real-world eval when --open is requested", async () => {

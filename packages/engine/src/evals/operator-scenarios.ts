@@ -1,3 +1,4 @@
+import { mergeProofBoundaries, type ProofBoundary } from "../proof-boundary.js";
 import type { Task } from "../types.js";
 
 export type OperatorScenarioDecision = "accepted" | "deferred" | "rejected";
@@ -53,6 +54,7 @@ export interface OperatorScenarioCaseResult {
   journey: OperatorScenarioJourney;
   expectedDecision: OperatorScenarioDecision;
   review: OperatorScenarioReview;
+  proofBoundary: ProofBoundary;
   passed: boolean;
   failures: string[];
   proves: string;
@@ -68,6 +70,7 @@ export interface OperatorScenarioEvalReport {
   decisions: Record<OperatorScenarioDecision, number>;
   averageConfidence: number | null;
   falseConfidenceRiskCount: number;
+  proofBoundary: ProofBoundary;
   findings: OperatorScenarioFinding[];
   cases: OperatorScenarioCaseResult[];
 }
@@ -117,6 +120,9 @@ export interface OperatorAcceptanceCaseRecord {
   humanDecision?: OperatorScenarioDecision;
   evidenceInspected: boolean;
   falseConfidenceRisksAccepted: boolean;
+  evidenceLinks: OperatorEvidenceLink[];
+  falseConfidenceRisks: string[];
+  proofBoundary: ProofBoundary;
   overrideReason?: string;
   notes?: string;
   blockingIssues: string[];
@@ -133,6 +139,7 @@ export interface OperatorAcceptanceRecord {
   finalDecision: OperatorScenarioDecision;
   accepted: boolean;
   totals: { total: number; signedOff: number; blockingIssues: number };
+  proofBoundary: ProofBoundary;
   issues: OperatorAcceptanceIssue[];
   cases: OperatorAcceptanceCaseRecord[];
 }
@@ -330,6 +337,7 @@ export function buildOperatorAcceptanceRecord(
       signedOff: report.cases.filter((testCase) => signoffsByCase.has(testCase.id)).length,
       blockingIssues,
     },
+    proofBoundary: proofBoundaryForOperatorAcceptance(report, issues),
     issues,
     cases: caseRecords,
   };
@@ -344,6 +352,9 @@ function caseRecordFor(testCase: OperatorScenarioCaseResult, signed: OperatorAcc
     ...(signed?.humanDecision ? { humanDecision: signed.humanDecision } : {}),
     evidenceInspected: signed?.evidenceInspected === true,
     falseConfidenceRisksAccepted: signed?.falseConfidenceRisksAccepted === true,
+    evidenceLinks: testCase.review.evidenceLinks,
+    falseConfidenceRisks: testCase.review.falseConfidenceRisks,
+    proofBoundary: testCase.proofBoundary,
     ...(signed?.overrideReason ? { overrideReason: signed.overrideReason } : {}),
     ...(signed?.notes ? { notes: signed.notes } : {}),
     blockingIssues: signed?.blockingIssues ?? [],
@@ -383,6 +394,7 @@ function evaluateCase(evalCase: OperatorScenarioEvalCase, review: OperatorScenar
     journey: evalCase.journey,
     expectedDecision: evalCase.expectedDecision,
     review,
+    proofBoundary: proofBoundaryForOperatorCase(evalCase, review),
     passed: failures.length === 0,
     failures,
     proves: evalCase.proves,
@@ -426,9 +438,67 @@ function buildReport(
     },
     averageConfidence: total === 0 ? null : cases.reduce((sum, item) => sum + item.review.confidence, 0) / total,
     falseConfidenceRiskCount: cases.reduce((sum, item) => sum + item.review.falseConfidenceRisks.length, 0),
+    proofBoundary: proofBoundaryForOperatorReport(cases),
     findings,
     cases,
   };
+}
+
+function proofBoundaryForOperatorCase(evalCase: OperatorScenarioEvalCase, review: OperatorScenarioReview): ProofBoundary {
+  return mergeProofBoundaries([{
+    proven: [
+      `Operator scenario evaluated: ${evalCase.id}`,
+      `Fixture decision recorded: ${review.decision}`,
+      ...review.evidenceLinks.map((link) => `Evidence link listed: ${link.kind}:${link.ref}`),
+    ],
+    notProven: [
+      "Human acceptance is not proven by fixture review.",
+      "Production health is not proven by operator scenario fixtures.",
+    ],
+    assumptions: [
+      `Expected operator decision: ${evalCase.expectedDecision}`,
+      "Fixture reviewer output represents a deterministic local review sample.",
+    ],
+    evidenceGaps: [
+      ...(review.evidenceLinks.length === 0 ? ["No evidence links were provided for this scenario."] : []),
+      ...review.blockingIssues.map((issue) => `Blocking issue: ${issue}`),
+      ...(review.decision !== "accepted" && review.nextActions.length === 0 ? ["Non-accepted scenario has no next action."] : []),
+    ],
+  }]);
+}
+
+function proofBoundaryForOperatorReport(cases: OperatorScenarioCaseResult[]): ProofBoundary {
+  return mergeProofBoundaries([
+    {
+      proven: cases.length > 0 ? ["Deterministic L3 operator scenario fixtures were evaluated."] : [],
+      notProven: [
+        "Human acceptance is not proven by fixture review.",
+        "Fixture pass does not prove live operator readiness.",
+        "Production health is not proven by operator scenario fixtures.",
+      ],
+      assumptions: ["Human reviewer must inspect linked evidence before accepting any scenario."],
+      evidenceGaps: cases.length === 0 ? ["No L3 operator scenario cases were provided."] : [],
+    },
+    ...cases.map((testCase) => testCase.proofBoundary),
+  ]);
+}
+
+function proofBoundaryForOperatorAcceptance(report: OperatorScenarioEvalReport, issues: OperatorAcceptanceIssue[]): ProofBoundary {
+  const blockingIssues = issues.filter((issue) => issue.severity === "blocking");
+  return mergeProofBoundaries([
+    {
+      proven: blockingIssues.length === 0
+        ? ["Human sign-off file was validated for all L3 scenarios."]
+        : ["Human sign-off file was parsed and checked."],
+      notProven: [
+        "Sign-off validation does not prove the reviewer actually inspected evidence content.",
+        "Human acceptance does not prove production health.",
+      ],
+      assumptions: ["Reviewer attestations are truthful and externally accountable."],
+      evidenceGaps: blockingIssues.map((issue) => issue.caseId ? `${issue.caseId}: ${issue.message}` : issue.message),
+    },
+    report.proofBoundary,
+  ]);
 }
 
 function fixtureReviewFor(testCase: OperatorScenarioEvalCase): OperatorScenarioReview {

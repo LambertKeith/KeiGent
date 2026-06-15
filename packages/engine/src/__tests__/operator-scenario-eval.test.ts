@@ -35,8 +35,19 @@ describe("operator scenario L3 eval", () => {
     expect(report.averageConfidence).toBeLessThanOrEqual(1);
     expect(report.falseConfidenceRiskCount).toBeGreaterThan(0);
     expect(report.findings).toContainEqual(expect.objectContaining({ code: "fixture_level", severity: "info" }));
+    expect(report.proofBoundary).toMatchObject({
+      proven: expect.arrayContaining(["Deterministic L3 operator scenario fixtures were evaluated."]),
+      notProven: expect.arrayContaining(["Human acceptance is not proven by fixture review."]),
+      assumptions: expect.arrayContaining(["Human reviewer must inspect linked evidence before accepting any scenario."]),
+    });
     expect(report.cases.find((testCase) => testCase.id === "failure-triage")).toMatchObject({
       expectedDecision: "deferred",
+      proofBoundary: {
+        proven: expect.arrayContaining(["Fixture decision recorded: deferred"]),
+        notProven: expect.arrayContaining(["Human acceptance is not proven by fixture review."]),
+        assumptions: expect.arrayContaining(["Expected operator decision: deferred"]),
+        evidenceGaps: expect.arrayContaining(["Blocking issue: Failure owner needs to inspect debug bundle before retry."]),
+      },
       review: {
         decision: "deferred",
         blockingIssues: expect.arrayContaining(["Failure owner needs to inspect debug bundle before retry."]),
@@ -109,6 +120,16 @@ describe("operator scenario L3 eval", () => {
     });
     expect(record.issues).toEqual([]);
     expect(record.fixtureOnly).toBe(false);
+    expect(record.proofBoundary).toMatchObject({
+      proven: expect.arrayContaining(["Human sign-off file was validated for all L3 scenarios."]),
+      notProven: expect.arrayContaining(["Sign-off validation does not prove the reviewer actually inspected evidence content."]),
+      assumptions: expect.arrayContaining(["Reviewer attestations are truthful and externally accountable."]),
+      evidenceGaps: expect.arrayContaining(["Blocking issue: Failure owner needs to inspect debug bundle before retry."]),
+    });
+    expect(record.cases.find((testCase) => testCase.caseId === "failure-triage")).toMatchObject({
+      evidenceLinks: expect.arrayContaining([expect.objectContaining({ kind: "debug_bundle", ref: "run_failed_001" })]),
+      falseConfidenceRisks: expect.arrayContaining(["A green retry would not explain the original failure."]),
+    });
     expect(record.cases.find((testCase) => testCase.caseId === "governed-execution")).toMatchObject({
       expectedDecision: "rejected",
       humanDecision: "rejected",
