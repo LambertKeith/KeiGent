@@ -32,6 +32,7 @@ describe("git_status readonly connector", () => {
     expect(result.isError).toBe(false);
     expect(result.content).toContain("##");
     expect(result.content).toContain("?? README.md");
+    expect(result.sources).toEqual([{ kind: "workspace_path", ref: workspace, connector: "git_status" }]);
     expect(approval.request).not.toHaveBeenCalled();
     expect(registry.get("git_status")).toMatchObject({
       permission: "readonly",

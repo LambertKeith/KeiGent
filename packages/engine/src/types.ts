@@ -1,6 +1,6 @@
 import type { Context, Message, Tool } from "@earendil-works/pi-ai";
 import type { FailureSummary } from "./failures.js";
-import type { ApprovalDecision, ApprovalRequest } from "./tools/types.js";
+import type { ApprovalDecision, ApprovalRequest, EvidenceSource } from "./tools/types.js";
 
 // ── Task ─────────────────────────────────────────────────────────────
 
@@ -16,6 +16,7 @@ export type Assertion =
   | { kind: "toolSucceeded"; toolName: string; minCount?: number }
   | { kind: "checkpointPassed"; checkpointId?: string; minCount?: number }
   | { kind: "humanApproved"; scope: string }
+  | { kind: "sourceCollected"; connector: string; refIncludes?: string }
   | { kind: "jsonPathEquals"; path: string; value: unknown }
   | { kind: "screenshotJudge"; rubric: string };
 
@@ -155,6 +156,7 @@ export interface TrajectoryStep {
   toolArgs?: Record<string, unknown>;
   toolResult?: string;
   toolSucceeded?: boolean;
+  toolSources?: EvidenceSource[];
   // text_output
   text?: string;
   // checkpoint

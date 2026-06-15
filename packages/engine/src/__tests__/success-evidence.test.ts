@@ -101,4 +101,36 @@ describe("success evidence model", () => {
       expect.objectContaining({ passed: true }),
     ]);
   });
+
+  it("collects readonly connector sources as structured evidence", () => {
+    const bundle = buildEvidenceBundle(trajectory({
+      steps: [
+        {
+          iteration: 1,
+          kind: "tool_call",
+          toolName: "http_get",
+          toolArgs: { url: "https://example.com/status" },
+          toolResult: "connector=http_get\nsource_url=https://example.com/status\nHTTP 200 OK",
+          toolSucceeded: true,
+          toolSources: [{ kind: "url", ref: "https://example.com/status", connector: "http_get" }],
+        },
+      ],
+    }));
+
+    const [result] = evaluateAssertions([{
+      kind: "sourceCollected",
+      connector: "http_get",
+      refIncludes: "example.com/status",
+    }], bundle);
+
+    expect(bundle.sources).toEqual([{
+      kind: "url",
+      ref: "https://example.com/status",
+      connector: "http_get",
+    }]);
+    expect(result).toMatchObject({
+      passed: true,
+      evidence: "source http_get collected https://example.com/status",
+    });
+  });
 });

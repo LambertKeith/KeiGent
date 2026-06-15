@@ -59,7 +59,7 @@ function runGitStatus(cwd: string, ctx: ToolContext): Promise<ReturnType<typeof 
           settle(err(`connector_failure=git_status_unavailable\n${output || error.message}`));
           return;
         }
-        settle(ok(output || "## clean"));
+        settle(ok(output || "## clean", undefined, [{ kind: "workspace_path", ref: cwd, connector: "git_status" }]));
       },
     );
     const onAbort = () => {

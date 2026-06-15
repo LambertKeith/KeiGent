@@ -39,6 +39,7 @@ describe("http_get readonly connector", () => {
       expect(result.content).toContain("HTTP 200 OK");
       expect(result.content).toContain("hello [REDACTED]");
       expect(result.content).not.toContain("sk-http-secret-123456");
+      expect(result.sources).toEqual([{ kind: "url", ref: `${url}/`, connector: "http_get" }]);
       expect(approval.request).not.toHaveBeenCalled();
       expect(registry.get("http_get")).toMatchObject({
         permission: "readonly",

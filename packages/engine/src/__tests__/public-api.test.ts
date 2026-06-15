@@ -69,6 +69,7 @@ describe("@keigent/engine public API", () => {
     expect(api).toHaveProperty("countSuccessfulToolCalls");
     expect(api).toHaveProperty("countPassedCheckpoints");
     expect(api).toHaveProperty("hasApprovedScope");
+    expect(api).toHaveProperty("hasCollectedSource");
     expect(api).toHaveProperty("describeAssertion");
     expect(api).toHaveProperty("evaluateAssertion");
     expect(api).toHaveProperty("evaluateAssertions");

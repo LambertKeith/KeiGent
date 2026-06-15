@@ -2,7 +2,7 @@ import { vlog, vwarn } from "./logger.js";
 import { randomUUID } from "crypto";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
-import type { ApprovalDecision } from "./tools/types.js";
+import type { ApprovalDecision, EvidenceSource } from "./tools/types.js";
 import type { FailureSummary } from "./failures.js";
 import type {
   ExitReason,
@@ -31,6 +31,7 @@ export class TrajectoryCollector {
     toolArgs: Record<string, unknown>;
     toolResult: string;
     succeeded: boolean;
+    sources?: EvidenceSource[];
   }): void {
     this.steps.push({
       iteration: opts.iteration,
@@ -39,6 +40,7 @@ export class TrajectoryCollector {
       toolArgs: opts.toolArgs,
       toolResult: opts.toolResult,
       toolSucceeded: opts.succeeded,
+      ...(opts.sources ? { toolSources: opts.sources } : {}),
     });
   }
 

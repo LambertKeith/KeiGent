@@ -1,6 +1,6 @@
 # Development Priority Backlog Delta - 2026-06-15
 
-> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening`、`P1-01 Reviewed-loop v1`、`P1-02 Local Automation Triage` 与 `P1-05 CLI Operator Ergonomics` 的增量交付。
+> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening`、`P1-01 Reviewed-loop v1`、`P1-02 Local Automation Triage`、`P1-05 CLI Operator Ergonomics` 与 `P2-01 Readonly Connector Baseline` 的增量交付。
 >
 > 依据：`doc/product/12-development-priority-backlog.md`。
 
@@ -257,3 +257,59 @@
 - blocking：无。
 - non-blocking：CLI 默认输出仍是文本摘要，不提供交互式筛选、排序或分页。
 - next action：继续按 backlog 推进 P2 项。
+
+## Backlog Item
+
+- 编号：P2-01
+- 开发包：Readonly Connector Baseline
+- 目标：readonly connector 通过 ToolRegistry 执行，记录结构化 source evidence，失败具备稳定 failure code，写路径明确 unsupported。
+- 非目标：不实现写型 connector、不引入外部账号 token flow、不把 connector source 等同于业务验收结论。
+
+## Changed Files
+
+- `packages/engine/src/tools/types.ts`
+- `packages/engine/src/tools/impl/filesystem.ts`
+- `packages/engine/src/tools/impl/web.ts`
+- `packages/engine/src/tools/impl/browser.ts`
+- `packages/engine/src/tools/impl/git.ts`
+- `packages/engine/src/tools/impl/github.ts`
+- `packages/engine/src/engine.ts`
+- `packages/engine/src/trajectory.ts`
+- `packages/engine/src/evidence.ts`
+- `packages/engine/src/assertions.ts`
+- `packages/engine/src/failures.ts`
+- `packages/engine/src/lib.ts`
+- `packages/engine/src/types.ts`
+- `packages/engine/src/__tests__/readonly-connector-sources.test.ts`
+- `packages/engine/src/__tests__/http-readonly-tool.test.ts`
+- `packages/engine/src/__tests__/github-readonly-tool.test.ts`
+- `packages/engine/src/__tests__/git-tool.test.ts`
+- `packages/engine/src/__tests__/success-evidence.test.ts`
+- `packages/engine/src/__tests__/workflow-runner.test.ts`
+- `packages/engine/src/__tests__/failures.test.ts`
+- `packages/engine/src/__tests__/public-api.test.ts`
+
+## Tests / Evals
+
+- `corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/failures.test.ts src/__tests__/readonly-connector-sources.test.ts src/__tests__/http-readonly-tool.test.ts src/__tests__/github-readonly-tool.test.ts src/__tests__/git-tool.test.ts src/__tests__/success-evidence.test.ts src/__tests__/workflow-runner.test.ts src/__tests__/public-api.test.ts`
+- `corepack pnpm -r check`
+- `corepack pnpm -r test`
+- `corepack pnpm -r --if-present build`
+- `git diff --check`
+- 结果：全部通过。
+
+## Evidence
+
+- 已证明：`http_get`、`github_repo_read`、`git_status`、`web_fetch`、`file_read`、`file_list`、`grep`、`browser_snapshot`、`browser_get_text`、`browser_screenshot` 返回结构化 `sources`。
+- 已证明：readonly connector 仍是 `permission=readonly`、`riskLevel=R0`、`sideEffect=none`，目标测试断言不触发审批。
+- 已证明：secret-bearing HTTP / GitHub 响应进入 tool output 前会脱敏，测试覆盖原始 secret 不泄漏。
+- 已证明：`ToolResult.sources` 通过 `LoopEngine` 写入 trajectory `toolSources`，`buildEvidenceBundle` 收集为 `sources`。
+- 已证明：新增 deterministic assertion `sourceCollected` 可让 verified-loop 把外部 source 纳入 workflow evidence。
+- 已证明：`connector_failure=http_get_unavailable` 映射为 `network_error`，`connector_failure=git_status_unavailable` 映射为 `tool_unavailable`，`write_unsupported=*` 映射为 `permission_denied`。
+- 未证明：真实 GitHub/HTTP 网络长期可用性、外部 source 内容真实性、写型 connector、OAuth/token 账号 connector。
+
+## Risks / Follow-ups
+
+- blocking：无。
+- non-blocking：browser `get_text` / `screenshot` source 目前记录为 `current_page`，后续可从 BrowserSession 暴露实际 URL 提升审计精度。
+- next action：继续按 backlog 推进 P2-02 / P2-03 / P2-04 / P2-05。

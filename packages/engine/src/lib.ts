@@ -20,7 +20,7 @@ export { formatLearningResult } from "./skill-patch.js";
 export { buildDefaultRegistry } from "./tools/index.js";
 export { ToolRegistry, type ToolDef, type ApprovalGate } from "./tools/index.js";
 export { AllowAllGate, DenyByDefaultGate } from "./tools/types.js";
-export type { ApprovalRequest, RiskLevel, SideEffect } from "./tools/types.js";
+export type { ApprovalRequest, EvidenceSource, RiskLevel, SideEffect } from "./tools/types.js";
 export { WriteThroughMemory } from "./memory.js";
 export { setVerbose, isVerbose } from "./logger.js";
 export {
@@ -28,6 +28,7 @@ export {
   countPassedCheckpoints,
   countSuccessfulToolCalls,
   hasApprovedScope,
+  hasCollectedSource,
 } from "./evidence.js";
 export type {
   CheckpointEvidence,

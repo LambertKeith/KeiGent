@@ -49,7 +49,7 @@ export const githubRepoReadTool: ToolDef = {
         `HTTP ${resp.status} ${resp.statusText}`,
         "",
         redactText(formatJsonText(text)),
-      ].join("\n"));
+      ].join("\n"), undefined, [{ kind: "url", ref: sourceUrl, connector: "github_repo_read" }]);
     } catch (error) {
       return err(`connector_failure=github_repo_read_unavailable\n${error instanceof Error ? error.message : String(error)}`);
     } finally {

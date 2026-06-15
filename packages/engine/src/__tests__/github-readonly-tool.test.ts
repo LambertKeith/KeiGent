@@ -39,6 +39,11 @@ describe("github_repo_read readonly connector", () => {
     expect(result.content).toContain('"full_name": "openai/codex"');
     expect(result.content).toContain("[REDACTED]");
     expect(result.content).not.toContain("sk-github-secret-123456");
+    expect(result.sources).toEqual([{
+      kind: "url",
+      ref: "https://api.github.com/repos/openai/codex",
+      connector: "github_repo_read",
+    }]);
     expect(approval.request).not.toHaveBeenCalled();
     expect(registry.get("github_repo_read")).toMatchObject({
       permission: "readonly",

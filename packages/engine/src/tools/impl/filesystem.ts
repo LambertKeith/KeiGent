@@ -40,7 +40,7 @@ export const fileReadTool: ToolDef = {
       const st = await stat(abs);
       if (st.size > MAX_FILE_BYTES) return err(`文件过大（>${MAX_FILE_BYTES} 字节）`);
       const content = await readFile(abs, "utf-8");
-      return ok(content);
+      return ok(content, undefined, [{ kind: "file", ref: abs, connector: "file_read" }]);
     } catch (e) {
       return err(`读取失败: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -91,7 +91,7 @@ export const fileListTool: ToolDef = {
     try {
       const entries = await readdir(abs, { withFileTypes: true });
       const lines = entries.map((e) => (e.isDirectory() ? `${e.name}/` : e.name));
-      return ok(lines.join("\n") || "（空目录）");
+      return ok(lines.join("\n") || "（空目录）", undefined, [{ kind: "workspace_path", ref: abs, connector: "file_list" }]);
     } catch (e) {
       return err(`列目录失败: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -157,7 +157,7 @@ export const grepTool: ToolDef = {
 
     try {
       await walk(dir);
-      return ok(matches.length > 0 ? matches.join("\n") : "（无匹配）");
+      return ok(matches.length > 0 ? matches.join("\n") : "（无匹配）", undefined, [{ kind: "workspace_path", ref: dir, connector: "grep" }]);
     } catch (e) {
       return err(`搜索失败: ${e instanceof Error ? e.message : String(e)}`);
     }

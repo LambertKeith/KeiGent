@@ -83,10 +83,17 @@ export interface ToolResult {
   content: string;                    // 给 LLM 的文本结果
   isError: boolean;
   image?: { data: string; mimeType: string };  // 截图等多模态产物
+  sources?: EvidenceSource[];
 }
 
-export function ok(content: string, image?: ToolResult["image"]): ToolResult {
-  return { content, isError: false, ...(image ? { image } : {}) };
+export interface EvidenceSource {
+  kind: "url" | "workspace_path" | "browser_state" | "file";
+  ref: string;
+  connector: string;
+}
+
+export function ok(content: string, image?: ToolResult["image"], sources?: EvidenceSource[]): ToolResult {
+  return { content, isError: false, ...(image ? { image } : {}), ...(sources ? { sources } : {}) };
 }
 
 export function err(message: string): ToolResult {

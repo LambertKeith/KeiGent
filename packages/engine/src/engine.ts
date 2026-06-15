@@ -399,6 +399,7 @@ export class LoopEngine {
           toolArgs: toolCall.arguments as Record<string, unknown>,
           toolResult: result,
           succeeded: !toolRes.isError,
+          sources: toolRes.sources,
         });
         if (toolRes.isError && (result.includes("未获授权") || result.includes("non_interactive_input_required"))) {
           return this.result(state, "error", result, collector, matchedSkills);

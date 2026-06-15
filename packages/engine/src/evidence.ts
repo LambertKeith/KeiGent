@@ -1,4 +1,5 @@
 import type { ApprovalDecision } from "./tools/types.js";
+import type { EvidenceSource } from "./tools/types.js";
 import type { Trajectory, TrajectoryStep } from "./types.js";
 import { redactObject, redactText } from "./redaction.js";
 
@@ -8,6 +9,7 @@ export interface ToolCallEvidence {
   toolArgs: Record<string, unknown>;
   toolResult: string;
   succeeded: boolean;
+  sources: EvidenceSource[];
 }
 
 export interface CheckpointEvidence {
@@ -25,6 +27,7 @@ export interface EvidenceBundle {
   toolCalls: ToolCallEvidence[];
   approvals: ApprovalDecision[];
   checkpoints: CheckpointEvidence[];
+  sources: EvidenceSource[];
 }
 
 export function buildEvidenceBundle(trajectory: Trajectory): EvidenceBundle {
@@ -32,11 +35,16 @@ export function buildEvidenceBundle(trajectory: Trajectory): EvidenceBundle {
   const approvals: ApprovalDecision[] = [];
   const checkpoints: CheckpointEvidence[] = [];
   const textOutputs: string[] = [];
+  const sources: EvidenceSource[] = [];
 
   for (const step of trajectory.steps) {
     switch (step.kind) {
       case "tool_call":
-        if (step.toolName) toolCalls.push(toolEvidence(step));
+        if (step.toolName) {
+          const evidence = toolEvidence(step);
+          toolCalls.push(evidence);
+          sources.push(...evidence.sources);
+        }
         break;
       case "approval":
         if (step.approval) approvals.push(redactApproval(step.approval));
@@ -65,6 +73,7 @@ export function buildEvidenceBundle(trajectory: Trajectory): EvidenceBundle {
     toolCalls,
     approvals,
     checkpoints,
+    sources,
   };
 }
 
@@ -83,6 +92,13 @@ export function hasApprovedScope(bundle: EvidenceBundle, scope: string): boolean
   });
 }
 
+export function hasCollectedSource(bundle: EvidenceBundle, connector: string, refIncludes?: string): EvidenceSource | undefined {
+  return bundle.sources.find((source) => {
+    if (source.connector !== connector) return false;
+    return refIncludes ? source.ref.includes(refIncludes) : true;
+  });
+}
+
 function toolEvidence(step: TrajectoryStep): ToolCallEvidence {
   return {
     iteration: step.iteration,
@@ -90,6 +106,11 @@ function toolEvidence(step: TrajectoryStep): ToolCallEvidence {
     toolArgs: redactObject(step.toolArgs ?? {}),
     toolResult: redactText(step.toolResult ?? ""),
     succeeded: step.toolSucceeded === true,
+    sources: (step.toolSources ?? []).map((source) => ({
+      kind: source.kind,
+      connector: redactText(source.connector),
+      ref: redactText(source.ref),
+    })),
   };
 }
 

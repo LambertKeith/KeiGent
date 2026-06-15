@@ -1,6 +1,6 @@
 import type { Assertion, AssertionResult } from "./types.js";
 import type { EvidenceBundle } from "./evidence.js";
-import { countPassedCheckpoints, countSuccessfulToolCalls, hasApprovedScope } from "./evidence.js";
+import { countPassedCheckpoints, countSuccessfulToolCalls, hasApprovedScope, hasCollectedSource } from "./evidence.js";
 
 type TextAssertionSource = "dom" | "stdout" | "file" | "final" | undefined;
 
@@ -25,6 +25,8 @@ export function describeAssertion(assertion: Assertion): string {
       return `checkpoint passed ${assertion.minCount ?? 1} time(s)`;
     case "humanApproved":
       return `human approved ${assertion.scope}`;
+    case "sourceCollected":
+      return `source collected by ${assertion.connector}${assertion.refIncludes ? ` including ${assertion.refIncludes}` : ""}`;
     case "jsonPathEquals":
       return `json path ${assertion.path} equals ${JSON.stringify(assertion.value)}`;
     case "screenshotJudge":
@@ -56,6 +58,12 @@ export function evaluateAssertion(assertion: Assertion, bundle: EvidenceBundle):
       return hasApprovedScope(bundle, assertion.scope)
         ? pass(assertion, `approved scope ${assertion.scope}`)
         : fail(assertion, "evidence_missing", `approval for ${assertion.scope} missing or denied`);
+    case "sourceCollected": {
+      const source = hasCollectedSource(bundle, assertion.connector, assertion.refIncludes);
+      return source
+        ? pass(assertion, `source ${source.connector} collected ${source.ref}`)
+        : fail(assertion, "evidence_missing", `source ${assertion.connector} missing${assertion.refIncludes ? ` for ${assertion.refIncludes}` : ""}`);
+    }
     case "textIncludes": {
       const haystack = textSource(assertion.source, bundle);
       return haystack.includes(assertion.value)

@@ -94,6 +94,15 @@ export function failureSummaryForLoopExit(exitReason: ExitReason, finalResponse:
   if (finalResponse.includes("non_interactive_input_required")) {
     return summary("missing_user_input", "input", "任务需要用户澄清，但当前没有可用交互通道。");
   }
+  if (finalResponse.includes("write_unsupported=")) {
+    return summary("permission_denied", "permission", "Readonly connector 不支持写入或带凭据请求。");
+  }
+  if (finalResponse.includes("connector_failure=git_status_unavailable")) {
+    return summary("tool_unavailable", "tool", "本地 readonly connector 不可用。");
+  }
+  if (finalResponse.includes("connector_failure=")) {
+    return summary("network_error", "external", "外部 readonly connector 读取失败。");
+  }
   if (text.includes("timed out") || text.includes("timeout") || finalResponse.includes("超时")) {
     return summary("timeout", "budget", "运行或外部请求超时。");
   }

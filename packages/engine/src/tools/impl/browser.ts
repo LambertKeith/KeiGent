@@ -54,7 +54,11 @@ export const browserSnapshotTool: ToolDef = {
   async execute(_args, ctx) {
     try {
       const snap = await getSession(ctx).snapshot();
-      return ok(`页面: ${snap.title}\nURL: ${snap.url}\n\n可交互元素:\n${renderSnapshot(snap.entries)}`);
+      return ok(
+        `页面: ${snap.title}\nURL: ${snap.url}\n\n可交互元素:\n${renderSnapshot(snap.entries)}`,
+        undefined,
+        [{ kind: "browser_state", ref: snap.url || "current_page", connector: "browser_snapshot" }],
+      );
     } catch (e) {
       return err(`快照失败: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -140,7 +144,7 @@ export const browserGetTextTool: ToolDef = {
     const target = args["target"] ? String(args["target"]) : undefined;
     try {
       const text = await getSession(ctx).getText(target);
-      return ok(text || "（无文本）");
+      return ok(text || "（无文本）", undefined, [{ kind: "browser_state", ref: target ?? "current_page", connector: "browser_get_text" }]);
     } catch (e) {
       return err(`读取文本失败: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -158,7 +162,7 @@ export const browserScreenshotTool: ToolDef = {
   async execute(_args, ctx) {
     try {
       const img = await getSession(ctx).screenshot();
-      return ok("已截图（见图像）", img);
+      return ok("已截图（见图像）", img, [{ kind: "browser_state", ref: "current_page", connector: "browser_screenshot" }]);
     } catch (e) {
       return err(`截图失败: ${e instanceof Error ? e.message : String(e)}`);
     }

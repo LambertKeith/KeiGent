@@ -430,6 +430,56 @@ describe("WorkflowRunner", () => {
     );
   });
 
+  it("accepts verified-loop success when readonly connector source evidence is collected", async () => {
+    const assertionTask = task({
+      successDef: {
+        goal: "Read external status source",
+        assertions: [{
+          kind: "sourceCollected",
+          connector: "http_get",
+          refIncludes: "example.com/status",
+        }],
+      },
+    });
+    const childTrajectory = trajectory({
+      steps: [
+        {
+          iteration: 1,
+          kind: "tool_call",
+          toolName: "http_get",
+          toolArgs: { url: "https://example.com/status" },
+          toolResult: "connector=http_get\nsource_url=https://example.com/status\nHTTP 200 OK",
+          toolSucceeded: true,
+          toolSources: [{ kind: "url", ref: "https://example.com/status", connector: "http_get" }],
+        },
+        {
+          iteration: 2,
+          kind: "checkpoint",
+          checkpointDesc: "source checked",
+          verdictPassed: true,
+          verdictEvidence: "external source inspected",
+          snapshot: { raw: {}, visibleText: "ok" },
+        },
+      ],
+    });
+    const runner = new WorkflowRunner(fakeChildRunner(loopResult({
+      trajectory: childTrajectory,
+      checkpointsPassed: 1,
+      totalToolCalls: 1,
+    })));
+
+    const result = await runner.run(createWorkflowSpec({ id: "wf-source-evidence", task: assertionTask }));
+
+    expect(result.exitReason).toBe("success");
+    expect(result.evidence).toContainEqual(expect.objectContaining({
+      kind: "assertion",
+      passed: true,
+      assertion: "source collected by http_get including example.com/status",
+      message: "source http_get collected https://example.com/status",
+      sourceChildRunId: "wf-source-evidence:worker-1",
+    }));
+  });
+
   it("summarizes repair attempts that finish with passing evidence", async () => {
     const repairedTrajectory = trajectory({
       steps: [

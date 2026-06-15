@@ -28,6 +28,21 @@ describe("failure semantics", () => {
     expect(recommendedNextActionFor("verified_failure")).toContain("补充或检查证据");
   });
 
+  it("maps readonly connector failures and unsupported writes to stable failure codes", () => {
+    expect(failureSummaryForLoopExit("error", "[错误] connector_failure=http_get_unavailable\nfetch failed")).toMatchObject({
+      code: "network_error",
+      layer: "external",
+    });
+    expect(failureSummaryForLoopExit("error", "[错误] connector_failure=git_status_unavailable\nnot a git repository")).toMatchObject({
+      code: "tool_unavailable",
+      layer: "tool",
+    });
+    expect(failureSummaryForLoopExit("error", "[错误] write_unsupported=http_get_readonly: method override is not allowed")).toMatchObject({
+      code: "permission_denied",
+      layer: "permission",
+    });
+  });
+
   it("returns undefined for successful terminal states", () => {
     expect(failureSummaryForLoopExit("success", "done")).toBeUndefined();
     expect(failureSummaryForWorkflowExit("success")).toBeUndefined();

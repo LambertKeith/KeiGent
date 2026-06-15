@@ -32,7 +32,7 @@ export const webFetchTool: ToolDef = {
     if (!url) return err("web_fetch 需要 url 参数");
     try {
       const content = await fetchUrl(url);
-      return ok(content);
+      return ok(content, undefined, [{ kind: "url", ref: redactText(url), connector: "web_fetch" }]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       return err(`抓取失败: ${msg}`);
@@ -88,7 +88,7 @@ export const httpGetTool: ToolDef = {
         `HTTP ${resp.status} ${resp.statusText}`,
         "",
         text,
-      ].join("\n"));
+      ].join("\n"), undefined, [{ kind: "url", ref: redactText(resp.url), connector: "http_get" }]);
     } catch (e) {
       return err(`connector_failure=http_get_unavailable\n${e instanceof Error ? e.message : String(e)}`);
     } finally {
