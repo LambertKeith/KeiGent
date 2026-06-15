@@ -144,7 +144,7 @@ describe("dashboard report model", () => {
       healthClaim: "Fixture-level regression, not product health",
       metrics: {
         routeAccuracy: { value: 1, label: "100.0%" },
-        taskSuccessRate: { value: 5 / 19, label: "26.3%" },
+        taskSuccessRate: { value: 6 / 20, label: "30.0%" },
         evidenceQuality: { label: expect.stringMatching(/%$/) },
       },
       proofBoundary: {

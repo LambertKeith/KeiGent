@@ -107,7 +107,7 @@ describe("eval and replay commands", () => {
     expect(report).toMatchObject({
       level: "L2",
       datasetId: "local-real-task-v1",
-      totals: { total: 19, failed: 0 },
+      totals: { total: 20, failed: 0 },
       falseSuccessCount: 0,
     });
     expect(report.cases.map((testCase: { id: string }) => testCase.id)).toContain("approval-denied");
@@ -182,7 +182,7 @@ describe("eval and replay commands", () => {
       datasetId: "local-real-task-v1",
       workbenchHref: "http://127.0.0.1:5173/#eval/real-world/local-real-task-v1",
       persistedRunRecords: {
-        total: 19,
+        total: 20,
         runsDir,
       },
       persistedEvalReport: {
@@ -190,7 +190,7 @@ describe("eval and replay commands", () => {
         path: join(runsDir, "..", "evals", "real-world", "local-real-task-v1", "latest.json"),
       },
     });
-    expect(store.records).toHaveLength(19);
+    expect(store.records).toHaveLength(20);
     await expect(readFile(report.persistedEvalReport.path, "utf8").then(JSON.parse)).resolves.toMatchObject({
       datasetId: "local-real-task-v1",
       cases: expect.arrayContaining([

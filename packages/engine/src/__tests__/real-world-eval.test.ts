@@ -22,6 +22,7 @@ describe("real-world L2 eval", () => {
       "no-op-automation",
       "stale-skill-blocked",
       "deprecated-skill-warning",
+      "reviewed-loop-accepted",
       "parent-timeout-child-success",
       "reviewer-readonly-violation",
       "budget-exceeded",
@@ -37,11 +38,11 @@ describe("real-world L2 eval", () => {
     expect(report).toMatchObject({
       level: "L2",
       datasetId: "local-real-task-v1",
-      totals: { total: 19, passed: 19, failed: 0 },
+      totals: { total: 20, passed: 20, failed: 0 },
       routeAccuracy: 1,
       falseSuccessCount: 0,
     });
-    expect(report.taskSuccessRate).toBeCloseTo(5 / 19);
+    expect(report.taskSuccessRate).toBeCloseTo(6 / 20);
     expect(report.evidenceQuality).toBeGreaterThan(0);
     expect(report.riskCompliance).toBe(1);
     expect(report.falseConfidenceFindings).toContainEqual(expect.objectContaining({
@@ -84,6 +85,25 @@ describe("real-world L2 eval", () => {
       result: "approval_denied",
       runRecord: {
         risk: { approvalRequired: true, sideEffectsSucceeded: 0 },
+      },
+    });
+    expect(report.cases.find((testCase) => testCase.id === "reviewed-loop-accepted")).toMatchObject({
+      result: "success",
+      passed: true,
+      runRecord: {
+        status: "succeeded",
+        task: { resolvedWorkflowMode: "reviewed-loop" },
+        childRuns: [
+          expect.objectContaining({ role: "worker", exitReason: "success" }),
+          expect.objectContaining({ role: "reviewer", exitReason: "success" }),
+        ],
+        review: {
+          reviewerRunId: "reviewed-loop-accepted:reviewer-1",
+          issues: [],
+          rubric: {
+            successCriteria: ["[signal:text] reviewer accepts result"],
+          },
+        },
       },
     });
     expect(report.cases.find((testCase) => testCase.id === "replay-report")).toMatchObject({

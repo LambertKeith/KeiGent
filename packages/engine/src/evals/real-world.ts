@@ -226,6 +226,23 @@ export const DEFAULT_REAL_WORLD_L2_CASES: RealWorldEvalCase[] = [
     proves: "deprecated skills produce auditable blocking records",
   },
   {
+    id: "reviewed-loop-accepted",
+    title: "Accept a reviewed-loop with readonly reviewer evidence",
+    level: "L2",
+    task: {
+      goal: "Draft release notes and have a readonly reviewer accept them",
+      profile: "convergent-verified",
+      successDef: {
+        goal: "Reviewer accepts release notes",
+        assertions: [{ description: "reviewer accepts result", signal: "text" }],
+      },
+    },
+    expectedProfile: "convergent-verified",
+    expectedWorkflowMode: "reviewed-loop",
+    expectedResult: "success",
+    proves: "reviewed-loop records worker and readonly reviewer roles with rubric-bound evidence",
+  },
+  {
     id: "parent-timeout-child-success",
     title: "Keep parent timeout authoritative over late child success",
     level: "L2",
@@ -634,25 +651,64 @@ function fixtureScenario(testCase: RealWorldEvalCase): FixtureScenario {
 function workflowResultFor(testCase: RealWorldEvalCase, scenario: FixtureScenario): WorkflowResult {
   const childId = `${testCase.id}:worker-1`;
   const loop = loopResultFor(testCase, scenario, childId);
-  const childRuns = [{ id: childId, role: "worker" as const, result: loop, trajectory: loop.trajectory }];
+  const childRuns: WorkflowResult["childRuns"] = [{ id: childId, role: "worker", result: loop, trajectory: loop.trajectory }];
+  const review = testCase.id === "reviewed-loop-accepted"
+    ? {
+        reviewerRunId: `${testCase.id}:reviewer-1`,
+        rubric: {
+          taskGoal: testCase.task.goal,
+          successCriteria: ["[signal:text] reviewer accepts result"],
+          requiredEvidence: ["reviewer checkpoint verdict"],
+          forbiddenClaims: ["Do not claim reviewer acceptance without a passed reviewer checkpoint."],
+          falseConfidenceRisks: ["Reviewer approval cannot override failed worker evidence."],
+          blockingIssueRules: ["Any failed reviewer checkpoint is blocking."],
+        },
+        issues: [],
+      }
+    : undefined;
+  if (review) {
+    const reviewerEvidence: WorkflowEvidence = {
+      kind: "checkpoint",
+      passed: true,
+      message: "reviewer accepted worker result",
+      sourceChildRunId: review.reviewerRunId,
+      assertion: "reviewer accepts result",
+    };
+    const reviewerLoop = loopResultFor(testCase, {
+      ...scenario,
+      finalResponse: "review passed",
+      evidence: [reviewerEvidence],
+      checkpointPassed: true,
+      checkpointDesc: "reviewer accepts result",
+      toolName: undefined,
+      toolSucceeded: undefined,
+      approval: undefined,
+    }, review.reviewerRunId);
+    childRuns.push({
+      id: review.reviewerRunId,
+      role: "reviewer",
+      result: reviewerLoop,
+      trajectory: { ...reviewerLoop.trajectory, profile: "convergent-verified" },
+    });
+  }
   const budget = {
-    maxChildRuns: 1,
+    maxChildRuns: childRuns.length,
     maxIterationsPerRun: 4,
-    maxAggregateIterations: 4,
+    maxAggregateIterations: 4 * childRuns.length,
     maxToolCallsPerRun: 6,
-    maxAggregateToolCalls: 6,
+    maxAggregateToolCalls: 6 * childRuns.length,
     maxTokenEstimatePerRun: 64_000,
-    maxAggregateTokenEstimate: 64_000,
+    maxAggregateTokenEstimate: 64_000 * childRuns.length,
     maxRecoveryAttemptsPerRun: 3,
     timeoutMs: 120_000,
   };
   const budgetUsage = {
-    childRuns: 1,
-    iterations: loop.iterations,
-    toolCalls: loop.totalToolCalls,
-    tokenEstimate: loop.estimatedTokens ?? loop.trajectory.estimatedTokens ?? 0,
-    recoveryAttempts: countRecoveryAttempts(loop.trajectory.steps),
-    checkpointsPassed: loop.checkpointsPassed,
+    childRuns: childRuns.length,
+    iterations: childRuns.reduce((sum, child) => sum + child.result.iterations, 0),
+    toolCalls: childRuns.reduce((sum, child) => sum + child.result.totalToolCalls, 0),
+    tokenEstimate: childRuns.reduce((sum, child) => sum + (child.result.estimatedTokens ?? child.result.trajectory.estimatedTokens ?? 0), 0),
+    recoveryAttempts: childRuns.reduce((sum, child) => sum + countRecoveryAttempts(child.trajectory?.steps ?? child.result.trajectory.steps), 0),
+    checkpointsPassed: childRuns.reduce((sum, child) => sum + child.result.checkpointsPassed, 0),
     durationMs: 12,
   };
   const autonomy = buildAutonomySummary({
@@ -685,6 +741,7 @@ function workflowResultFor(testCase: RealWorldEvalCase, scenario: FixtureScenari
       budgetUsage,
       autonomy,
       evidence: scenario.evidence,
+      ...(review ? { review } : {}),
       ...(scenario.failure ? { failure: scenario.failure } : {}),
       events: [
         { kind: "workflow_start", workflowId: `wf_${testCase.id}`, mode: testCase.expectedWorkflowMode, goal: testCase.task.goal },
@@ -702,11 +759,29 @@ function workflowResultFor(testCase: RealWorldEvalCase, scenario: FixtureScenari
             signals: [`case:${testCase.id}`],
           },
         },
+        ...(review ? [
+          { kind: "child_done" as const, workflowId: `wf_${testCase.id}`, childRunId: childId, exitReason: loop.exitReason },
+          { kind: "child_start" as const, workflowId: `wf_${testCase.id}`, childRunId: review.reviewerRunId, role: "reviewer" as const },
+          {
+            kind: "child_event" as const,
+            workflowId: `wf_${testCase.id}`,
+            childRunId: review.reviewerRunId,
+            event: {
+              kind: "profile_selected" as const,
+              profile: testCase.expectedProfile,
+              via: "rule" as const,
+              ruleId: "real_world_fixture_reviewer",
+              rationale: "reviewer checks worker result against rubric",
+              signals: [`case:${testCase.id}:reviewer`],
+            },
+          },
+        ] : []),
         { kind: "workflow_verdict", workflowId: `wf_${testCase.id}`, passed: scenario.workflowExitReason === "success", evidence: scenario.evidence },
         { kind: "workflow_done", workflowId: `wf_${testCase.id}`, exitReason: scenario.workflowExitReason, ...(scenario.failure ? { failure: scenario.failure } : {}) },
       ],
       childRuns,
     },
+    ...(review ? { review } : {}),
     ...(scenario.failure ? { failure: scenario.failure } : {}),
   };
 }

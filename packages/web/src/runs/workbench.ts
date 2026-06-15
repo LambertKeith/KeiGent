@@ -110,6 +110,7 @@ export function renderRunWorkbench(view: RunWorkbenchView): string {
       <section class="run-detail-stack">
         ${renderSummary(view.selected)}
         ${renderTimeline(view.selected)}
+        ${renderChildRunTimeline(view.selected)}
         ${renderChildWorkspaces(view.selected)}
         ${renderRouteAndSkills(view.selected)}
         ${renderReview(view.selected)}
@@ -195,6 +196,18 @@ function renderSummary(run: RunRecordDetailView): string {
 function renderTimeline(run: RunRecordDetailView): string {
   const facts = run.timelineFacts.map((fact) => renderFact(fact.label, fact.value)).join("");
   return panel("Timeline", `<div class="summary-strip">${facts}</div>`);
+}
+
+function renderChildRunTimeline(run: RunRecordDetailView): string {
+  if (run.childRuns.length === 0) return "";
+  const rows = run.childRuns.map((child) => `
+    <li>
+      <strong>${escapeHtml(child.id)}</strong>
+      <span>${escapeHtml(child.role)} / ${escapeHtml(child.profile ?? `${child.role}-profile-not-recorded`)}</span>
+      <span>${escapeHtml(child.exitReason)} | ${child.iterations} iterations | ${child.toolCalls} tools | ${child.checkpointsPassed} checkpoints</span>
+    </li>
+  `).join("");
+  return panel("Child run timeline", `<ul class="audit-list">${rows}</ul>`);
 }
 
 function renderChildWorkspaces(run: RunRecordDetailView): string {

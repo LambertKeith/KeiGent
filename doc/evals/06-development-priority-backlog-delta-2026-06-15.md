@@ -1,6 +1,6 @@
 # Development Priority Backlog Delta - 2026-06-15
 
-> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation` 与 `P1-04 Schema Migration / Redaction Hardening` 的增量交付。
+> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening` 与 `P1-01 Reviewed-loop v1` 的增量交付。
 >
 > 依据：`doc/product/12-development-priority-backlog.md`。
 
@@ -129,4 +129,49 @@
 
 - blocking：无。
 - non-blocking：engine 与 web 仍各有一份同构 redaction helper；后续可抽成共享包避免漂移。
-- next action：继续按 backlog 审计 P1-01 / P1-02 / P1-05 与 P2 项。
+- next action：继续按 backlog 审计 P1-02 / P1-05 与 P2 项。
+
+## Backlog Item
+
+- 编号：P1-01
+- 开发包：Reviewed-loop v1
+- 目标：reviewed-loop 具备 worker / reviewer 子运行审计面、readonly reviewer 成功 fixture 与 L2 eval 覆盖。
+- 非目标：不新增第二套 loop，不改变 reviewer readonly policy，不实现多人并行 review。
+
+## Changed Files
+
+- `packages/engine/src/evals/real-world.ts`
+- `packages/engine/src/__tests__/real-world-eval.test.ts`
+- `packages/web/src/runs/workbench.ts`
+- `packages/web/src/__tests__/run-workbench.test.ts`
+- `packages/web/src/__tests__/dashboard.test.ts`
+- `packages/cli/src/__tests__/eval-commands.test.ts`
+- `packages/cli/src/__tests__/product-e2e.test.ts`
+
+## Tests / Evals
+
+- `corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/real-world-eval.test.ts`
+- `corepack pnpm --filter @keigent/web exec vitest run src/__tests__/run-workbench.test.ts`
+- `corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/workflow-runner.test.ts src/__tests__/workflow-policy.test.ts src/__tests__/workflow-engine-child-runner.test.ts src/__tests__/real-world-eval.test.ts src/__tests__/run-record.test.ts`
+- `corepack pnpm --filter @keigent/web exec vitest run src/__tests__/run-workbench.test.ts src/__tests__/runs-view.test.ts`
+- `corepack pnpm --filter @keigent/cli exec vitest run src/__tests__/eval-commands.test.ts src/__tests__/product-e2e.test.ts`
+- `corepack pnpm --filter @keigent/web exec vitest run src/__tests__/dashboard.test.ts src/__tests__/run-workbench.test.ts src/__tests__/runs-view.test.ts`
+- `corepack pnpm -r check`
+- `corepack pnpm -r test`
+- `corepack pnpm -r --if-present build`
+- `git diff --check`
+- 结果：全部通过。
+
+## Evidence
+
+- 已证明：L2 fixture `reviewed-loop-accepted` 产生 `reviewed-loop` RunRecord，并记录 worker 与 reviewer child run。
+- 已证明：review summary 包含 reviewer run id、rubric success criteria、required evidence、forbidden claims、false-confidence risks、blocking rules 与空 issue 集。
+- 已证明：reviewer child run 使用 readonly review 语义，不依赖工具调用或审批来通过 fixture。
+- 已证明：Workbench Run Detail 新增 `Child run timeline`，展示 child id、role、profile fallback、exit reason、iterations、tool calls 与 checkpoints。
+- 未证明：真实 LLM reviewer 的判断质量、多人 review、跨 workspace merge 后审查。
+
+## Risks / Follow-ups
+
+- blocking：无。
+- non-blocking：当前 Web child timeline 是静态审计面，不提供 child run drill-down 跳转。
+- next action：继续按 backlog 推进 P1-02 / P1-05 与 P2 项。

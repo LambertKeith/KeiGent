@@ -236,7 +236,7 @@ describe("run workbench page", () => {
         childRuns: 2,
       },
       childRuns: [
-        { id: "run_reviewed:worker-1", role: "worker", exitReason: "success", iterations: 1, toolCalls: 1, checkpointsPassed: 1 },
+        { id: "run_reviewed:worker-1", role: "worker", profile: "convergent-exec", exitReason: "success", iterations: 1, toolCalls: 1, checkpointsPassed: 1 },
         { id: "run_reviewed:reviewer-1", role: "reviewer", exitReason: "success", iterations: 1, toolCalls: 0, checkpointsPassed: 0 },
       ],
       review: {
@@ -266,6 +266,11 @@ describe("run workbench page", () => {
     expect(html).toContain("Reviewer issues");
     expect(html).toContain("blocking");
     expect(html).toContain("missing source attribution");
+    expect(html).toContain("Child run timeline");
+    expect(html).toContain("run_reviewed:worker-1");
+    expect(html).toContain("worker / convergent-exec");
+    expect(html).toContain("run_reviewed:reviewer-1");
+    expect(html).toContain("reviewer / reviewer-profile-not-recorded");
   });
 
   it("renders P1-03 child workspace audit details", () => {

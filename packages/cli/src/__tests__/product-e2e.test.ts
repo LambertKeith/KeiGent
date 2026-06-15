@@ -115,10 +115,10 @@ describe("CLI to Web Workbench product E2E", () => {
 
     expect(report).toMatchObject({
       workbenchHref: "http://127.0.0.1:5173/#eval/real-world/local-real-task-v1",
-      persistedRunRecords: { total: 19 },
+      persistedRunRecords: { total: 20 },
     });
     expect(report.persistedRunRecords.runIds).toContain("run_replay-report");
-    expect(store.records).toHaveLength(19);
+    expect(store.records).toHaveLength(20);
     expect(latestReport).toMatchObject({
       datasetId: "local-real-task-v1",
       cases: expect.arrayContaining([
