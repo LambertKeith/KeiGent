@@ -110,6 +110,74 @@ describe("runs commands", () => {
     });
   });
 
+  it("prints a human-friendly failed run detail with failure code, blocking evidence, and next action", async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), "keigent-cli-run-show-human-"));
+    const failed = noOpRecord("run_failed_human");
+    failed.status = "failed";
+    failed.task.goal = "Create release notes";
+    failed.task.resolvedProfile = "convergent-verified";
+    failed.task.resolvedWorkflowMode = "verified-loop";
+    failed.evidence = {
+      status: "failed",
+      total: 1,
+      passed: 0,
+      failed: 1,
+      sources: ["assertion"],
+      blocking: ["release-notes.md was not created"],
+    };
+    failed.failures = [{
+      code: "verified_failure",
+      layer: "verification",
+      message: "Required output file is missing.",
+      nextAction: "Inspect the missing release-notes.md assertion.",
+    }];
+    failed.nextAction = "Inspect the missing release-notes.md assertion.";
+    await saveRunRecord(failed, { runsDir });
+    const output = capture();
+
+    await runRunsCommand(["show", "run_failed_human"], { runsDir, stdout: output.stdout });
+
+    expect(output.lines).toEqual([
+      "Run: run_failed_human",
+      "Status: failed",
+      "Failure: verified_failure",
+      "Goal: Create release notes",
+      "Profile: convergent-verified",
+      "Workflow: verified-loop",
+      "Evidence: failed (0/1 passed)",
+      "Blocking evidence: release-notes.md was not created",
+      "Next action: Inspect the missing release-notes.md assertion.",
+      "Automation scope: last 20 runs",
+      "Workbench: http://127.0.0.1:5173/#runs/run_failed_human",
+    ]);
+  });
+
+  it("prints a human-friendly run list with next action hints", async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), "keigent-cli-runs-list-human-"));
+    const failed = noOpRecord("run_failed");
+    failed.status = "failed";
+    failed.evidence = { status: "failed", total: 1, passed: 0, failed: 1, sources: ["assertion"], blocking: ["missing output"] };
+    failed.failures = [{
+      code: "verified_failure",
+      layer: "verification",
+      message: "missing output",
+      nextAction: "Inspect the failed assertion.",
+    }];
+    failed.nextAction = "Inspect the failed assertion.";
+    const ok = noOpRecord("run_ok");
+    ok.status = "succeeded";
+    ok.evidence = { status: "passed", total: 1, passed: 1, failed: 0, sources: ["assertion"], blocking: [] };
+    await saveRunRecord(ok, { runsDir });
+    await saveRunRecord(failed, { runsDir });
+    const output = capture();
+
+    await runRunsCommand(["list"], { runsDir, stdout: output.stdout });
+
+    expect(output.lines[0]).toBe("Runs: 2");
+    expect(output.lines).toContain("- run_failed | failed | evidence failed | verified_failure | Inspect the failed assertion.");
+    expect(output.lines).toContain("- run_ok | succeeded | evidence passed | no action");
+  });
+
   it("redacts sensitive user directory segments from shown run records", async () => {
     const runsDir = await mkdtemp(join(tmpdir(), "keigent-cli-run-path-redaction-"));
     const record = noOpRecord("run_path_redaction");
@@ -202,6 +270,38 @@ describe("runs commands", () => {
         nextAction: "Inspect the failed assertion.",
       }],
     });
+  });
+
+  it("prints human-friendly triage candidates with reason, failure code, and next action", async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), "keigent-cli-run-triage-human-"));
+    const failed = noOpRecord("run_failed");
+    failed.status = "failed";
+    failed.evidence = {
+      status: "failed",
+      total: 1,
+      passed: 0,
+      failed: 1,
+      sources: ["assertion"],
+      blocking: ["missing output"],
+    };
+    failed.failures = [{
+      code: "verified_failure",
+      layer: "verification",
+      message: "missing output",
+      nextAction: "Inspect the failed assertion.",
+    }];
+    failed.nextAction = "Inspect the failed assertion.";
+    await saveRunRecord(failed, { runsDir });
+    const output = capture();
+
+    await runRunsCommand(["triage"], { runsDir, stdout: output.stdout });
+
+    expect(output.lines).toEqual([
+      "Triage candidates: 1",
+      "- run_failed | blocking_failure | failed | verified_failure",
+      "  Blocking: missing output",
+      "  Next action: Inspect the failed assertion.",
+    ]);
   });
 
   it("triages schema warnings and missing evidence instead of only non-success status", async () => {

@@ -1,4 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -48,5 +49,34 @@ describe("CLI package metadata", () => {
       "verify:node": "node scripts/verify-node-version.mjs",
     });
     expect(binStat.mode & 0o111).toBeGreaterThan(0);
+  });
+
+  it("executes runs list --compact through the bin shim as clean JSON", async () => {
+    const repoRoot = join(process.cwd(), "../..");
+    const result = spawnSync(process.execPath, [
+      join(process.cwd(), "bin", "keigent.mjs"),
+      "runs",
+      "list",
+      "--compact",
+    ], {
+      cwd: repoRoot,
+      env: process.env,
+      encoding: "utf8",
+    });
+    const stdout = result.stdout.trim();
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(stdout).toMatch(/^\{.*\}$/);
+    expect(stdout.split("\n")).toHaveLength(1);
+    expect(JSON.parse(stdout)).toMatchObject({
+      total: expect.any(Number),
+      runs: expect.any(Array),
+      errors: expect.any(Array),
+      migrationReport: expect.objectContaining({
+        schemaVersion: 1,
+        totalRecords: expect.any(Number),
+      }),
+    });
   });
 });

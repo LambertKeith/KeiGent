@@ -1,6 +1,6 @@
 # Development Priority Backlog Delta - 2026-06-15
 
-> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening`、`P1-01 Reviewed-loop v1` 与 `P1-02 Local Automation Triage` 的增量交付。
+> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening`、`P1-01 Reviewed-loop v1`、`P1-02 Local Automation Triage` 与 `P1-05 CLI Operator Ergonomics` 的增量交付。
 >
 > 依据：`doc/product/12-development-priority-backlog.md`。
 
@@ -129,7 +129,7 @@
 
 - blocking：无。
 - non-blocking：engine 与 web 仍各有一份同构 redaction helper；后续可抽成共享包避免漂移。
-- next action：继续按 backlog 审计 P1-02 / P1-05 与 P2 项。
+- next action：继续按 backlog 审计 P2 项。
 
 ## Backlog Item
 
@@ -174,7 +174,7 @@
 
 - blocking：无。
 - non-blocking：当前 Web child timeline 是静态审计面，不提供 child run drill-down 跳转。
-- next action：继续按 backlog 推进 P1-05 与 P2 项。
+- next action：继续按 backlog 推进 P2 项。
 
 ## Backlog Item
 
@@ -219,4 +219,41 @@
 
 - blocking：无。
 - non-blocking：`runs triage` 仍是轻量候选列表；产品级 automation record/report 闭环在 `automation triage local`。
-- next action：继续按 backlog 推进 P1-05 与 P2 项。
+- next action：继续按 backlog 推进 P2 项。
+
+## Backlog Item
+
+- 编号：P1-05
+- 开发包：CLI Operator Ergonomics
+- 目标：operator 常用 `runs` 路径具备人读默认输出、机器可读 compact/json 输出、failure code 与 next action 可见。
+- 非目标：不实现交互式 TUI、不改变 run store 默认位置、不把 `runs triage` 扩展为自动修复系统。
+
+## Changed Files
+
+- `packages/cli/src/runs-commands.ts`
+- `packages/cli/src/__tests__/runs-commands.test.ts`
+- `packages/cli/src/__tests__/package-metadata.test.ts`
+
+## Tests / Evals
+
+- `corepack pnpm --filter @keigent/cli exec vitest run src/__tests__/package-metadata.test.ts src/__tests__/runs-commands.test.ts`
+- `corepack pnpm --filter @keigent/cli exec vitest run src/__tests__/guide-command.test.ts src/__tests__/eval-commands.test.ts src/__tests__/product-e2e.test.ts`
+- `corepack pnpm -r check`
+- `corepack pnpm -r test`
+- `corepack pnpm -r --if-present build`
+- `git diff --check`
+- 结果：全部通过。
+
+## Evidence
+
+- 已证明：`runs list` 默认输出从 tab-separated 行升级为人读摘要，包含总数、run id、status、evidence status、failure code 与 next action。
+- 已证明：`runs show <run-id>` 默认输出展示 run id、status、failure code、goal、profile、workflow、evidence 汇总、blocking evidence、next action、automation scope 与 Workbench deep link。
+- 已证明：`runs triage` 默认输出展示候选总数、reason、status、failure code、blocking 与 next action。
+- 已证明：`runs list --compact` 通过正式 `bin/keigent.mjs` shim 执行时输出单行可解析 JSON，不需要 pnpm wrapper。
+- 未证明：真实 operator 端到端人工验收、shell 安装包发布后的全局 `keigent` 命令行为。
+
+## Risks / Follow-ups
+
+- blocking：无。
+- non-blocking：CLI 默认输出仍是文本摘要，不提供交互式筛选、排序或分页。
+- next action：继续按 backlog 推进 P2 项。

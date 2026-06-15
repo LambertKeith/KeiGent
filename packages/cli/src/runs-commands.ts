@@ -23,6 +23,8 @@ interface RunListItem {
   profile: string;
   workflowMode: string;
   evidenceStatus: string;
+  failureCode?: string;
+  nextAction?: string;
   replayFreshExecution: boolean;
 }
 
@@ -34,6 +36,7 @@ interface RunTriageItem {
   evidenceStatus: string;
   reason: "blocking_failure" | "review_needed" | "missing_evidence" | "stale_schema";
   blocking: string[];
+  failureCode?: string;
   nextAction?: string;
 }
 
@@ -68,9 +71,8 @@ export async function runRunsCommand(
       print(options, "No run records saved");
       return;
     }
-    for (const run of payload.runs) {
-      print(options, `${run.id}\t${run.status}\t${run.evidenceStatus}\t${run.goal}`);
-    }
+    print(options, `Runs: ${payload.runs.length}`);
+    for (const run of payload.runs) print(options, humanRunListLine(run));
     return;
   }
 
@@ -83,9 +85,7 @@ export async function runRunsCommand(
       print(options, formatJson(record, outputArgs));
       return;
     }
-    print(options, `${record.id}\t${record.status}\t${record.task.goal}`);
-    if (record.nextAction) print(options, `Next action: ${record.nextAction}`);
-    if (record.automation) print(options, `Automation scope: ${record.automation.scope}`);
+    for (const line of humanRunDetailLines(record)) print(options, line);
     return;
   }
 
@@ -145,9 +145,11 @@ export async function runRunsCommand(
       print(options, "No triage candidates found");
       return;
     }
+    print(options, `Triage candidates: ${runs.length}`);
     for (const run of runs) {
-      const detail = run.nextAction ?? run.blocking.join("; ") ?? "";
-      print(options, `${run.id}\t${run.status}\t${run.evidenceStatus}\t${detail}`);
+      print(options, `- ${run.id} | ${run.reason} | ${run.status} | ${run.failureCode ?? "no failure code"}`);
+      print(options, `  Blocking: ${run.blocking.join("; ") || "None"}`);
+      print(options, `  Next action: ${run.nextAction ?? "Review this run before accepting it."}`);
     }
     return;
   }
@@ -171,6 +173,7 @@ export async function runRunsCommand(
 }
 
 function runListItem(record: RunRecord): RunListItem {
+  const nextAction = actionableNextAction(record);
   return {
     id: record.id,
     status: record.status,
@@ -179,6 +182,8 @@ function runListItem(record: RunRecord): RunListItem {
     profile: record.task.resolvedProfile ?? record.route.selectedProfile ?? "unknown",
     workflowMode: record.task.resolvedWorkflowMode ?? record.workflow?.mode ?? "unknown",
     evidenceStatus: record.evidence.status,
+    ...(record.failures[0]?.code ? { failureCode: record.failures[0].code } : {}),
+    ...(nextAction ? { nextAction } : {}),
     replayFreshExecution: record.replay.freshExecution,
   };
 }
@@ -209,6 +214,38 @@ function replayCommand(trajectoryPath: string): string {
   return `keigent replay ${trajectoryPath}`;
 }
 
+function humanRunListLine(run: RunListItem): string {
+  const action = run.nextAction ?? "no action";
+  const failure = run.failureCode ? ` | ${run.failureCode}` : "";
+  return `- ${run.id} | ${run.status} | evidence ${run.evidenceStatus}${failure} | ${action}`;
+}
+
+function humanRunDetailLines(record: RunRecord): string[] {
+  const lines = [
+    `Run: ${record.id}`,
+    `Status: ${record.status}`,
+  ];
+  const failureCode = record.failures[0]?.code;
+  if (failureCode) lines.push(`Failure: ${failureCode}`);
+  lines.push(
+    `Goal: ${record.task.goal}`,
+    `Profile: ${record.task.resolvedProfile ?? record.route.selectedProfile ?? "unknown"}`,
+    `Workflow: ${record.task.resolvedWorkflowMode ?? record.workflow?.mode ?? "unknown"}`,
+    `Evidence: ${record.evidence.status} (${record.evidence.passed}/${record.evidence.total} passed)`,
+  );
+  if (record.evidence.blocking[0]) lines.push(`Blocking evidence: ${record.evidence.blocking[0]}`);
+  const nextAction = actionableNextAction(record);
+  if (nextAction) lines.push(`Next action: ${nextAction}`);
+  if (record.automation) lines.push(`Automation scope: ${record.automation.scope}`);
+  lines.push(`Workbench: ${runDetailHref(record.id)}`);
+  return lines;
+}
+
+function actionableNextAction(record: RunRecord): string | undefined {
+  if (record.status === "succeeded" && record.evidence.status === "passed") return undefined;
+  return record.nextAction ?? record.failures[0]?.nextAction;
+}
+
 function bundleDirArg(args: string[], fallback: string): string {
   const index = args.indexOf("--out");
   if (index === -1) return fallback;
@@ -221,6 +258,7 @@ function runTriageItem(record: RunRecord, schemaWarnings: RunStoreMigrationWarni
       ...baseRunTriageItem(record),
       reason: "stale_schema",
       blocking: schemaWarnings.map(formatSchemaWarning),
+      failureCode: "schema_warning",
       nextAction: "Review run record schema before trusting this result.",
     };
   }
@@ -229,6 +267,7 @@ function runTriageItem(record: RunRecord, schemaWarnings: RunStoreMigrationWarni
       ...baseRunTriageItem(record),
       reason: "blocking_failure",
       blocking: record.evidence.blocking,
+      ...(record.failures[0]?.code ? { failureCode: record.failures[0].code } : {}),
       nextAction: record.nextAction ?? record.failures[0]?.nextAction ?? "Inspect blocking evidence before retrying.",
     };
   }
@@ -238,6 +277,7 @@ function runTriageItem(record: RunRecord, schemaWarnings: RunStoreMigrationWarni
       ...baseRunTriageItem(record),
       reason: staleSchema ? "stale_schema" : "review_needed",
       blocking: record.evidence.blocking,
+      ...(record.failures[0]?.code ? { failureCode: record.failures[0].code } : {}),
       nextAction: record.nextAction ?? record.failures[0]?.nextAction ?? (
         staleSchema ? "Review run record schema before trusting this result." : "Review failed or degraded run before retrying."
       ),
@@ -248,6 +288,7 @@ function runTriageItem(record: RunRecord, schemaWarnings: RunStoreMigrationWarni
       ...baseRunTriageItem(record),
       reason: "missing_evidence",
       blocking: record.evidence.blocking,
+      ...(record.failures[0]?.code ? { failureCode: record.failures[0].code } : {}),
       nextAction: record.nextAction ?? "Collect evidence before treating this run as successful.",
     };
   }
