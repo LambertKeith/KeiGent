@@ -700,7 +700,7 @@ failure-summary.md
 
 特别要解决：通过 pnpm 启动时，JSON 输出前可能有 wrapper 噪音；正式 CLI 必须提供更干净的入口。
 
-当前实现备注（2026-06-12）：已具备 CLI bin shim、package build metadata、secret-safe sample config、doctor 改进、Node 22+ engine 声明、`configVersion: 1` 兼容边界、Apache-2.0 package metadata 与 `CONTRIBUTING.md`。legacy 无版本 config 在解析时升级为 v1，doctor 会拒绝未知未来版本。first-run guide、config upgrade policy、release checklist、changelog 与版本兼容边界已收敛到 [`doc/product/10-release-and-upgrade.md`](10-release-and-upgrade.md)。CLI 额外提供只读 `guide first-run [--json|--compact]` 和 `guide release-checklist [--json|--compact]`。first-run guide 输出安装、config show、doctor、smoke / real-world eval、bin JSON 和 Web API print 的可复现步骤；每步带 `gate`、`proves`、`doesNotProve`，并明确不写配置、不跑网络检查、不证明产品健康。release-checklist guide 输出 release gates、manual checks 与边界说明，但不运行 gate、不修改 workspace、不宣称 release ready。
+当前实现备注（2026-06-15）：已具备 CLI bin shim、package build metadata、secret-safe sample config、doctor 改进、Node 22+ engine 声明、`configVersion: 1` 兼容边界、Apache-2.0 package metadata 与 `CONTRIBUTING.md`。legacy 无版本 config 在解析时升级为 v1，doctor 会拒绝未知未来版本。first-run guide、config upgrade policy、upgrade-check guide、release checklist、changelog 与版本兼容边界已收敛到 [`doc/product/10-release-and-upgrade.md`](10-release-and-upgrade.md)。CLI 额外提供只读 `guide first-run [--json|--compact]`、`guide upgrade-check [--json|--compact]` 和 `guide release-checklist [--json|--compact]`。first-run guide 输出安装、config show、doctor、smoke / real-world eval、bin JSON 和 Web API print 的可复现步骤；upgrade-check guide 输出 config show、doctor、RunRecord migration report 与 release checklist 预检步骤，并明确不修改配置、不迁移 run store、不宣称升级安全。release-checklist guide 输出 release gates、manual checks 与边界说明，但不运行 gate、不修改 workspace、不宣称 release ready。
 
 ### 7.7 Performance / Budget Controls
 

@@ -1,6 +1,6 @@
 # Development Priority Backlog Delta - 2026-06-15
 
-> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening`、`P1-01 Reviewed-loop v1`、`P1-02 Local Automation Triage`、`P1-05 CLI Operator Ergonomics`、`P2-01 Readonly Connector Baseline`、`P2-02 L3 Operator Scenario Eval` 与 `P2-03 Observability / Debug Package` 的增量交付。
+> 范围：`P0-02 Workbench Run Detail v1`、`P1-03 Worktree Isolation Foundation`、`P1-04 Schema Migration / Redaction Hardening`、`P1-01 Reviewed-loop v1`、`P1-02 Local Automation Triage`、`P1-05 CLI Operator Ergonomics`、`P2-01 Readonly Connector Baseline`、`P2-02 L3 Operator Scenario Eval`、`P2-03 Observability / Debug Package` 与 `P2-04 Release / Packaging / Upgrade Path` 的增量交付。
 >
 > 依据：`doc/product/12-development-priority-backlog.md`。
 
@@ -396,3 +396,44 @@
 - blocking：无。
 - non-blocking：`eval_case` artifact 由调用方附加到 RunRecord；后续可把 real-world / operator eval 保存路径自动补齐为一等 artifact。
 - next action：继续按 backlog 推进 P2-04 / P2-05。
+
+## Backlog Item
+
+- 编号：P2-04
+- 开发包：Release / Packaging / Upgrade Path
+- 目标：补齐本地产品化升级预检入口，让 operator 在升级前能获得可机器读取的 config / run-store / release checklist 边界。
+- 非目标：不执行升级、不修改配置、不迁移 RunRecord store、不宣称 release ready 或 product health。
+
+## Changed Files
+
+- `packages/cli/src/guide-command.ts`
+- `packages/cli/src/__tests__/guide-command.test.ts`
+- `doc/product/10-release-and-upgrade.md`
+- `doc/product/09-agent-operations-maturity-roadmap.md`
+
+## Tests / Evals
+
+- `corepack pnpm --filter @keigent/cli exec vitest run src/__tests__/guide-command.test.ts`
+- `corepack pnpm --filter @keigent/cli start guide upgrade-check --compact`
+- `node packages/cli/bin/keigent.mjs guide upgrade-check --compact`
+- `corepack pnpm --filter @keigent/cli exec tsc --noEmit`
+- `corepack pnpm -r check`
+- `corepack pnpm -r test`
+- `corepack pnpm -r --if-present build`
+- `git diff --check`
+- `rg "upgrade-check|P2-04|Release / Packaging / Upgrade Path|does_not_migrate_run_store" doc/product/10-release-and-upgrade.md doc/product/09-agent-operations-maturity-roadmap.md doc/evals/06-development-priority-backlog-delta-2026-06-15.md`
+- 结果：全部通过。
+
+## Evidence
+
+- 已证明：CLI `guide upgrade-check --compact` 输出 `upgrade-check-guide` 结构化 JSON，包含 `does_not_modify_config`、`does_not_migrate_run_store`、`does_not_claim_upgrade_safe`。
+- 已证明：升级预检步骤覆盖 config show、doctor、RunRecord migration report 与 release checklist，并给出每步 `gate`、`proves`、`doesNotProve`。
+- 已证明：默认人类可读输出保留 Does not do、Gate、Proves、Does not prove 与升级边界。
+- 已证明：release checklist 把正式 bin shim 的 `guide upgrade-check --compact` 纳入必跑 gate，防止升级预检入口被发布候选遗漏。
+- 未证明：真实用户环境升级已经成功、未知未来 config schema 可被当前版本接受、旧 RunRecord 在语义上全部可接受或 release candidate 已 ready。
+
+## Risks / Follow-ups
+
+- blocking：无。
+- non-blocking：当前 upgrade-check 是只读指南，后续如引入真实迁移器，需要新增显式 migration plan / dry-run / rollback evidence，而不能复用本指南暗示已迁移。
+- next action：继续按 backlog 推进 P2-05。

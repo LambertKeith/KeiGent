@@ -101,6 +101,12 @@ describe("guide command", () => {
           proves: ["first-run guide emits machine-readable JSON"],
         }),
         expect.objectContaining({
+          id: "bin_upgrade_check_guide",
+          command: "node packages/cli/bin/keigent.mjs guide upgrade-check --compact",
+          required: true,
+          proves: ["upgrade check guide emits machine-readable JSON"],
+        }),
+        expect.objectContaining({
           id: "browser_verify",
           command:
             "PLAYWRIGHT_BROWSERS_PATH=/opt/data/home/.cache/ms-playwright corepack pnpm --filter @keigent/engine verify:browser",
@@ -186,9 +192,79 @@ describe("guide command", () => {
     expect(text).toContain("Loop Event Protocol remains stable");
   });
 
+  it("prints a compact upgrade check as machine-readable JSON", async () => {
+    const output = capture();
+
+    await runGuideCommand(["upgrade-check", "--compact"], { stdout: output.stdout });
+
+    const payload = JSON.parse(output.lines[0]!);
+    expect(payload).toMatchObject({
+      kind: "upgrade-check-guide",
+      status: "informational",
+      doesNotDo: expect.arrayContaining([
+        "does_not_modify_config",
+        "does_not_migrate_run_store",
+        "does_not_claim_upgrade_safe",
+      ]),
+      steps: expect.arrayContaining([
+        expect.objectContaining({
+          id: "config_show",
+          command: "corepack pnpm --filter @keigent/cli start config show --compact",
+          gate: "diagnostic",
+          proves: ["effective config can be rendered with configVersion and redaction"],
+          doesNotProve: ["future config schema is supported"],
+        }),
+        expect.objectContaining({
+          id: "doctor_upgrade",
+          command: "corepack pnpm --filter @keigent/cli start doctor --compact",
+          gate: "diagnostic",
+          proves: ["doctor can report configVersion and actionable local issues"],
+          doesNotProve: ["online model quality"],
+        }),
+        expect.objectContaining({
+          id: "runs_migration_report",
+          command: "node packages/cli/bin/keigent.mjs runs list --compact",
+          gate: "upgrade",
+          proves: [
+            "run store can be read through the clean bin shim with migration diagnostics",
+          ],
+          doesNotProve: ["legacy run records are semantically accepted"],
+        }),
+        expect.objectContaining({
+          id: "release_checklist",
+          command: "node packages/cli/bin/keigent.mjs guide release-checklist --compact",
+          gate: "release",
+          proves: ["release checklist is available as machine-readable JSON"],
+          doesNotProve: ["release gates were executed"],
+        }),
+      ]),
+      boundaries: expect.arrayContaining([
+        "Upgrade check is read-only and does not rewrite config or run records.",
+        "Unsupported future config versions must be rejected or flagged, not silently reinterpreted.",
+        "Passing upgrade check does not prove release readiness or product health.",
+      ]),
+    });
+    expect(output.lines[0]).not.toContain("\n");
+  });
+
+  it("prints a human-readable upgrade check by default", async () => {
+    const output = capture();
+
+    await runGuideCommand(["upgrade-check"], { stdout: output.stdout });
+
+    const text = output.lines.join("\n");
+    expect(text).toContain("Upgrade Check Guide");
+    expect(text).toContain("Does not do:");
+    expect(text).toContain("- does_not_modify_config");
+    expect(text).toContain("corepack pnpm --filter @keigent/cli start config show --compact");
+    expect(text).toContain("Gate: upgrade");
+    expect(text).toContain("Does not prove: legacy run records are semantically accepted");
+    expect(text).toContain("Unsupported future config versions must be rejected or flagged");
+  });
+
   it("rejects unknown guide topics", async () => {
     await expect(runGuideCommand(["upgrade"])).rejects.toThrow(
-      "Usage: keigent guide first-run|release-checklist [--json|--compact]",
+      "Usage: keigent guide first-run|release-checklist|upgrade-check [--json|--compact]",
     );
   });
 });

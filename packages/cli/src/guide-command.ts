@@ -9,7 +9,7 @@ interface GuideStep {
   title: string;
   command: string;
   purpose: string;
-  gate: "setup" | "diagnostic" | "fixture" | "release" | "workbench";
+  gate: "setup" | "diagnostic" | "fixture" | "release" | "upgrade" | "workbench";
   proves: string[];
   doesNotProve: string[];
 }
@@ -48,6 +48,16 @@ interface ReleaseChecklistGuide {
   boundaries: string[];
 }
 
+interface UpgradeCheckGuide {
+  kind: "upgrade-check-guide";
+  status: "informational";
+  steps: GuideStep[];
+  doesNotDo: string[];
+  boundaries: string[];
+}
+
+type Guide = FirstRunGuide | ReleaseChecklistGuide | UpgradeCheckGuide;
+
 function print(options: GuideCommandOptions, line: string): void {
   (options.stdout ?? console.log)(line);
 }
@@ -57,11 +67,18 @@ export async function runGuideCommand(
   options: GuideCommandOptions = {},
 ): Promise<void> {
   const [topic = "first-run", ...rest] = args;
-  if (topic !== "first-run" && topic !== "release-checklist") {
-    throw new Error("Usage: keigent guide first-run|release-checklist [--json|--compact]");
+  if (topic !== "first-run" && topic !== "release-checklist" && topic !== "upgrade-check") {
+    throw new Error(
+      "Usage: keigent guide first-run|release-checklist|upgrade-check [--json|--compact]",
+    );
   }
 
-  const guide = topic === "first-run" ? firstRunGuide() : releaseChecklistGuide();
+  const guide: Guide =
+    topic === "first-run"
+      ? firstRunGuide()
+      : topic === "release-checklist"
+        ? releaseChecklistGuide()
+        : upgradeCheckGuide();
   const outputFormat = parseJsonOutputFormat(rest);
   if (outputFormat.json) {
     print(options, formatJson(guide, rest));
@@ -70,6 +87,10 @@ export async function runGuideCommand(
 
   if (guide.kind === "first-run-guide") {
     printFirstRunGuide(guide, options);
+    return;
+  }
+  if (guide.kind === "upgrade-check-guide") {
+    printUpgradeCheckGuide(guide, options);
     return;
   }
   printReleaseChecklistGuide(guide, options);
@@ -110,6 +131,25 @@ function printReleaseChecklistGuide(guide: ReleaseChecklistGuide, options: Guide
     print(options, `- ${check.title}: ${check.evidence}`);
     print(options, `  Required: ${check.required ? "yes" : "no"}`);
     print(options, `  Does not prove: ${check.doesNotProve.join("; ")}`);
+  }
+  print(options, "");
+  print(options, "Boundaries:");
+  for (const boundary of guide.boundaries) print(options, `- ${boundary}`);
+}
+
+function printUpgradeCheckGuide(guide: UpgradeCheckGuide, options: GuideCommandOptions): void {
+  print(options, "Upgrade Check Guide");
+  print(options, "");
+  print(options, "Does not do:");
+  for (const item of guide.doesNotDo) print(options, `- ${item}`);
+  print(options, "");
+  for (const [index, step] of guide.steps.entries()) {
+    print(options, `${index + 1}. ${step.title}`);
+    print(options, `   ${step.command}`);
+    print(options, `   Gate: ${step.gate}`);
+    print(options, `   ${step.purpose}`);
+    print(options, `   Proves: ${step.proves.join("; ")}`);
+    print(options, `   Does not prove: ${step.doesNotProve.join("; ")}`);
   }
   print(options, "");
   print(options, "Boundaries:");
@@ -255,6 +295,14 @@ function releaseChecklistGuide(): ReleaseChecklistGuide {
         required: true,
         proves: ["first-run guide emits machine-readable JSON"],
         doesNotProve: ["first-run steps were executed"],
+      },
+      {
+        id: "bin_upgrade_check_guide",
+        title: "Verify upgrade check guide bin output",
+        command: "node packages/cli/bin/keigent.mjs guide upgrade-check --compact",
+        required: true,
+        proves: ["upgrade check guide emits machine-readable JSON"],
+        doesNotProve: ["upgrade checks were executed"],
       },
       {
         id: "bin_runs_list",
@@ -420,6 +468,67 @@ function releaseChecklistGuide(): ReleaseChecklistGuide {
       "The checklist is a read-only guide; it does not run release commands.",
       "Passing fixture evals does not prove production health.",
       "Human acceptance still requires reviewer sign-off on evidence.",
+    ],
+  };
+}
+
+function upgradeCheckGuide(): UpgradeCheckGuide {
+  return {
+    kind: "upgrade-check-guide",
+    status: "informational",
+    doesNotDo: [
+      "does_not_modify_config",
+      "does_not_migrate_run_store",
+      "does_not_claim_upgrade_safe",
+    ],
+    steps: [
+      {
+        id: "config_show",
+        title: "Inspect config schema and sources",
+        command: "corepack pnpm --filter @keigent/cli start config show --compact",
+        purpose:
+          "Render the effective config with configVersion, source metadata, and secret redaction before upgrading.",
+        gate: "diagnostic",
+        proves: ["effective config can be rendered with configVersion and redaction"],
+        doesNotProve: ["future config schema is supported"],
+      },
+      {
+        id: "doctor_upgrade",
+        title: "Run upgrade diagnostics",
+        command: "corepack pnpm --filter @keigent/cli start doctor --compact",
+        purpose:
+          "Check configVersion compatibility, model capabilities, Node version, API key presence, and browser cache hints.",
+        gate: "diagnostic",
+        proves: ["doctor can report configVersion and actionable local issues"],
+        doesNotProve: ["online model quality"],
+      },
+      {
+        id: "runs_migration_report",
+        title: "Inspect run store migration report",
+        command: "node packages/cli/bin/keigent.mjs runs list --compact",
+        purpose:
+          "Read the run store through the package bin shim and surface migration diagnostics without wrapper noise.",
+        gate: "upgrade",
+        proves: [
+          "run store can be read through the clean bin shim with migration diagnostics",
+        ],
+        doesNotProve: ["legacy run records are semantically accepted"],
+      },
+      {
+        id: "release_checklist",
+        title: "Print release checklist",
+        command: "node packages/cli/bin/keigent.mjs guide release-checklist --compact",
+        purpose:
+          "Confirm the release candidate exposes machine-readable gates, manual checks, and proof boundaries.",
+        gate: "release",
+        proves: ["release checklist is available as machine-readable JSON"],
+        doesNotProve: ["release gates were executed"],
+      },
+    ],
+    boundaries: [
+      "Upgrade check is read-only and does not rewrite config or run records.",
+      "Unsupported future config versions must be rejected or flagged, not silently reinterpreted.",
+      "Passing upgrade check does not prove release readiness or product health.",
     ],
   };
 }

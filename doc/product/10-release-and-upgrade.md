@@ -68,7 +68,32 @@ corepack pnpm --filter @keigent/cli start web --api --print
 
 ---
 
-## 2. Config Upgrade Policy
+## 2. Upgrade Check Guide
+
+CLI 可打印只读升级预检指引，不会修改配置、不会迁移 RunRecord store、不会宣称升级安全：
+
+```bash
+corepack pnpm --filter @keigent/cli start guide upgrade-check
+corepack pnpm --filter @keigent/cli start guide upgrade-check --compact
+node packages/cli/bin/keigent.mjs guide upgrade-check --compact
+```
+
+机器可读输出中的步骤覆盖：
+
+- `config show --compact`：证明有效配置可以带 `configVersion` 和 redaction 渲染；不证明未来 schema 被支持。
+- `doctor --compact`：证明 doctor 能报告 `configVersion` 与本地可行动问题；不证明在线模型质量。
+- `runs list --compact`：证明 RunRecord store 可通过正式 bin shim 只读读取并暴露 `migrationReport`；不证明 legacy records 在语义上已被接受。
+- `guide release-checklist --compact`：证明 release checklist 可作为机器可读 JSON 输出；不证明 release gates 已执行。
+
+升级预检边界：
+
+- 该指南只读，不会重写 config 或 run records。
+- 未知未来 config version 必须被拒绝或标记，不得静默 reinterpret。
+- 预检通过不等于 release ready，也不等于产品健康。
+
+---
+
+## 3. Config Upgrade Policy
 
 当前配置 schema：
 
@@ -89,7 +114,7 @@ corepack pnpm --filter @keigent/cli start web --api --print
 
 ---
 
-## 3. Release Checklist
+## 4. Release Checklist
 
 CLI 可打印只读 release checklist，不运行 gate、不修改 workspace、不宣称 release ready：
 
@@ -129,6 +154,7 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/data/home/.cache/ms-playwright corepack pnpm --fil
 - `packages/cli/package.json` 的 `bin` 指向 `./bin/keigent.mjs`。
 - `packages/cli/bin/keigent.mjs` 以 executable bit 提交，可以在没有 `pnpm` wrapper 的情况下执行。
 - `node packages/cli/bin/keigent.mjs guide first-run --compact` 输出为可解析 JSON，并明确 `does_not_write_config`、`does_not_run_network_checks`、`does_not_claim_product_health`。
+- `node packages/cli/bin/keigent.mjs guide upgrade-check --compact` 输出为可解析 JSON，并明确 `does_not_modify_config`、`does_not_migrate_run_store`、`does_not_claim_upgrade_safe`。
 - `corepack pnpm --filter @keigent/cli start doctor --compact` 输出为可解析 JSON。
 - `node packages/cli/bin/keigent.mjs runs list --compact` 输出为可解析 JSON，并包含只读 `migrationReport`，不得静默写回 legacy / unsupported RunRecord。
 - `node packages/cli/bin/keigent.mjs skill list --compact` 输出为可解析 JSON，并展示非执行状态 skill 的只读治理信息。
@@ -145,7 +171,7 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/data/home/.cache/ms-playwright corepack pnpm --fil
 
 ---
 
-## 4. Changelog
+## 5. Changelog
 
 ### Unreleased
 
@@ -158,6 +184,7 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/data/home/.cache/ms-playwright corepack pnpm --fil
 - Added worktree isolation foundation.
 - Added readonly git / HTTP / GitHub connector baseline.
 - Added CLI bin shim and build metadata for cleaner machine-readable command output.
+- Added read-only `guide upgrade-check` output for config/run-store upgrade preflight boundaries.
 - Added runtime budget controls for iterations, tool calls, token estimate, provider cost ceiling, wall time, child runs, and recovery attempts.
 - Added provider usage/cost observability from pi-ai response usage through LoopResult, trajectory, workflow usage, RunRecord, debug bundle, and Web view model; unpriced endpoints surface `pricing_not_configured`.
 - Added explicit local `modelPricing` config for custom endpoints; values map to pi-ai `Model.cost` as USD per million tokens and avoid remote price table guessing.
@@ -181,7 +208,7 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/data/home/.cache/ms-playwright corepack pnpm --fil
 
 ---
 
-## 5. Version Compatibility Notes
+## 6. Version Compatibility Notes
 
 - Node.js: `>=22.19.0`
 - pnpm: `>=10`
