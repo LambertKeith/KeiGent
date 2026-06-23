@@ -216,12 +216,12 @@ describe("runs commands", () => {
     });
   });
 
-  it("prints a replay command for records with saved workflow trajectories", async () => {
+  it("prints a replay handoff for records with saved workflow trajectories", async () => {
     const runsDir = await mkdtemp(join(tmpdir(), "keigent-cli-run-replay-"));
     const record = noOpRecord("run_replayable");
     record.replay = {
       supported: true,
-      trajectoryPath: "/tmp/workflow.json",
+      trajectoryPath: "/tmp/workflow path.json",
       trajectorySchemaVersion: 1,
       freshExecution: true,
     };
@@ -232,10 +232,53 @@ describe("runs commands", () => {
 
     expect(JSON.parse(output.lines[0]!)).toEqual({
       runId: "run_replayable",
-      trajectoryPath: "/tmp/workflow.json",
-      command: "keigent replay /tmp/workflow.json",
+      trajectoryPath: "/tmp/workflow path.json",
+      command: "keigent replay '/tmp/workflow path.json'",
       freshExecution: false,
+      doesNotProve: ["Historical replay does not prove fresh execution."],
+      nextAction: "Run the replay command, then inspect the replay report before accepting the result.",
     });
+  });
+
+  it("prints a human-friendly replay proof boundary", async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), "keigent-cli-run-replay-human-"));
+    const record = noOpRecord("run_replayable");
+    record.replay = {
+      supported: true,
+      trajectoryPath: "/tmp/workflow path.json",
+      trajectorySchemaVersion: 1,
+      freshExecution: true,
+    };
+    await saveRunRecord(record, { runsDir });
+    const output = capture();
+
+    await runRunsCommand(["replay", "run_replayable"], { runsDir, stdout: output.stdout });
+
+    expect(output.lines).toEqual([
+      "Run: run_replayable",
+      "Replay command: keigent replay '/tmp/workflow path.json'",
+      "Trajectory: /tmp/workflow path.json",
+      "Fresh execution: false",
+      "Does not prove: Historical replay does not prove fresh execution.",
+      "Next action: Run the replay command, then inspect the replay report before accepting the result.",
+    ]);
+  });
+
+  it("shell-quotes replay trajectories with single quotes", async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), "keigent-cli-run-replay-quoted-"));
+    const record = noOpRecord("run_replayable");
+    record.replay = {
+      supported: true,
+      trajectoryPath: "/tmp/operator's workflow.json",
+      trajectorySchemaVersion: 1,
+      freshExecution: true,
+    };
+    await saveRunRecord(record, { runsDir });
+    const output = capture();
+
+    await runRunsCommand(["replay", "run_replayable", "--compact"], { runsDir, stdout: output.stdout });
+
+    expect(JSON.parse(output.lines[0]!).command).toBe("keigent replay '/tmp/operator'\\''s workflow.json'");
   });
 
   it("triages non-success records with blocking evidence and next action", async () => {

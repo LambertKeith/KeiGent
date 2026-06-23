@@ -42,6 +42,8 @@ interface RunTriageItem {
 
 const DEFAULT_RUNS_DIR = join(KEIGENT_HOME, "runs");
 const DEFAULT_WORKBENCH_URL = "http://127.0.0.1:5173";
+const REPLAY_DOES_NOT_PROVE = ["Historical replay does not prove fresh execution."];
+const REPLAY_NEXT_ACTION = "Run the replay command, then inspect the replay report before accepting the result.";
 
 function print(options: RunsCommandOptions, line: string): void {
   (options.stdout ?? console.log)(line);
@@ -117,12 +119,14 @@ export async function runRunsCommand(
       trajectoryPath: record.replay.trajectoryPath,
       command: replayCommand(record.replay.trajectoryPath),
       freshExecution: false,
+      doesNotProve: REPLAY_DOES_NOT_PROVE,
+      nextAction: REPLAY_NEXT_ACTION,
     };
     if (parseJsonOutputFormat(outputArgs).json) {
       print(options, formatJson(payload, outputArgs));
       return;
     }
-    print(options, payload.command);
+    for (const line of humanReplayHandoffLines(payload)) print(options, line);
     return;
   }
 
@@ -211,7 +215,30 @@ function runDetailHref(runId: string, baseUrl = DEFAULT_WORKBENCH_URL): string {
 }
 
 function replayCommand(trajectoryPath: string): string {
-  return `keigent replay ${trajectoryPath}`;
+  return `keigent replay ${shellQuote(trajectoryPath)}`;
+}
+
+function shellQuote(value: string): string {
+  if (/^[A-Za-z0-9_/:.,=@%+-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function humanReplayHandoffLines(payload: {
+  runId: string;
+  trajectoryPath: string;
+  command: string;
+  freshExecution: boolean;
+  doesNotProve: string[];
+  nextAction: string;
+}): string[] {
+  return [
+    `Run: ${payload.runId}`,
+    `Replay command: ${payload.command}`,
+    `Trajectory: ${payload.trajectoryPath}`,
+    `Fresh execution: ${payload.freshExecution}`,
+    `Does not prove: ${payload.doesNotProve.join("; ")}`,
+    `Next action: ${payload.nextAction}`,
+  ];
 }
 
 function humanRunListLine(run: RunListItem): string {

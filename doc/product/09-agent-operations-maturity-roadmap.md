@@ -557,7 +557,7 @@ keigent eval real-world --open
 - next action 可见；
 - 正式 CLI 入口必须减少 pnpm wrapper 噪音。
 
-当前实现备注（2026-06-12）：`runs list/show/open/replay/triage/debug-bundle` 已有 CLI 入口与 `--json|--compact` 输出。`runs triage` 会输出 blocking failure、failed / degraded / cancelled review、missing evidence 与 stale schema 候选；triage 消费只读 migration diagnostics，因此 schema warning 不会因为兼容归一化为 `succeeded` 而从 operator 队列消失。每个候选包含 source run id、reason、blocking 信息与 next action。
+当前实现备注（2026-06-23）：`runs list/show/open/replay/triage/debug-bundle` 已有 CLI 入口与 `--json|--compact` 输出。`runs replay` 默认输出 copyable replay command、trajectory、`Fresh execution: false`、does-not-prove 和 next action，避免把 historical replay handoff 误读为 fresh success。`runs triage` 会输出 blocking failure、failed / degraded / cancelled review、missing evidence 与 stale schema 候选；triage 消费只读 migration diagnostics，因此 schema warning 不会因为兼容归一化为 `succeeded` 而从 operator 队列消失。每个候选包含 source run id、reason、blocking 信息与 next action。
 
 ---
 

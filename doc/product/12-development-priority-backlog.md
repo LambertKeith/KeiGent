@@ -329,6 +329,8 @@ Does not prove: no hidden failures outside this scope.
 
 **目标**：让本地 operator 不必理解内部文件结构，也能使用 runs / eval / replay / triage。
 
+**CLI runs replay handoff 规范**：[`../../docs/superpowers/specs/2026-06-23-cli-runs-replay-handoff-design.md`](../../docs/superpowers/specs/2026-06-23-cli-runs-replay-handoff-design.md)。
+
 **建议命令**：
 
 ```bash
@@ -341,6 +343,8 @@ keigent eval real-world --open
 ```
 
 **输出要求**：human-friendly 默认；`--json` 机器可读；`--compact` 简洁；failure code 高亮；next action 可见；正式 CLI 入口减少 pnpm wrapper 噪音。
+
+**当前增量**：[`../evals/16-cli-runs-replay-handoff-delta-2026-06-23.md`](../evals/16-cli-runs-replay-handoff-delta-2026-06-23.md) 强化 `runs replay <run-id>` handoff，默认输出可复制 replay command、fresh execution 边界、does-not-prove 和 next action。
 
 ---
 
