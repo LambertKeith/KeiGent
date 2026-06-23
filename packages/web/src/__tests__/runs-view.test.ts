@@ -372,6 +372,35 @@ describe("run record view model", () => {
     });
   });
 
+  it("displays pricing_not_configured instead of formatting unpriced provider usage as zero cost", () => {
+    const view = normalizeRunRecord(runRecord({
+      workflow: {
+        ...runRecord().workflow!,
+        budgetUsage: {
+          ...runRecord().workflow!.budgetUsage,
+          providerUsage: {
+            inputTokens: 100,
+            outputTokens: 25,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            totalTokens: 125,
+            costUsd: 0,
+            costStatus: "pricing_not_configured",
+          },
+        },
+      },
+    }));
+
+    expect(view.budget.providerUsage).toMatchObject({
+      totalTokens: 125,
+      tokenLabel: "125 provider tokens",
+      costUsd: 0,
+      costLabel: "pricing_not_configured",
+      costStatus: "pricing_not_configured",
+    });
+    expect(view.budget.providerUsage.costLabel).not.toBe("$0.000000");
+  });
+
   it("normalizes injected and excluded skill explanations for run review", () => {
     const view = normalizeRunRecord(runRecord({
       skills: [

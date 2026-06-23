@@ -604,7 +604,7 @@ function providerUsagePanel(usage: ProviderUsageSummary | undefined): RunProvide
     totalTokens: usage.totalTokens,
     tokenLabel: `${usage.totalTokens} provider tokens`,
     costUsd: usage.costUsd,
-    costLabel: usage.costStatus === "priced" ? `$${usage.costUsd.toFixed(6)}` : "Pricing not configured",
+    costLabel: usage.costStatus === "priced" ? `$${usage.costUsd.toFixed(6)}` : usage.costStatus,
     costStatus: usage.costStatus,
   };
 }

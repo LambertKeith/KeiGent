@@ -433,6 +433,8 @@ observability-summary.json
 
 **验收标准**：超预算不会继续跑；failure code 稳定；parent / child budget 分开；Workbench 显示预算耗用；eval 覆盖 budget exceeded；自定义 endpoint 未配置价格时显示 `pricing_not_configured`，不内置过期价格。
 
+**当前增量**：[`../evals/21-performance-budget-controls-audit-delta-2026-06-23.md`](../evals/21-performance-budget-controls-audit-delta-2026-06-23.md) 将现有 budget controls 拆为独立 P2-05 验收包，绑定 LoopEngine / WorkflowRunner 预算停止、RunRecord budget summary、Workbench budget display、real-world `budget-exceeded` eval 与 `pricing_not_configured` 非免费边界。
+
 ---
 
 ## 6. 跨优先级共同验收红线

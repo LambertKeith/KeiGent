@@ -728,7 +728,7 @@ failure-summary.md
 - Workbench 显示预算耗用；
 - eval 覆盖 budget exceeded。
 
-当前实现备注（2026-06-15）：已覆盖 iterations、tool calls、child runs、wall time、max token estimate（请求前保守估算）、provider usage/cost 聚合、`maxProviderCostUsd` hard ceiling（仅在 `costStatus: "priced"` 时强制执行）、显式本地 `modelPricing`（USD per million tokens）配置、retry/recovery attempts、per-tool `timeoutMs`、`budget_exceeded` failure code、RunRecord/Web budget usage、debug bundle 与 real-world eval fixture。engine 单测锁住超工具调用、wall time、token estimate、recovery、priced provider cost 与 `pricing_not_configured` 行为；workflow 单测锁住 parent / child budget 分离、aggregate budget、timeout abort、late child event 不覆盖终态；real-world L2 `budget-exceeded` / `repair-budget-exhausted` case 证明预算耗尽进入 RunRecord、proof boundary 与 failure evidence。自定义 endpoint 未配置价格时显示 `pricing_not_configured`；远程自动价格表同步不实现，避免内置过期价格。
+当前实现备注（2026-06-23）：已覆盖 iterations、tool calls、child runs、wall time、max token estimate（请求前保守估算）、provider usage/cost 聚合、`maxProviderCostUsd` hard ceiling（仅在 `costStatus: "priced"` 时强制执行）、显式本地 `modelPricing`（USD per million tokens）配置、retry/recovery attempts、per-tool `timeoutMs`、`budget_exceeded` failure code、RunRecord/Web budget usage、debug bundle 与 real-world eval fixture。engine 单测锁住超工具调用、wall time、token estimate、recovery、priced provider cost 与 `pricing_not_configured` 行为；workflow 单测锁住 parent / child budget 分离、aggregate budget、timeout abort、late child event 不覆盖终态；real-world L2 `budget-exceeded` / `repair-budget-exhausted` case 证明预算耗尽进入 RunRecord、proof boundary 与 failure evidence。Workbench 明确显示 `pricing_not_configured`，不得把未配置价格解释为免费；远程自动价格表同步不实现，避免内置过期价格。当前 P2-05 audit delta 独立绑定 LoopEngine / WorkflowRunner 预算停止、RunRecord budget summary、Workbench budget display、real-world `budget-exceeded` eval 与未配置价格边界。
 
 ---
 
