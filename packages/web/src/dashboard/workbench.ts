@@ -96,6 +96,18 @@ function caseView(
       assumptions: ["Sample dashboard data is illustrative."],
       evidenceGaps: passed ? [] : failures,
     },
+    caseReview: {
+      verdict: replayFreshExecution ? (passed ? "evidence_backed" : "blocked") : "replay_only",
+      label: replayFreshExecution
+        ? (passed ? "Evidence-backed case result" : "Blocked before reviewer acceptance")
+        : "Replay result, not a fresh execution",
+      reason: replayFreshExecution
+        ? (passed ? "Case passed with checked evidence and no proof gaps." : failures[0] ?? "Eval case did not satisfy its acceptance criteria.")
+        : "RunRecord replay.freshExecution=false.",
+      nextAction: replayFreshExecution
+        ? (passed ? "Open Run Detail to inspect supporting evidence before acceptance." : "Resolve blocking eval findings before reviewer acceptance.")
+        : "Open Run Detail and do not treat replay as fresh execution.",
+    },
   };
 }
 
@@ -108,10 +120,12 @@ function renderCaseTable(view: RealWorldEvalReportView): string {
       <td>${testCase.routeMatched ? "Matched" : "Mismatch"}</td>
       <td>${testCase.evidenceChecked ? escapeHtml(testCase.evidenceStatus) : "Not checked"}</td>
       <td>${testCase.replayFreshExecution ? "Fresh execution" : "Replay report"}</td>
+      <td><strong>${escapeHtml(testCase.caseReview.label)}</strong><small>${escapeHtml(testCase.caseReview.reason)}</small></td>
+      <td>${escapeHtml(testCase.caseReview.nextAction)}</td>
       <td>${escapeHtml(testCase.failureCodes.join(", ") || "None")}</td>
     </tr>
   `).join("");
-  return `<p class="run-goal">${escapeHtml(view.datasetId)} · ${escapeHtml(view.level)} · ${view.totals.passed}/${view.totals.total} passed · ${view.falseSuccessCount} false success</p><div class="table-wrap"><table><thead><tr><th>Case / run</th><th>Expected/result</th><th>Eval</th><th>Route</th><th>Evidence</th><th>Execution</th><th>Failure codes</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<p class="run-goal">${escapeHtml(view.datasetId)} · ${escapeHtml(view.level)} · ${view.totals.passed}/${view.totals.total} passed · ${view.falseSuccessCount} false success</p><div class="table-wrap"><table><thead><tr><th>Case / run</th><th>Expected/result</th><th>Eval</th><th>Route</th><th>Evidence</th><th>Execution</th><th>Reviewer verdict</th><th>Next action</th><th>Failure codes</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function renderFindings(view: RealWorldEvalReportView): string {

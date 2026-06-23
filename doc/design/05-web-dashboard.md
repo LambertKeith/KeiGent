@@ -214,6 +214,19 @@ The component must stay visible for succeeded, failed, replay, no-op, and insuff
 | blocked skill | Skill matched but blocked by governance policy | Skill unavailable |
 | degraded after repair failed | Degraded after bounded repair could not close the evidence gap | Auto-fixed |
 
+### 8.5 Eval-run linkage case review
+
+P0-04 adds a reviewer-facing case review layer for real-world eval dashboards. The source of truth remains the L2 report and each case `RunRecord`; the dashboard only normalizes those facts.
+
+| Case review verdict | Source condition | Required copy |
+|---|---|---|
+| `evidence_backed` | case passed, fresh execution, checked evidence, no proof gaps | Evidence-backed case result |
+| `needs_review` | no-op, insufficient/not-checked evidence, or proof gaps | Needs reviewer inspection |
+| `blocked` | eval case failed, false success, or risk noncompliance | Blocked before reviewer acceptance |
+| `replay_only` | `RunRecord.replay.freshExecution=false` | Replay result, not a fresh execution |
+
+The case table must show `Reviewer verdict` and `Next action` next to the Run Detail link. This verdict is not a human acceptance decision and must never be derived from final text.
+
 ## 9. Visual direction
 
 Warm, bright, technical clarity:

@@ -162,6 +162,8 @@ interface SkillMatchExplanation {
 
 **目标**：eval 不只是命令行 JSON，而是可复盘产品入口。
 
+**Run linkage UX 规范**：[`../../docs/superpowers/specs/2026-06-23-eval-run-linkage-report-ux-design.md`](../../docs/superpowers/specs/2026-06-23-eval-run-linkage-report-ux-design.md)。
+
 **链路要求**：
 
 ```text

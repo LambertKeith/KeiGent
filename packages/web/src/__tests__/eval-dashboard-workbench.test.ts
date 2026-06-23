@@ -54,6 +54,12 @@ function reportView(): RealWorldEvalReportView {
           assumptions: ["Fixture evidence is limited to this local report."],
           evidenceGaps: [],
         },
+        caseReview: {
+          verdict: "evidence_backed",
+          label: "Evidence-backed case result",
+          reason: "Case passed with checked evidence and no proof gaps.",
+          nextAction: "Open Run Detail to inspect supporting evidence before acceptance.",
+        },
       },
       {
         id: "case-failed",
@@ -80,6 +86,44 @@ function reportView(): RealWorldEvalReportView {
           assumptions: ["Fixture evidence is limited to this local report."],
           evidenceGaps: ["success without evidence"],
         },
+        caseReview: {
+          verdict: "blocked",
+          label: "Blocked before reviewer acceptance",
+          reason: "success without evidence",
+          nextAction: "Resolve blocking eval findings before reviewer acceptance.",
+        },
+      },
+      {
+        id: "case-replay",
+        title: "Replay-only case",
+        level: "L2",
+        runId: "run_case-replay",
+        runDetailHref: "#runs/run_case-replay",
+        expectedResult: "replay",
+        result: "replay",
+        passed: true,
+        routeMatched: true,
+        taskSucceeded: false,
+        evidenceChecked: true,
+        riskCompliant: true,
+        falseSuccess: false,
+        status: "succeeded",
+        evidenceStatus: "passed",
+        replayFreshExecution: false,
+        failureCodes: [],
+        failures: [],
+        proofBoundary: {
+          proven: ["Replay report was evaluated."],
+          notProven: ["Replay does not prove fresh execution."],
+          assumptions: ["Fixture evidence is limited to this local report."],
+          evidenceGaps: [],
+        },
+        caseReview: {
+          verdict: "replay_only",
+          label: "Replay result, not a fresh execution",
+          reason: "RunRecord replay.freshExecution=false.",
+          nextAction: "Open Run Detail and do not treat replay as fresh execution.",
+        },
       },
     ],
   };
@@ -95,6 +139,12 @@ describe("real-world eval dashboard workbench", () => {
     expect(html).toContain("False-confidence findings");
     expect(html).toContain("false_success");
     expect(html).toContain("Replay report");
+    expect(html).toContain("Reviewer verdict");
+    expect(html).toContain("Next action");
+    expect(html).toContain("Evidence-backed case result");
+    expect(html).toContain("Blocked before reviewer acceptance");
+    expect(html).toContain("Replay result, not a fresh execution");
+    expect(html).toContain("Resolve blocking eval findings before reviewer acceptance.");
     expect(html).toContain("Fixture-level regression, not product health");
     expect(html).not.toContain("Overall health");
   });

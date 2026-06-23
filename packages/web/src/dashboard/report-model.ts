@@ -81,6 +81,16 @@ export interface RealWorldEvalCaseView {
   failureCodes: string[];
   failures: string[];
   proofBoundary: ProofBoundary;
+  caseReview: RealWorldEvalCaseReviewView;
+}
+
+export type RealWorldEvalCaseReviewVerdict = "evidence_backed" | "needs_review" | "blocked" | "replay_only";
+
+export interface RealWorldEvalCaseReviewView {
+  verdict: RealWorldEvalCaseReviewVerdict;
+  label: string;
+  reason: string;
+  nextAction: string;
 }
 
 export interface RealWorldEvalReportView {
@@ -218,11 +228,77 @@ function realWorldCaseView(testCase: RealWorldEvalCaseResult): RealWorldEvalCase
     failureCodes: testCase.runRecord.failures.map((failure) => failure.code),
     failures: testCase.failures,
     proofBoundary: testCase.proofBoundary,
+    caseReview: caseReviewFor(testCase),
   };
 }
 
 function runDetailHrefFor(runId: string): string {
   return `#runs/${encodeURIComponent(runId)}`;
+}
+
+function caseReviewFor(testCase: RealWorldEvalCaseResult): RealWorldEvalCaseReviewView {
+  const nextAction = nextActionFor(testCase);
+  if (!testCase.passed || testCase.falseSuccess || !testCase.riskCompliant) {
+    return {
+      verdict: "blocked",
+      label: "Blocked before reviewer acceptance",
+      reason: testCase.failures[0] ?? testCase.runRecord.failures[0]?.message ?? "Eval case did not satisfy its acceptance criteria.",
+      nextAction,
+    };
+  }
+  if (!testCase.runRecord.replay.freshExecution) {
+    return {
+      verdict: "replay_only",
+      label: "Replay result, not a fresh execution",
+      reason: "RunRecord replay.freshExecution=false.",
+      nextAction,
+    };
+  }
+  if (
+    testCase.runRecord.status === "no_op"
+    || testCase.runRecord.evidence.status === "not_checked"
+    || testCase.runRecord.evidence.status === "insufficient_evidence"
+    || testCase.proofBoundary.evidenceGaps.length > 0
+  ) {
+    return {
+      verdict: "needs_review",
+      label: "Needs reviewer inspection",
+      reason: caseReviewReason(testCase),
+      nextAction,
+    };
+  }
+  return {
+    verdict: "evidence_backed",
+    label: "Evidence-backed case result",
+    reason: "Case passed with checked evidence and no proof gaps.",
+    nextAction,
+  };
+}
+
+function caseReviewReason(testCase: RealWorldEvalCaseResult): string {
+  if (testCase.runRecord.status === "no_op") return "No-op automation requires scope review before acceptance.";
+  if (testCase.runRecord.evidence.status === "insufficient_evidence") return "RunRecord evidence is insufficient for trusted success.";
+  if (testCase.runRecord.evidence.status === "not_checked") return "RunRecord evidence was not checked.";
+  return testCase.proofBoundary.evidenceGaps[0] ?? "Proof boundary requires reviewer inspection.";
+}
+
+function nextActionFor(testCase: RealWorldEvalCaseResult): string {
+  return testCase.runRecord.nextAction
+    ?? testCase.runRecord.failures.find((failure) => failure.nextAction)?.nextAction
+    ?? defaultNextActionFor(testCase);
+}
+
+function defaultNextActionFor(testCase: RealWorldEvalCaseResult): string {
+  if (!testCase.passed || testCase.falseSuccess || !testCase.riskCompliant) {
+    return "Resolve blocking eval findings before reviewer acceptance.";
+  }
+  if (!testCase.runRecord.replay.freshExecution) {
+    return "Open Run Detail and do not treat replay as fresh execution.";
+  }
+  if (testCase.runRecord.status === "no_op" || testCase.proofBoundary.evidenceGaps.length > 0) {
+    return "Inspect proof boundary and evidence gaps before accepting this case.";
+  }
+  return "Open Run Detail to inspect supporting evidence before acceptance.";
 }
 
 function metricView(value: number | null): RealWorldMetricView {

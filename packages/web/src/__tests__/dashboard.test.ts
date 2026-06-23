@@ -156,11 +156,29 @@ describe("dashboard report model", () => {
       runDetailHref: "#runs/run_no-op-automation",
       result: "no_op",
       replayFreshExecution: true,
+      caseReview: {
+        verdict: "needs_review",
+        label: "Needs reviewer inspection",
+        nextAction: "Review automation scope before treating no-op as health.",
+      },
     });
     expect(view.cases.find((testCase) => testCase.id === "replay-report")).toMatchObject({
       runId: "run_replay-report",
       runDetailHref: "#runs/run_replay-report",
       replayFreshExecution: false,
+      caseReview: {
+        verdict: "replay_only",
+        label: "Replay result, not a fresh execution",
+      },
+    });
+    expect(view.cases.find((testCase) => testCase.id === "file-summary")?.caseReview).toMatchObject({
+      verdict: "evidence_backed",
+      label: "Evidence-backed case result",
+    });
+    expect(view.cases.find((testCase) => testCase.id === "insufficient-evidence-success-claim")?.caseReview).toMatchObject({
+      verdict: "needs_review",
+      label: "Needs reviewer inspection",
+      nextAction: "补充或检查证据，必要时人工复核操作是否实际完成。",
     });
     expect(view.falseConfidenceFindings).toEqual([
       expect.objectContaining({ code: "fixture_level", severity: "info" }),

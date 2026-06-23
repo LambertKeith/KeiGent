@@ -137,6 +137,8 @@ Replay 必须：
 - checkpoint passed ≠ final text says success。
 - failure code count 可大于 failed case count。
 
+当前实现备注（2026-06-23）：P0-04 Eval-run linkage 已把 real-world eval case 归一化为 reviewer-facing case review surface。Eval case table 保留 `case -> runId -> Run Detail` 链接，并展示 `Reviewer verdict`、`Next action`、replay freshness、failure code 与 false-confidence findings。`caseReview` 来自 RunRecord/eval facts，不来自 final text；它不等同人工 sign-off。
+
 ## 6. Config Center
 
 要求：
