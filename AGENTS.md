@@ -76,6 +76,7 @@ corepack pnpm --filter @keigent/cli start skill inspect web-summarize --compact
 corepack pnpm --filter @keigent/engine eval:smoke
 corepack pnpm --filter @keigent/engine eval:orchestrator
 corepack pnpm --filter @keigent/engine eval:real-world -- --compact
+corepack pnpm --filter @keigent/engine eval:stability -- --compact
 corepack pnpm --filter @keigent/engine exec vitest run src/__tests__/eval-replay.test.ts
 corepack pnpm --filter @keigent/cli start eval smoke --compact
 corepack pnpm --filter @keigent/cli start eval orchestrator --compact

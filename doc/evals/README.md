@@ -11,11 +11,14 @@
 | 验收报告 | [07 Run Review Workbench V1 Delta](07-run-review-workbench-v1-delta-2026-06-23.md) | P0-02 Run Review Workbench V1 的验收 delta |
 | 验收报告 | [08 Skill Explanation Run Surface Delta](08-skill-explanation-run-surface-delta-2026-06-23.md) | P0-03 Skill Explanation Surface 的验收 delta |
 | 验收报告 | [09 Eval-run Linkage Report UX Delta](09-eval-run-linkage-report-ux-delta-2026-06-23.md) | P0-04 Eval-run Linkage and Report UX 的验收 delta |
+| 验收报告 | [10 Stability Hardening Gate Delta](10-stability-hardening-gate-delta-2026-06-23.md) | P0-05 Stability Hardening Gate 的验收 delta |
+| 验收报告 | [11 P0 Acceptance Delta](11-p0-acceptance-delta-2026-06-23.md) | P0-01 至 P0-05 的本地验收边界汇总 |
 
 当前本地 L2 fixture 基线入口：
 
 ```bash
 corepack pnpm --filter @keigent/engine eval:real-world -- --compact
+corepack pnpm --filter @keigent/engine eval:stability -- --compact
 corepack pnpm --filter @keigent/cli start eval real-world --compact
 corepack pnpm --filter @keigent/cli start eval real-world --compact --open
 ```
@@ -23,6 +26,8 @@ corepack pnpm --filter @keigent/cli start eval real-world --compact --open
 边界：L2 real-world fixture 只证明确定性本地 case 被执行和记录；它不证明产品健康、生产可用性、外部系统状态或真人验收。
 
 L2 report 现在包含 proof boundary：每个 case 必须说明已证明内容、未证明内容、假设和 evidence gaps。新增 self-repair / budget-exhausted fixture 会进入 autonomy summary，用于防止“失败后直接问人”或“repair 失败伪装成功”。
+
+`eval:stability` 是 P0 false-confidence 主干门禁。它复用 L2 fixture 和空 dataset report，集中检查 final text 伪造成功、attempted/succeeded 混淆、replay fresh 伪装、empty evidence 100%、approval bypass、blocked skill 注入、reviewer 写操作、parent timeout 覆盖与 secret redaction。任一红线失败时命令返回非零退出码。
 
 `real-world --open` 会把 L2 fixture 中每个 case 的 `RunRecord` 写入 run store，并把 latest report 写入 `evals/real-world/<dataset>/latest.json`，随后在报告中输出 Workbench dashboard 链接。该入口用于验证 `eval case -> saved RunRecord -> Web API -> Workbench Run Detail` 的复盘链路；它仍然只是 fixture 级证明，不代表生产健康。
 

@@ -49,6 +49,9 @@ describe("@keigent/engine public API", () => {
     expect(api).toHaveProperty("DEFAULT_ORCHESTRATOR_EVAL_CASES");
     expect(api).toHaveProperty("BROWSER_EVAL_CASES");
     expect(api).toHaveProperty("classifyByRulesDetailed");
+    expect(api).toHaveProperty("runStabilityGate");
+    expect(api).toHaveProperty("buildStabilityGateReport");
+    expect(api).toHaveProperty("STABILITY_GATE_REDLINE_IDS");
   });
 
   it("exports workflow envelope APIs for external runners", () => {

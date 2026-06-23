@@ -4,7 +4,7 @@ import { mergeProofBoundaries, type ProofBoundary } from "../proof-boundary.js";
 import { redactObject } from "../redaction.js";
 import type { ProfileName } from "../orchestrator.js";
 import type { ApprovalDecision, ApprovalRequest } from "../tools/types.js";
-import type { LoopResult, Task, TrajectoryStep } from "../types.js";
+import type { LoopResult, SkillMatchExplanation, Task, TrajectoryStep } from "../types.js";
 import { buildAutonomySummary } from "../workflow/autonomy.js";
 import type { ExecutionMode, WorkflowEvidence, WorkflowExitReason, WorkflowResult } from "../workflow/types.js";
 
@@ -795,15 +795,7 @@ function loopResultFor(testCase: RealWorldEvalCase, scenario: FixtureScenario, c
     {
       iteration: 0,
       kind: "skill_match",
-      skillMatches: [{
-        name: `${testCase.id}-skill`,
-        status: "verified",
-        score: 10,
-        signals: [`case:${testCase.id}`],
-        matched: true,
-        injected: true,
-        evalCoverage: [testCase.id],
-      }],
+      skillMatches: skillMatchesFor(testCase),
     },
   ];
   if (scenario.approval) steps.push({ iteration: 1, kind: "approval", approval: scenario.approval });
@@ -853,6 +845,44 @@ function loopResultFor(testCase: RealWorldEvalCase, scenario: FixtureScenario, c
     },
     ...(scenario.failure ? { failure: scenario.failure } : {}),
   };
+}
+
+function skillMatchesFor(testCase: RealWorldEvalCase): SkillMatchExplanation[] {
+  if (testCase.id === "stale-skill-blocked") {
+    return [{
+      name: `${testCase.id}-skill`,
+      status: "blocked",
+      score: 10,
+      signals: [`case:${testCase.id}`, "status:stale"],
+      matched: true,
+      injected: false,
+      exclusionReason: "blocked",
+      blockedReason: "matched skill is stale and cannot be used",
+      evalCoverage: [testCase.id],
+    }];
+  }
+  if (testCase.id === "deprecated-skill-warning") {
+    return [{
+      name: `${testCase.id}-skill`,
+      status: "deprecated",
+      score: 10,
+      signals: [`case:${testCase.id}`, "status:deprecated"],
+      matched: true,
+      injected: false,
+      exclusionReason: "status_not_executable",
+      blockedReason: "deprecated skill requires update before execution",
+      evalCoverage: [testCase.id],
+    }];
+  }
+  return [{
+    name: `${testCase.id}-skill`,
+    status: "verified",
+    score: 10,
+    signals: [`case:${testCase.id}`],
+    matched: true,
+    injected: true,
+    evalCoverage: [testCase.id],
+  }];
 }
 
 function riskMatchesExpectation(evalCase: RealWorldEvalCase, runRecord: RunRecord): boolean {

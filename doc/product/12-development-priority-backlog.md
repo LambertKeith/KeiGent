@@ -190,6 +190,14 @@ eval case
 
 **目标**：把防自欺红线变成主干测试和 CI/验收门。
 
+**Stability Gate 规范**：[`../../docs/superpowers/specs/2026-06-23-stability-hardening-gate-design.md`](../../docs/superpowers/specs/2026-06-23-stability-hardening-gate-design.md)。
+
+**本地门禁入口**：
+
+```bash
+corepack pnpm --filter @keigent/engine eval:stability -- --compact
+```
+
 **红线测试**：
 
 | 风险 | 测试要求 |
@@ -205,6 +213,8 @@ eval case
 | secret 泄漏 | redaction test 覆盖 CLI / Web / Eval |
 
 **P0 完成定义**：P0-01 ~ P0-05 全部完成后，必须提交一份 acceptance delta，包含文件清单、测试清单、命令输出、eval 报告路径、已证明/未证明矩阵与剩余风险。
+
+当前 P0 acceptance delta：[`../evals/11-p0-acceptance-delta-2026-06-23.md`](../evals/11-p0-acceptance-delta-2026-06-23.md)。
 
 ---
 

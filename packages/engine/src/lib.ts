@@ -185,6 +185,19 @@ export {
   runRealWorldEvalCases,
 } from "./evals/real-world.js";
 export {
+  STABILITY_GATE_REDLINE_IDS,
+  buildStabilityGateReport,
+  runStabilityGate,
+} from "./evals/stability-gate.js";
+export type {
+  BuildStabilityGateReportOptions,
+  RunStabilityGateOptions,
+  StabilityGateRedline,
+  StabilityGateRedlineId,
+  StabilityGateReport,
+  StabilityGateStatus,
+} from "./evals/stability-gate.js";
+export {
   P0_RUN_AUDIT_CASE_IDS,
   buildP0RunAuditFixtureRecords,
 } from "./evals/run-audit-fixtures.js";

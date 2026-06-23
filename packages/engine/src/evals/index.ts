@@ -6,3 +6,4 @@ export * from "./replay.js";
 export * from "./cli-options.js";
 export * from "./orchestrator-eval.js";
 export * from "./browser-cases.js";
+export * from "./stability-gate.js";
