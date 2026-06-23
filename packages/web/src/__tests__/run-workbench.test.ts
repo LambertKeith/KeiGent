@@ -168,6 +168,64 @@ describe("run workbench page", () => {
     expect(html).toContain("[REDACTED]");
   });
 
+  it("renders Run Review V1 queues, row trust labels, and selected trust header", () => {
+    const view = buildRunWorkbenchView([
+      record({ id: "run_ok", status: "succeeded" }),
+      record({ id: "run_failed", status: "failed", nextAction: "Inspect failed evidence." }),
+      record({
+        id: "run_replay",
+        replay: { supported: true, freshExecution: false, latestReplayReportId: "case:replay-report" },
+      }),
+    ], "run_replay");
+
+    const html = renderRunWorkbench(view);
+
+    expect(html).toContain("Run queues");
+    expect(html).toContain("Needs Action");
+    expect(html).toContain("Failed / Degraded");
+    expect(html).toContain("Awaiting Approval");
+    expect(html).toContain("Replay / Eval");
+    expect(html).toContain("Recent Succeeded");
+    expect(html).toContain("Run trust");
+    expect(html).toContain("replay-only");
+    expect(html).toContain("Replay result, not a fresh execution");
+    expect(html).toContain("This record is a replay/report view and cannot prove fresh execution.");
+  });
+
+  it("renders approval denial as stopped and never as a succeeded tool", () => {
+    const view = buildRunWorkbenchView([record({
+      id: "run_denied",
+      status: "cancelled",
+      approvals: [{
+        toolName: "shell_exec",
+        approved: false,
+        decidedAt: "2026-06-10T00:00:01.000Z",
+        riskLevel: "R4",
+        permission: "execute",
+        sideEffect: "local",
+        reversible: false,
+        targetResource: "workspace:dangerous-command",
+      }],
+      tools: [{
+        name: "shell_exec",
+        attempted: true,
+        succeeded: false,
+        permission: "execute",
+        riskLevel: "R4",
+        sideEffect: "local",
+        targetResource: "workspace:dangerous-command",
+      }],
+      nextAction: "Request explicit approval or choose a safer path.",
+    })], "run_denied");
+
+    const html = renderRunWorkbench(view);
+
+    expect(html).toContain("Stopped because approval was denied.");
+    expect(html).toContain("Denied");
+    expect(html).toContain("Not succeeded");
+    expect(html).not.toContain("<td>Succeeded</td><td>execute</td><td>R4</td>");
+  });
+
   it("renders P0-02 run list metadata required for audit triage", () => {
     const view = buildRunWorkbenchView([record({
       execution: {
@@ -366,9 +424,20 @@ describe("run workbench page", () => {
     ]);
     expect(view.selected?.summary.id).toBe("run_no-op-automation");
     expect(view.selected?.nextAction.label).toBe("Review automation scope before treating no-op as health.");
+    expect(view.collection.queues.needsAction).toHaveLength(5);
+    expect(view.collection.queues.failedOrDegraded).toHaveLength(4);
+    expect(view.collection.queues.replayOrEval).toHaveLength(6);
+    expect(view.collection.runs.find((run) => run.id === "run_file-summary")?.trust.label).toBe("evidence-backed");
+    expect(view.collection.runs.find((run) => run.id === "run_failed-assertion")?.trust.label).toBe("needs-review");
+    expect(view.collection.runs.find((run) => run.id === "run_approval-denied")?.trust.reason).toBe("Stopped because approval was denied.");
+    expect(view.collection.runs.find((run) => run.id === "run_replay-report")?.trust.label).toBe("replay-only");
+    expect(view.collection.runs.find((run) => run.id === "run_insufficient-evidence-success-claim")?.trust.label).toBe("insufficient-evidence");
+    expect(view.collection.runs.find((run) => run.id === "run_no-op-automation")?.trust.label).toBe("needs-review");
+    expect(view.collection.runs.find((run) => run.id === "run_parent-timeout-child-success")?.trust.label).toBe("needs-review");
     expect(html).toContain("run_no-op-automation");
     expect(html).toContain("No hidden failures outside this scope.");
     expect(renderRunWorkbench(buildRunWorkbenchView(records, "run_replay-report"))).toContain("Replay report, not fresh execution");
+    expect(renderRunWorkbench(buildRunWorkbenchView(records, "run_insufficient-evidence-success-claim"))).toContain("Not enough evidence to mark this run successful");
     expect(renderRunWorkbench(buildRunWorkbenchView(records, "run_failed-assertion"))).toContain("missing-output.txt was not found");
     expect(renderRunWorkbench(buildRunWorkbenchView(records, "run_parent-timeout-child-success"))).toContain("parent workflow timed out before accepting child success");
   });

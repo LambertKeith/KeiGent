@@ -2,11 +2,20 @@ import type { ApprovalSummary, AutonomySummary, ProofBoundary, ProviderUsageSumm
 import { redactObject, redactText } from "../shared/redaction.js";
 import { childRunsFor, type RunChildRunPanel } from "./child-workspaces.js";
 
+export type RunTrustLabel = "evidence-backed" | "needs-review" | "insufficient-evidence" | "replay-only" | "not-checked";
+
+export interface RunTrustSummary {
+  label: RunTrustLabel;
+  copy: string;
+  reason: string;
+}
+
 export interface RunRecordListItem {
   id: string;
   status: string;
   createdAt: string;
   goal: string;
+  taskSource: string;
   profile: string;
   workflowMode: string;
   evidenceStatus: string;
@@ -17,6 +26,16 @@ export interface RunRecordListItem {
   approvalRequired: boolean;
   replayAvailable: boolean;
   replayLabel: string;
+  nextActionRequired: boolean;
+  trust: RunTrustSummary;
+}
+
+export interface RunQueueSummary {
+  needsAction: RunRecordListItem[];
+  failedOrDegraded: RunRecordListItem[];
+  awaitingApproval: RunRecordListItem[];
+  replayOrEval: RunRecordListItem[];
+  recentSucceeded: RunRecordListItem[];
 }
 
 export interface RunEvidencePanel {
@@ -81,6 +100,7 @@ export interface RunProviderUsagePanel {
 
 export interface RunRecordDetailView {
   summary: RunRecordListItem;
+  trust: RunTrustSummary;
   route: {
     source: string;
     selectedProfile: string;
@@ -124,6 +144,7 @@ export interface RunRecordCollectionView {
   empty: boolean;
   emptyMessage?: string;
   runs: RunRecordListItem[];
+  queues: RunQueueSummary;
 }
 
 export function normalizeRunRecord(input: unknown): RunRecordDetailView {
@@ -131,6 +152,7 @@ export function normalizeRunRecord(input: unknown): RunRecordDetailView {
   const summary = listItemFor(record);
   return {
     summary,
+    trust: summary.trust,
     route: {
       source: redactText(record.route.source),
       selectedProfile: redactText(record.route.selectedProfile ?? "unknown"),
@@ -209,25 +231,29 @@ export function normalizeRunRecord(input: unknown): RunRecordDetailView {
 
 export function summarizeRunRecords(records: unknown[]): RunRecordCollectionView {
   if (records.length === 0) {
-    return { empty: true, emptyMessage: "No run records saved", runs: [] };
+    return { empty: true, emptyMessage: "No run records saved", runs: [], queues: emptyQueueSummary() };
   }
+  const runs = records
+    .map(normalizeRecordShape)
+    .map(listItemFor)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return {
     empty: false,
-    runs: records
-      .map(normalizeRecordShape)
-      .map(listItemFor)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    runs,
+    queues: queueSummaryFor(runs),
   };
 }
 
 function listItemFor(record: RunRecord): RunRecordListItem {
   const profile = record.task.resolvedProfile ?? record.route.selectedProfile ?? "unknown";
   const workflowMode = record.task.resolvedWorkflowMode ?? record.workflow?.mode ?? "unknown";
+  const nextAction = nextActionFor(record);
   return {
     id: redactText(record.id),
     status: record.status,
     createdAt: record.createdAt,
     goal: redactText(record.task.goal),
+    taskSource: record.task.source,
     profile: redactText(profile),
     workflowMode: redactText(workflowMode),
     evidenceStatus: record.evidence.status,
@@ -238,6 +264,28 @@ function listItemFor(record: RunRecord): RunRecordListItem {
     approvalRequired: record.risk.approvalRequired,
     replayAvailable: record.replay.supported && Boolean(record.replay.trajectoryPath),
     replayLabel: replayLabel(record),
+    nextActionRequired: nextAction.required,
+    trust: trustFor(record, nextAction),
+  };
+}
+
+function emptyQueueSummary(): RunQueueSummary {
+  return {
+    needsAction: [],
+    failedOrDegraded: [],
+    awaitingApproval: [],
+    replayOrEval: [],
+    recentSucceeded: [],
+  };
+}
+
+function queueSummaryFor(runs: RunRecordListItem[]): RunQueueSummary {
+  return {
+    needsAction: runs.filter((run) => run.nextActionRequired),
+    failedOrDegraded: runs.filter((run) => ["failed", "degraded", "cancelled"].includes(run.status)),
+    awaitingApproval: runs.filter((run) => run.status === "awaiting_approval"),
+    replayOrEval: runs.filter((run) => run.trust.label === "replay-only" || run.taskSource === "eval" || run.taskSource === "replay"),
+    recentSucceeded: runs.filter((run) => run.trust.label === "evidence-backed"),
   };
 }
 
@@ -399,10 +447,69 @@ function nextActionFor(record: RunRecord): RunRecordDetailView["nextAction"] {
   if (String(record.status) === "unknown") {
     return { required: true, label: "Review run record schema before trusting this result." };
   }
+  if (record.status === "awaiting_approval") {
+    return { required: true, label: "Approve or deny the pending tool request." };
+  }
   if (record.status === "failed" || record.status === "cancelled" || record.status === "degraded") {
     return { required: true, label: "Review failure evidence before retrying." };
   }
   return { required: false, label: "No action required" };
+}
+
+function trustFor(record: RunRecord, nextAction: RunRecordDetailView["nextAction"]): RunTrustSummary {
+  if (!record.replay.freshExecution) {
+    return {
+      label: "replay-only",
+      copy: "Replay result, not a fresh execution",
+      reason: "This record is a replay/report view and cannot prove fresh execution.",
+    };
+  }
+
+  if (record.approvals.some((approval) => approval.approved === false)) {
+    return {
+      label: "needs-review",
+      copy: "Needs review",
+      reason: "Stopped because approval was denied.",
+    };
+  }
+
+  if (record.status === "awaiting_approval" || record.status === "no_op" || record.status === "unknown") {
+    return {
+      label: "needs-review",
+      copy: "Needs review",
+      reason: nextAction.label,
+    };
+  }
+
+  if (record.evidence.status === "insufficient_evidence" || record.evidence.status === "not_checked" || record.evidence.total === 0) {
+    return {
+      label: "insufficient-evidence",
+      copy: "Not enough evidence to mark this run successful",
+      reason: "Verification evidence was not checked or was insufficient.",
+    };
+  }
+
+  if (record.status === "failed" || record.status === "degraded" || record.status === "cancelled" || nextAction.required) {
+    return {
+      label: "needs-review",
+      copy: "Needs review",
+      reason: nextAction.label,
+    };
+  }
+
+  if (record.status === "succeeded" && record.evidence.status === "passed" && record.evidence.passed > 0 && record.proofBoundary.evidenceGaps.length === 0) {
+    return {
+      label: "evidence-backed",
+      copy: "Evidence-backed completion",
+      reason: "Fresh execution with passed evidence and no evidence gaps.",
+    };
+  }
+
+  return {
+    label: "not-checked",
+    copy: "Not checked",
+    reason: "No verification evidence was checked for this run.",
+  };
 }
 
 function evidenceLabel(record: RunRecord): string {

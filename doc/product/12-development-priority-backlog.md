@@ -76,6 +76,8 @@ P0 的目标是让用户和验收人能真实回答：一次 agent run 为什么
 
 **目标**：Web 不再只是静态 shell，而是能让 operator 审计真实 run。
 
+**Run Review V1 规范**：[`../../docs/superpowers/specs/2026-06-23-run-review-workbench-v1-design.md`](../../docs/superpowers/specs/2026-06-23-run-review-workbench-v1-design.md)。
+
 **Run List 至少展示**：run id、status、createdAt、profile、workflow mode、risk level、evidence summary、duration、replay status。
 
 **Run Detail 至少包含**：
@@ -103,6 +105,19 @@ Raw Redacted Record
 - insufficient evidence run；
 - no-op automation run；
 - parent workflow with child run。
+
+**Run Review V1 UI checklist**：
+
+- Run Queue 按 Needs Action、Failed / Degraded、Awaiting Approval、Replay / Eval、Recent Succeeded 分组或统计。
+- Run row 展示 trust label，且 trust label 不从 final text 推导。
+- Run Trust Header 展示 `evidence-backed`、`needs-review`、`insufficient-evidence`、`replay-only` 或 `not-checked`。
+- `freshExecution=false` 必须显示 `Replay result, not a fresh execution`，不得显示 fresh success。
+- empty evidence 必须显示 `Not enough evidence to mark this run successful` 或 `Not checked`，不得显示成功。
+- approval denied 必须显示 `Stopped because approval was denied`，denied tool 不得显示 succeeded。
+- no-op automation 必须显示 scope 与 `doesNotProve`，不得显示系统健康。
+- parent workflow failure / timeout / budget exhaustion 优先于 child success。
+- Proof Boundary 组件必须持续展示 Proven、Not proven、Assumptions、Evidence gaps。
+- Timeline 必须区分 route/profile、skill、tool/approval、evidence/assertion、repair/escalation、terminal outcome。
 
 **稳定性要求**：
 

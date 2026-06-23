@@ -169,6 +169,65 @@ describe("run record view model", () => {
     });
   });
 
+  it("derives evidence-backed trust only from fresh checked evidence", () => {
+    const view = normalizeRunRecord(runRecord());
+
+    expect(view.trust).toEqual({
+      label: "evidence-backed",
+      copy: "Evidence-backed completion",
+      reason: "Fresh execution with passed evidence and no evidence gaps.",
+    });
+    expect(view.summary.trust.label).toBe("evidence-backed");
+  });
+
+  it("does not let final response text upgrade unchecked evidence to success", () => {
+    const view = normalizeRunRecord(runRecord({
+      status: "succeeded",
+      execution: {
+        ...runRecord().execution,
+        finalResponseSummary: "Everything succeeded and production is healthy.",
+      },
+      evidence: {
+        status: "not_checked",
+        total: 0,
+        passed: 0,
+        failed: 0,
+        sources: [],
+        blocking: [],
+      },
+      proofBoundary: {
+        proven: [],
+        notProven: ["External production health is not proven by this run."],
+        assumptions: [],
+        evidenceGaps: ["No verification evidence was checked."],
+      },
+    }));
+
+    expect(view.trust).toEqual({
+      label: "insufficient-evidence",
+      copy: "Not enough evidence to mark this run successful",
+      reason: "Verification evidence was not checked or was insufficient.",
+    });
+  });
+
+  it("marks replay reports as replay-only even when their stored status succeeded", () => {
+    const view = normalizeRunRecord(runRecord({
+      status: "succeeded",
+      replay: {
+        supported: true,
+        trajectoryPath: "/tmp/replay.json",
+        latestReplayReportId: "local-real-task-v1:replay-report",
+        freshExecution: false,
+      },
+    }));
+
+    expect(view.trust).toEqual({
+      label: "replay-only",
+      copy: "Replay result, not a fresh execution",
+      reason: "This record is a replay/report view and cannot prove fresh execution.",
+    });
+  });
+
   it("summarizes saved run records newest first", () => {
     const collection = summarizeRunRecords([
       runRecord({ id: "run_001", createdAt: "2026-06-09T00:00:00.000Z" }),
@@ -178,6 +237,32 @@ describe("run record view model", () => {
     expect(collection.empty).toBe(false);
     expect(collection.runs.map((run) => run.id)).toEqual(["run_003", "run_001"]);
     expect(summarizeRunRecords([])).toMatchObject({ empty: true, emptyMessage: "No run records saved" });
+  });
+
+  it("groups run records into review queues without treating no-op as health", () => {
+    const collection = summarizeRunRecords([
+      runRecord({ id: "run_succeeded", status: "succeeded" }),
+      runRecord({ id: "run_failed", status: "failed", nextAction: "Inspect failed evidence." }),
+      runRecord({ id: "run_approval", status: "awaiting_approval" }),
+      runRecord({
+        id: "run_replay",
+        task: { ...runRecord().task, source: "replay" },
+        replay: { supported: true, freshExecution: false, latestReplayReportId: "case:replay-report" },
+      }),
+      runRecord({
+        id: "run_no_op",
+        status: "no_op",
+        nextAction: "Review automation scope before treating no-op as health.",
+      }),
+    ]);
+
+    expect(collection.queues.needsAction.map((run) => run.id)).toEqual(expect.arrayContaining(["run_failed", "run_approval", "run_no_op"]));
+    expect(collection.queues.needsAction).toHaveLength(3);
+    expect(collection.queues.failedOrDegraded.map((run) => run.id)).toEqual(["run_failed"]);
+    expect(collection.queues.awaitingApproval.map((run) => run.id)).toEqual(["run_approval"]);
+    expect(collection.queues.replayOrEval.map((run) => run.id)).toEqual(["run_replay"]);
+    expect(collection.queues.recentSucceeded.map((run) => run.id)).toEqual(["run_succeeded"]);
+    expect(collection.runs.find((run) => run.id === "run_no_op")?.trust.label).toBe("needs-review");
   });
 
   it("does not crash on legacy or malformed records and never upgrades unknown status to success", () => {

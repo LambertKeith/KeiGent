@@ -21,6 +21,9 @@ export interface RunWorkbenchStats {
   needsAction: number;
   replayable: number;
   failedOrDegraded: number;
+  awaitingApproval: number;
+  replayOrEval: number;
+  recentSucceeded: number;
   schemaWarnings: number;
 }
 
@@ -41,15 +44,19 @@ export function buildRunWorkbenchView(
     .map(normalizeRunRecord)
     .sort((a, b) => b.summary.createdAt.localeCompare(a.summary.createdAt));
   const selected = details.find((detail) => detail.summary.id === selectedRunId) ?? details[0];
+  const collection = summarizeRunRecords(records);
 
   return {
-    collection: summarizeRunRecords(records),
+    collection,
     ...(selected ? { selected } : {}),
     stats: {
       total: details.length,
-      needsAction: details.filter((detail) => detail.nextAction.required).length,
+      needsAction: collection.queues.needsAction.length,
       replayable: details.filter((detail) => detail.replay.supported).length,
-      failedOrDegraded: details.filter((detail) => ["failed", "degraded", "cancelled"].includes(detail.summary.status)).length,
+      failedOrDegraded: collection.queues.failedOrDegraded.length,
+      awaitingApproval: collection.queues.awaitingApproval.length,
+      replayOrEval: collection.queues.replayOrEval.length,
+      recentSucceeded: collection.queues.recentSucceeded.length,
       schemaWarnings: normalizedMigrationReport?.warnings.length ?? 0,
     },
     ...(normalizedMigrationReport ? { migrationReport: normalizedMigrationReport } : {}),
@@ -97,17 +104,12 @@ export function renderRunWorkbench(view: RunWorkbenchView): string {
 
   return `
     <section class="hero compact"><p class="eyebrow">Runs</p><h1>RunRecord is the product contract.</h1><p>Review route, evidence, risk, budget, replay, and redacted payloads from one run record.</p></section>
-    <section class="run-stats" aria-label="Run queues">
-      ${renderStat("Total", view.stats.total)}
-      ${renderStat("Needs action", view.stats.needsAction)}
-      ${renderStat("Replayable", view.stats.replayable)}
-      ${renderStat("Failed/degraded", view.stats.failedOrDegraded)}
-      ${renderStat("Schema warnings", view.stats.schemaWarnings)}
-    </section>
+    ${renderQueueBuckets(view)}
     ${renderSchemaCompatibility(view.migrationReport)}
     <section class="workbench-grid">
       <aside class="panel run-list-panel">${renderRunList(view.collection.runs, view.selected.summary.id)}</aside>
       <section class="run-detail-stack">
+        ${renderTrustHeader(view.selected)}
         ${renderSummary(view.selected)}
         ${renderTimeline(view.selected)}
         ${renderChildRunTimeline(view.selected)}
@@ -188,12 +190,40 @@ function renderRunList(runs: RunRecordListItem[], selectedId: string | undefined
       <span><strong>${escapeHtml(run.id)}</strong><small>${escapeHtml(run.createdAt)}</small></span>
       <span>${escapeHtml(run.status)}</span>
       <span>${escapeHtml(run.profile)} / ${escapeHtml(run.workflowMode)}</span>
+      <span>${escapeHtml(run.trust.label)} / ${escapeHtml(run.trust.copy)}</span>
       <span>${escapeHtml(run.evidenceLabel)}</span>
       <span>${escapeHtml(run.riskLabel)}</span>
       <span>${escapeHtml(run.durationLabel)} / ${escapeHtml(run.replayLabel)}</span>
     </button>
   `).join("");
   return `<h2>Run list</h2>${rows || "<p>No run records saved</p>"}`;
+}
+
+function renderQueueBuckets(view: RunWorkbenchView): string {
+  const queues = view.collection.queues;
+  return `
+    <section class="run-stats" aria-label="Run queues">
+      ${renderStat("Total", view.stats.total)}
+      ${renderStat("Needs Action", queues.needsAction.length)}
+      ${renderStat("Failed / Degraded", queues.failedOrDegraded.length)}
+      ${renderStat("Awaiting Approval", queues.awaitingApproval.length)}
+      ${renderStat("Replay / Eval", queues.replayOrEval.length)}
+      ${renderStat("Recent Succeeded", queues.recentSucceeded.length)}
+      ${renderStat("Schema warnings", view.stats.schemaWarnings)}
+    </section>
+  `;
+}
+
+function renderTrustHeader(run: RunRecordDetailView): string {
+  return panel("Run trust", `
+    <div class="summary-strip">
+      ${renderFact("Trust", run.trust.label)}
+      ${renderFact("Assessment", run.trust.copy)}
+      ${renderFact("Reason", run.trust.reason)}
+      ${renderFact("Fresh execution", run.replay.freshExecution ? "Yes" : "No")}
+      ${renderFact("Next action", run.nextAction.label)}
+    </div>
+  `);
 }
 
 function renderSummary(run: RunRecordDetailView): string {

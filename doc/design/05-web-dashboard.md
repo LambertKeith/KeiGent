@@ -162,7 +162,59 @@ Replay default should be `mapped-cases-only`; full-suite replay may explicitly m
 - Unknown failure code/category/profile: render raw value and keep filterable.
 - Missing trajectory: disable replay but keep report inspection.
 
-## 8. Visual direction
+## 8. Run Review Trust And State Rules
+
+Run Review Workbench V1 adds explicit trust state to avoid turning dashboard success into false confidence. The authoritative spec is [`../../docs/superpowers/specs/2026-06-23-run-review-workbench-v1-design.md`](../../docs/superpowers/specs/2026-06-23-run-review-workbench-v1-design.md).
+
+### 8.1 Trust labels
+
+| Trust label | Meaning | Required UI copy |
+|---|---|---|
+| `evidence-backed` | Fresh succeeded run with checked evidence and no evidence gaps | Evidence-backed completion |
+| `needs-review` | Failed, degraded, cancelled, awaiting approval, schema warning, or next action required | Needs review |
+| `insufficient-evidence` | Evidence is `not_checked` or `insufficient_evidence` | Not enough evidence to mark this run successful |
+| `replay-only` | Replay/report result with `freshExecution=false` | Replay result, not a fresh execution |
+| `not-checked` | No verification evidence was checked and no stronger failure state applies | Not checked |
+
+Trust labels must not be derived from final text. Empty evidence cannot display as success. Replay-only must outrank success wording.
+
+### 8.2 Timeline grouping
+
+Timeline display groups events into:
+
+- route / profile;
+- skills;
+- tools and approvals;
+- evidence and assertions;
+- repair and escalation;
+- terminal outcome.
+
+Attempted and succeeded tools must be distinct. Denied, failed, degraded, unknown, and budget-exceeded states must remain visible without opening raw logs.
+
+### 8.3 Proof boundary copy
+
+Proof boundary is a first-class UI component with four fixed labels:
+
+- Proven;
+- Not proven;
+- Assumptions;
+- Evidence gaps.
+
+The component must stay visible for succeeded, failed, replay, no-op, and insufficient-evidence runs. It must not be replaced by a total score.
+
+### 8.4 State copy
+
+| State | Use | Avoid |
+|---|---|---|
+| evidence-backed | Evidence-backed completion | Successfully done! |
+| insufficient evidence | Not enough evidence to mark this run successful | Probably succeeded |
+| replay | Replay result, not a fresh execution | Passed |
+| no-op | No matching runs in this scope | Everything is healthy |
+| approval denied | Stopped because approval was denied | Failed unexpectedly |
+| blocked skill | Skill matched but blocked by governance policy | Skill unavailable |
+| degraded after repair failed | Degraded after bounded repair could not close the evidence gap | Auto-fixed |
+
+## 9. Visual direction
 
 Warm, bright, technical clarity:
 
@@ -172,7 +224,7 @@ Warm, bright, technical clarity:
 - No purple/cold/AI-sparkle aesthetics.
 - Charts must have accessible table equivalents.
 
-## 9. Acceptance standards
+## 10. Acceptance standards
 
 ### Metric correctness
 
