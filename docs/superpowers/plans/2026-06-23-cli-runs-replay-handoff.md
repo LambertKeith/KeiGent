@@ -119,7 +119,7 @@ rg "P1-05|CLI Operator Ergonomics|runs replay|Replay command|Historical replay" 
 
 Expected: all commands pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-06-23-cli-runs-replay-handoff-design.md docs/superpowers/plans/2026-06-23-cli-runs-replay-handoff.md doc/evals/16-cli-runs-replay-handoff-delta-2026-06-23.md doc/evals/README.md doc/product/12-development-priority-backlog.md doc/product/09-agent-operations-maturity-roadmap.md packages/cli/src/runs-commands.ts packages/cli/src/__tests__/runs-commands.test.ts
