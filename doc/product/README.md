@@ -14,3 +14,4 @@
 | 发布入口 | [10 Release and Upgrade Path](10-release-and-upgrade.md) | first-run guide、config upgrade policy、release checklist、changelog 与版本兼容边界 |
 | 开发要求 | [11 Agent Project Learning Development Requirements](11-agent-project-learning-development-requirements.md) | 从 OpenAI Agents SDK、Mastra、Microsoft Agent Framework、12-Factor Agents、AG-UI/AgentOps 等项目提炼的新一轮开发要求 |
 | 开发优先级 | [12 Development Priority Backlog](12-development-priority-backlog.md) | P0/P1/P2 开发包、推荐顺序、验收红线与交付模板 |
+| 产品设计 | [13 Recent Research Internalization and Next Design](13-recent-research-internalization-and-next-design.md) | 近期 Agent 调研可内化的设计思考、Run Review Workbench v1 下一步产品设计入口 |
