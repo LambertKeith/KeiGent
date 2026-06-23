@@ -366,11 +366,15 @@ P2 的目标是把本地 Agent Operations 系统做得更完整，但仍坚持 r
 
 **目标**：先做 readonly connector，不碰外部写操作。
 
+**Readonly connector baseline audit 规范**：[`../../docs/superpowers/specs/2026-06-23-readonly-connector-baseline-audit-design.md`](../../docs/superpowers/specs/2026-06-23-readonly-connector-baseline-audit-design.md)。
+
 **候选 connector**：local git readonly、GitHub readonly、HTTP readonly、file readonly、browser readonly。
 
 **所有 connector 必须经过 ToolRegistry 并具备**：permission、risk、sideEffect、reversible、timeout、outputLimit、redaction、approvalPolicy。
 
 **验收标准**：readonly 不审批但记录 source；failed connector 有 failure code；secret 不泄漏；external source 进入 evidence；write path 明确 unsupported。
+
+**当前增量**：[`../evals/17-readonly-connector-baseline-audit-delta-2026-06-23.md`](../evals/17-readonly-connector-baseline-audit-delta-2026-06-23.md) 将现有 readonly connector baseline 拆为独立 P2-01 验收包，绑定 ToolRegistry metadata、structured source evidence、redaction、failure mapping 与 `sourceCollected` workflow evidence。
 
 ### P2-02：L3 Operator Scenario Eval
 

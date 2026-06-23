@@ -612,7 +612,7 @@ approvalPolicy
 - external source 进入 evidence；
 - write path 明确 unsupported。
 
-当前实现备注（2026-06-12）：已新增 readonly connector baseline：`git_status`、`http_get`、`github_repo_read` 均通过 `ToolRegistry` 注册为 `readonly / R0 / sideEffect=none / reversible=true`，并声明 timeout / output limit。Git 与 HTTP / GitHub connector 会输出或保留 source，失败使用 `connector_failure=*`，write-like 参数使用 `write_unsupported=*`，HTTP / GitHub 响应经过 redaction；测试覆盖无需审批、path escape、secret redaction、write-like option 拒绝和 connector failure。该基线不包含认证 GitHub API、任意自定义 headers、外部写 connector 或“connector 文本即可信 evidence”的语义。
+当前实现备注（2026-06-23）：已新增 readonly connector baseline：`git_status`、`http_get`、`github_repo_read` 均通过 `ToolRegistry` 注册为 `readonly / R0 / sideEffect=none / reversible=true`，并声明 timeout / output limit。Git 与 HTTP / GitHub connector 会输出或保留 source，失败使用 `connector_failure=*`，write-like 参数使用 `write_unsupported=*`，HTTP / GitHub 响应经过 redaction；测试覆盖无需审批、path escape、secret redaction、write-like option 拒绝和 connector failure。当前 P2-01 audit delta 独立绑定 `sourceCollected` workflow evidence，并明确该基线不包含认证 GitHub API、任意自定义 headers、外部写 connector 或“connector 文本即可信 evidence”的语义。
 
 ### 7.4 L3 Operator Scenario Eval
 

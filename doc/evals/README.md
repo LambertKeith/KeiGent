@@ -18,6 +18,7 @@
 | 验收报告 | [14 Worktree Isolation Conflict Summary Delta](14-worktree-isolation-conflict-summary-delta-2026-06-23.md) | P1-03 Worktree Isolation Foundation 的 conflict summary 验收 delta |
 | 验收报告 | [15 Debug Bundle Redaction Summary Delta](15-debug-bundle-redaction-summary-delta-2026-06-23.md) | P1-04 Schema Migration / Redaction Hardening 的 debug bundle redaction summary 验收 delta |
 | 验收报告 | [16 CLI Runs Replay Handoff Delta](16-cli-runs-replay-handoff-delta-2026-06-23.md) | P1-05 CLI Operator Ergonomics 的 runs replay handoff 验收 delta |
+| 验收报告 | [17 Readonly Connector Baseline Audit Delta](17-readonly-connector-baseline-audit-delta-2026-06-23.md) | P2-01 Readonly Connector Baseline 的当前验收 audit delta |
 
 当前本地 L2 fixture 基线入口：
 
