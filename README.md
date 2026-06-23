@@ -283,6 +283,7 @@ git diff --check
 - [成熟路线图] [`doc/product/09-agent-operations-maturity-roadmap.md`](doc/product/09-agent-operations-maturity-roadmap.md) —— Run 可审计、Eval 可复盘、Loop 可治理、Ops 可扩展的下一阶段任务与验收标准
 - [发布入口] [`doc/product/10-release-and-upgrade.md`](doc/product/10-release-and-upgrade.md) —— first-run guide、config upgrade policy、release checklist、changelog 与版本兼容边界
 - [开发优先级] [`doc/product/12-development-priority-backlog.md`](doc/product/12-development-priority-backlog.md) —— P0/P1/P2 开发包、推荐顺序、验收红线与交付模板
+- [产品设计] [`doc/product/13-recent-research-internalization-and-next-design.md`](doc/product/13-recent-research-internalization-and-next-design.md) —— 近期 Agent 调研可内化的设计思考与 Run Review Workbench v1 下一步设计入口
 - [设计蓝图] [`doc/evals/01-real-world-eval-suite.md`](doc/evals/01-real-world-eval-suite.md) —— 真实世界 Eval Suite 蓝图
 - [验收报告] [`doc/evals/02-main-acceptance-report.md`](doc/evals/02-main-acceptance-report.md) —— main 分支产品/架构验收意见
 - [Eval 路线图] [`doc/evals/03-real-world-eval-roadmap.md`](doc/evals/03-real-world-eval-roadmap.md) —— L1/L2/L3 分层 eval 与 false confidence 防线
