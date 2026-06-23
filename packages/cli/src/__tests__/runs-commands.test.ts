@@ -412,6 +412,7 @@ describe("runs commands", () => {
         expect.objectContaining({ relativePath: "record.json" }),
         expect.objectContaining({ relativePath: "workflow-trajectory.json" }),
         expect.objectContaining({ relativePath: "eval-case.json" }),
+        expect.objectContaining({ relativePath: "redaction-summary.json" }),
         expect.objectContaining({ relativePath: "tool-summary.json" }),
         expect.objectContaining({ relativePath: "failure-summary.md" }),
       ]),
@@ -419,5 +420,16 @@ describe("runs commands", () => {
     expect(await readFile(join(bundleDir, "record.json"), "utf8")).not.toContain("sk-record-secret-123456");
     expect(await readFile(join(bundleDir, "workflow-trajectory.json"), "utf8")).not.toContain("sk-workflow-secret-123456");
     expect(await readFile(join(bundleDir, "eval-case.json"), "utf8")).not.toContain("sk-eval-case-secret-123456");
+    const redactionSummary = await readFile(join(bundleDir, "redaction-summary.json"), "utf8");
+    expect(redactionSummary).not.toContain("sk-record-secret-123456");
+    expect(redactionSummary).not.toContain("sk-workflow-secret-123456");
+    expect(redactionSummary).not.toContain("sk-eval-case-secret-123456");
+    expect(JSON.parse(redactionSummary)).toMatchObject({
+      schemaVersion: 1,
+      runId: "run_failed",
+      applied: true,
+      rawPayloadStored: false,
+      filesRedacted: expect.arrayContaining(["record.json", "workflow-trajectory.json", "eval-case.json"]),
+    });
   });
 });

@@ -315,11 +315,15 @@ Does not prove: no hidden failures outside this scope.
 
 **目标**：让长期运行的 run store 更稳定，并降低 UI / eval / debug 泄密风险。
 
+**Debug Bundle Redaction Summary 规范**：[`../../docs/superpowers/specs/2026-06-23-debug-bundle-redaction-summary-design.md`](../../docs/superpowers/specs/2026-06-23-debug-bundle-redaction-summary-design.md)。
+
 **Schema migration**：`schemaVersion` 读取、legacy record fallback、unknown status fallback、missing field defaults、migration report。
 
 **Redaction 覆盖**：API key、bearer token、文件路径敏感部分、tool output secret、config values、connector payload。
 
 **验收标准**：旧 record 不导致 Web 崩溃；secret 不进入 UI；raw payload 默认不存；redaction summary 明确；redaction test 覆盖 CLI / Web / Eval。
+
+**当前增量**：[`../evals/15-debug-bundle-redaction-summary-delta-2026-06-23.md`](../evals/15-debug-bundle-redaction-summary-delta-2026-06-23.md) 为 debug bundle 增加独立 `redaction-summary.json`，让 redaction policy、scope、raw payload 边界和未证明内容可审计。
 
 ### P1-05：CLI Operator Ergonomics
 

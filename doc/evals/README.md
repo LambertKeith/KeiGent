@@ -16,6 +16,7 @@
 | 验收报告 | [12 Reviewed-loop V1 Delta](12-reviewed-loop-v1-delta-2026-06-23.md) | P1-01 Reviewed-loop v1 的验收 delta |
 | 验收报告 | [13 Local Automation Triage Delta](13-local-automation-triage-delta-2026-06-23.md) | P1-02 Local Automation Triage 的验收 delta |
 | 验收报告 | [14 Worktree Isolation Conflict Summary Delta](14-worktree-isolation-conflict-summary-delta-2026-06-23.md) | P1-03 Worktree Isolation Foundation 的 conflict summary 验收 delta |
+| 验收报告 | [15 Debug Bundle Redaction Summary Delta](15-debug-bundle-redaction-summary-delta-2026-06-23.md) | P1-04 Schema Migration / Redaction Hardening 的 debug bundle redaction summary 验收 delta |
 
 当前本地 L2 fixture 基线入口：
 

@@ -15,6 +15,7 @@ export type DebugBundleFileKind =
   | "diff"
   | "log_excerpt"
   | "redacted_config"
+  | "redaction_summary"
   | "observability_summary"
   | "tool_summary"
   | "triage_summary"
@@ -74,6 +75,11 @@ export async function exportRunDebugBundle(
       });
     }
   }
+
+  files.push(await writeJsonFile(options.bundleDir, "redaction-summary.json", "redaction_summary", redactionSummary(record, {
+    files,
+    missingArtifacts,
+  })));
 
   files.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
   missingArtifacts.sort((a, b) => a.path.localeCompare(b.path));
@@ -215,6 +221,65 @@ function triageSummary(record: RunRecord): Record<string, unknown> {
       : undefined,
     replay: record.replay,
     nextAction: record.nextAction,
+  }) as Record<string, unknown>;
+}
+
+function redactionSummary(
+  record: RunRecord,
+  input: { files: DebugBundleFile[]; missingArtifacts: DebugBundleMissingArtifact[] },
+): Record<string, unknown> {
+  const copiedArtifactFiles = input.files
+    .filter((file) => ![
+      "record",
+      "redacted_config",
+      "tool_summary",
+      "observability_summary",
+      "triage_summary",
+      "failure_summary",
+    ].includes(file.kind))
+    .map((file) => file.relativePath);
+
+  return redactObject({
+    schemaVersion: 1,
+    runId: record.id,
+    applied: record.redaction.applied,
+    rawPayloadStored: record.redaction.rawPayloadStored,
+    rules: [
+      "secret_like_keys",
+      "secret_like_text",
+      "user_home_path_segments",
+    ],
+    scopes: [
+      {
+        name: "record",
+        redacted: true,
+        files: ["record.json"],
+      },
+      {
+        name: "config",
+        redacted: true,
+        files: ["redacted-config.json"],
+      },
+      {
+        name: "generated_summaries",
+        redacted: true,
+        files: ["tool-summary.json", "observability-summary.json", "triage-summary.json", "failure-summary.md"],
+      },
+      {
+        name: "artifact_copies",
+        redacted: true,
+        files: copiedArtifactFiles,
+      },
+    ],
+    filesRedacted: [
+      ...input.files.map((file) => file.relativePath),
+      "redaction-summary.json",
+    ].sort(),
+    missingArtifacts: input.missingArtifacts,
+    doesNotProve: [
+      "Pattern-based redaction does not prove every possible PII value was detected.",
+      "Debug bundle export does not prove source artifacts outside the bundle are secret-free.",
+    ],
   }) as Record<string, unknown>;
 }
 

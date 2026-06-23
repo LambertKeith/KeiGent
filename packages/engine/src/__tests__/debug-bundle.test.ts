@@ -117,6 +117,7 @@ describe("debug bundle export", () => {
         expect.objectContaining({ relativePath: "workflow-trajectory.json" }),
         expect.objectContaining({ relativePath: "eval-case.json" }),
         expect.objectContaining({ relativePath: "redacted-config.json" }),
+        expect.objectContaining({ relativePath: "redaction-summary.json" }),
         expect.objectContaining({ relativePath: "tool-summary.json" }),
         expect.objectContaining({ relativePath: "observability-summary.json" }),
         expect.objectContaining({ relativePath: "triage-summary.json" }),
@@ -128,6 +129,7 @@ describe("debug bundle export", () => {
     const workflow = await readFile(join(bundleDir, "workflow-trajectory.json"), "utf8");
     const evalCase = await readFile(join(bundleDir, "eval-case.json"), "utf8");
     const config = JSON.parse(await readFile(join(bundleDir, "redacted-config.json"), "utf8"));
+    const redactionSummary = JSON.parse(await readFile(join(bundleDir, "redaction-summary.json"), "utf8"));
     const observability = JSON.parse(await readFile(join(bundleDir, "observability-summary.json"), "utf8"));
     const triage = JSON.parse(await readFile(join(bundleDir, "triage-summary.json"), "utf8"));
     const failureSummary = await readFile(join(bundleDir, "failure-summary.md"), "utf8");
@@ -136,6 +138,24 @@ describe("debug bundle export", () => {
     expect(workflow).not.toContain("workflow-secret-token");
     expect(evalCase).not.toContain("sk-eval-case-secret-123456");
     expect(config).toMatchObject({ apiKey: "[REDACTED:...3456]", modelId: "test-model" });
+    expect(redactionSummary).toMatchObject({
+      schemaVersion: 1,
+      runId: "run_failed",
+      applied: true,
+      rawPayloadStored: false,
+      rules: expect.arrayContaining(["secret_like_keys", "secret_like_text", "user_home_path_segments"]),
+      scopes: expect.arrayContaining([
+        expect.objectContaining({ name: "record", redacted: true }),
+        expect.objectContaining({ name: "config", redacted: true }),
+        expect.objectContaining({ name: "generated_summaries", redacted: true }),
+        expect.objectContaining({ name: "artifact_copies", redacted: true }),
+      ]),
+      filesRedacted: expect.arrayContaining(["record.json", "redacted-config.json", "workflow-trajectory.json", "eval-case.json"]),
+      missingArtifacts: [],
+      doesNotProve: expect.arrayContaining(["Pattern-based redaction does not prove every possible PII value was detected."]),
+    });
+    expect(JSON.stringify(redactionSummary)).not.toContain("sk-config-secret-123456");
+    expect(JSON.stringify(redactionSummary)).not.toContain("sk-eval-case-secret-123456");
     expect(observability).toMatchObject({
       runId: "run_failed",
       timeline: [
