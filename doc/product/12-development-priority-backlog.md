@@ -411,6 +411,8 @@ observability-summary.json
 
 **验收标准**：debug bundle 脱敏；包含 failure summary；包含 budget/recovery/timeout/abort；缺失 latency 时显示 `not_recorded` 而不是伪造。
 
+**当前增量**：[`../evals/19-observability-debug-package-audit-delta-2026-06-23.md`](../evals/19-observability-debug-package-audit-delta-2026-06-23.md) 将现有 debug bundle 拆为独立 P2-03 验收包，绑定 observability summary、timeout/abort source signals、budget/recovery、failure taxonomy、redaction 与 `not_recorded` latency 边界。
+
 ### P2-04：Release / Packaging / Upgrade Path
 
 **目标**：从开发仓库走向本地产品。

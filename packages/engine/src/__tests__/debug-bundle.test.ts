@@ -203,4 +203,61 @@ describe("debug bundle export", () => {
     expect(failureSummary).toContain("tool_unavailable");
     expect(failureSummary).toContain("Inspect the failing tool output.");
   });
+
+  it("exports timeout and abort source signals without fabricating latency", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "keigent-debug-bundle-timeout-"));
+    const artifactDir = join(dir, "artifacts");
+    await mkdir(artifactDir, { recursive: true });
+    const workflowPath = join(artifactDir, "workflow.json");
+    await writeFile(workflowPath, JSON.stringify({ finalResponse: "[错误] parent timeout after child aborted" }), "utf8");
+    const bundleDir = join(dir, "bundle");
+    const record = failedRecord(workflowPath);
+    record.id = "run_timeout_abort";
+    record.status = "cancelled";
+    record.execution = {
+      ...record.execution,
+      exitReason: "error",
+      finalResponseSummary: "[错误] aborted after parent timeout",
+    };
+    record.workflow = {
+      ...record.workflow!,
+      exitReason: "timeout",
+      budgetExceeded: true,
+      budgetUsage: {
+        ...record.workflow!.budgetUsage,
+        durationMs: 120001,
+      },
+    };
+    record.failures = [{
+      code: "timeout",
+      layer: "budget",
+      message: "workflow parent timed out after aborting the child run",
+      nextAction: "Inspect timeout budget and child trajectory.",
+    }];
+
+    await exportRunDebugBundle(record, { bundleDir });
+
+    const observability = JSON.parse(await readFile(join(bundleDir, "observability-summary.json"), "utf8"));
+    expect(observability).toMatchObject({
+      runId: "run_timeout_abort",
+      status: "cancelled",
+      budget: {
+        exceeded: true,
+        usage: expect.objectContaining({ durationMs: 120001, recoveryAttempts: 2 }),
+        limits: expect.objectContaining({ timeoutMs: 120000 }),
+      },
+      recovery: { attempts: 2, limit: 2 },
+      timeoutAbort: {
+        timedOut: true,
+        aborted: true,
+        timeoutSources: expect.arrayContaining(["workflow.exitReason", "failures.timeout"]),
+        abortSources: ["execution.finalResponseSummary"],
+      },
+      latency: {
+        toolLatency: { status: "not_recorded" },
+        modelLatency: { status: "not_recorded" },
+      },
+      failureTaxonomy: [{ code: "timeout", layer: "budget", count: 1 }],
+    });
+  });
 });

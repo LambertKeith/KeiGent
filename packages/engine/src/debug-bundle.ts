@@ -179,10 +179,7 @@ function observabilitySummary(record: RunRecord): Record<string, unknown> {
       limit: record.workflow?.budget.maxRecoveryAttemptsPerRun ?? null,
     },
     providerUsage: record.workflow?.budgetUsage.providerUsage,
-    timeoutAbort: {
-      timedOut: record.workflow?.exitReason === "timeout" || record.execution.exitReason === "timeout" || record.failures.some((failure) => failure.code === "timeout"),
-      aborted: /aborted/i.test(record.execution.finalResponseSummary),
-    },
+    timeoutAbort: timeoutAbortSummary(record),
     latency: {
       totalDurationMs: record.workflow?.budgetUsage.durationMs ?? record.execution.durationMs,
       toolLatency: { status: "not_recorded" },
@@ -190,6 +187,30 @@ function observabilitySummary(record: RunRecord): Record<string, unknown> {
     },
     failureTaxonomy: [...failureTaxonomy.values()],
   }) as Record<string, unknown>;
+}
+
+function timeoutAbortSummary(record: RunRecord): Record<string, unknown> {
+  const timeoutSources = timeoutSourceSignals(record);
+  const abortSources = abortSourceSignals(record);
+  return {
+    timedOut: timeoutSources.length > 0,
+    aborted: abortSources.length > 0,
+    timeoutSources,
+    abortSources,
+  };
+}
+
+function timeoutSourceSignals(record: RunRecord): string[] {
+  const sources: string[] = [];
+  if (record.workflow?.exitReason === "timeout") sources.push("workflow.exitReason");
+  if (record.execution.exitReason === "timeout") sources.push("execution.exitReason");
+  if (record.failures.some((failure) => failure.code === "timeout")) sources.push("failures.timeout");
+  return sources;
+}
+
+function abortSourceSignals(record: RunRecord): string[] {
+  if (/aborted/i.test(record.execution.finalResponseSummary)) return ["execution.finalResponseSummary"];
+  return [];
 }
 
 function triageSummary(record: RunRecord): Record<string, unknown> {
