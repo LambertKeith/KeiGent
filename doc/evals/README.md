@@ -23,6 +23,7 @@
 | 验收报告 | [19 Observability Debug Package Audit Delta](19-observability-debug-package-audit-delta-2026-06-23.md) | P2-03 Observability / Debug Package 的当前验收 audit delta |
 | 验收报告 | [20 Release Packaging Upgrade Audit Delta](20-release-packaging-upgrade-audit-delta-2026-06-23.md) | P2-04 Release / Packaging / Upgrade Path 的当前验收 audit delta |
 | 验收报告 | [21 Performance Budget Controls Audit Delta](21-performance-budget-controls-audit-delta-2026-06-23.md) | P2-05 Performance / Budget Controls 的当前验收 audit delta |
+| 验收报告 | [22 P0/P1/P2 Completion Audit](22-p0-p1-p2-completion-audit-2026-06-23.md) | P0、P1、P2 全优先级完成审计 |
 
 当前本地 L2 fixture 基线入口：
 
