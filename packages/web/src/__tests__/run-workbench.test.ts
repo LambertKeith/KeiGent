@@ -226,6 +226,96 @@ describe("run workbench page", () => {
     expect(html).not.toContain("<td>Succeeded</td><td>execute</td><td>R4</td>");
   });
 
+  it("renders skill injection, candidate, blocked, and deprecated explanations in Run Detail", () => {
+    const view = buildRunWorkbenchView([record({
+      id: "run_skill_surface",
+      skills: [
+        {
+          name: "file-write",
+          status: "verified",
+          reason: "tag:file",
+          injected: true,
+          matched: true,
+          score: 12,
+          confidence: "high",
+          includedBody: true,
+          riskDelta: "R2",
+          evalCoverage: ["file-write-success"],
+        },
+        {
+          name: "candidate-browser",
+          status: "candidate",
+          reason: "tag:browser",
+          injected: false,
+          matched: true,
+          score: 7,
+          confidence: "medium",
+          includedBody: false,
+          exclusionReason: "candidate_not_enabled",
+          riskDelta: "R1",
+          evalCoverage: ["candidate-browser-positive"],
+        },
+        {
+          name: "blocked-shell",
+          status: "blocked",
+          reason: "tag:shell",
+          injected: false,
+          matched: true,
+          score: 9,
+          confidence: "medium",
+          includedBody: false,
+          exclusionReason: "blocked",
+          blockedReason: "unsafe shell command",
+          riskDelta: "R4",
+          evalCoverage: [],
+        },
+        {
+          name: "legacy-browser",
+          status: "deprecated",
+          reason: "tag:browser",
+          injected: false,
+          matched: true,
+          score: 5,
+          confidence: "low",
+          includedBody: false,
+          exclusionReason: "status_not_executable",
+          riskDelta: "R1",
+          evalCoverage: [],
+        },
+      ],
+    } as Partial<RunRecord>)], "run_skill_surface");
+
+    const html = renderRunWorkbench(view);
+
+    expect(html).toContain("file-write");
+    expect(html).toContain("verified");
+    expect(html).toContain("Matched");
+    expect(html).toContain("Body injected");
+    expect(html).toContain("high / 12");
+    expect(html).toContain("file-write-success");
+    expect(html).toContain("candidate-browser");
+    expect(html).toContain("candidate_not_enabled");
+    expect(html).toContain("blocked-shell");
+    expect(html).toContain("unsafe shell command");
+    expect(html).toContain("legacy-browser");
+    expect(html).toContain("status_not_executable");
+  });
+
+  it("renders an explicit no-skill empty state without implying runtime failure", () => {
+    const html = renderRunWorkbench(buildRunWorkbenchView([record({
+      id: "run_no_skill",
+      route: {
+        selectedProfile: "conversational",
+        source: "rule",
+        matchedSkillIds: [],
+      },
+      skills: [],
+    } as Partial<RunRecord>)], "run_no_skill"));
+
+    expect(html).toContain("No skills matched this run");
+    expect(html).not.toContain("Skill unavailable");
+  });
+
   it("renders P0-02 run list metadata required for audit triage", () => {
     const view = buildRunWorkbenchView([record({
       execution: {

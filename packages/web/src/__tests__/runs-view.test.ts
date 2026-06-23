@@ -371,4 +371,58 @@ describe("run record view model", () => {
       costStatus: "priced",
     });
   });
+
+  it("normalizes injected and excluded skill explanations for run review", () => {
+    const view = normalizeRunRecord(runRecord({
+      skills: [
+        {
+          name: "file-write",
+          status: "verified",
+          reason: "tag:file",
+          injected: true,
+          matched: true,
+          score: 12,
+          confidence: "high",
+          includedBody: true,
+          riskDelta: "R2",
+          evalCoverage: ["file-write-success"],
+        },
+        {
+          name: "blocked-shell",
+          status: "blocked",
+          reason: "tag:shell",
+          injected: false,
+          matched: true,
+          score: 9,
+          confidence: "medium",
+          includedBody: false,
+          exclusionReason: "blocked",
+          blockedReason: "unsafe shell command in /Users/privateuser/project",
+          riskDelta: "R4",
+          evalCoverage: [],
+        },
+      ],
+    } as Partial<RunRecord>));
+
+    expect(view.skills).toEqual([
+      expect.objectContaining({
+        name: "file-write",
+        status: "verified",
+        injected: true,
+        matched: true,
+        score: 12,
+        confidence: "high",
+        includedBody: true,
+        evalCoverage: ["file-write-success"],
+      }),
+      expect.objectContaining({
+        name: "blocked-shell",
+        status: "blocked",
+        injected: false,
+        matched: true,
+        exclusionReason: "blocked",
+        blockedReason: "unsafe shell command in /Users/[REDACTED_USER]/project",
+      }),
+    ]);
+  });
 });

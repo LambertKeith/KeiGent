@@ -417,9 +417,24 @@ function reviewPanel(review: ReviewSummary): ReviewSummary {
 }
 
 function skillsFor(record: RunRecord): SkillRunSummary[] {
-  if (record.skills?.length) return record.skills;
+  if (record.skills?.length) {
+    return record.skills.map((skill) => ({
+      name: redactText(skill.name),
+      ...(skill.status ? { status: redactText(skill.status) } : {}),
+      reason: redactText(skill.reason),
+      injected: skill.injected,
+      riskDelta: skill.riskDelta,
+      evalCoverage: skill.evalCoverage.map((item) => redactText(item)),
+      ...(typeof skill.matched === "boolean" ? { matched: skill.matched } : {}),
+      ...(typeof skill.score === "number" ? { score: skill.score } : {}),
+      ...(skill.confidence ? { confidence: skill.confidence } : {}),
+      ...(typeof skill.includedBody === "boolean" ? { includedBody: skill.includedBody } : {}),
+      ...(skill.exclusionReason ? { exclusionReason: skill.exclusionReason } : {}),
+      ...(skill.blockedReason ? { blockedReason: redactText(skill.blockedReason) } : {}),
+    }));
+  }
   return record.route.matchedSkillIds.map((name) => ({
-    name,
+    name: redactText(name),
     reason: "matched route",
     injected: true,
     riskDelta: "R0",

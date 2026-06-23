@@ -294,9 +294,14 @@ function renderRouteAndSkills(run: RunRecordDetailView): string {
   const skills = run.skills.map((skill) => `
     <tr>
       <td>${escapeHtml(skill.name)}</td>
-      <td>${skill.injected ? "Injected" : "Available"}</td>
-      <td>${escapeHtml(skill.riskDelta)}</td>
+      <td>${escapeHtml(skill.status ?? "not_reported")}</td>
+      <td>${skill.matched === false ? "Not matched" : "Matched"}</td>
+      <td>${skill.injected ? "Body injected" : "Not injected"}</td>
+      <td>${escapeHtml(`${skill.confidence ?? "not_reported"} / ${skill.score ?? "?"}`)}</td>
       <td>${escapeHtml(skill.reason)}</td>
+      <td>${escapeHtml(skill.exclusionReason ?? "None")}</td>
+      <td>${escapeHtml(skill.blockedReason ?? "None")}</td>
+      <td>${escapeHtml(skill.riskDelta)}</td>
       <td>${escapeHtml(skill.evalCoverage.join(", ") || "No eval coverage")}</td>
     </tr>
   `).join("");
@@ -307,7 +312,7 @@ function renderRouteAndSkills(run: RunRecordDetailView): string {
       ${renderFact("Matched skills", String(run.route.matchedSkillIds.length))}
       ${renderFact("Rationale", run.route.rationale ?? "Not reported")}
     </div>
-    <div class="table-wrap"><table><thead><tr><th>Skill</th><th>Status</th><th>Risk</th><th>Reason</th><th>Eval coverage</th></tr></thead><tbody>${skills}</tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Skill</th><th>Status</th><th>Match</th><th>Injection</th><th>Confidence</th><th>Reason</th><th>Exclusion</th><th>Blocked reason</th><th>Risk</th><th>Eval coverage</th></tr></thead><tbody>${skills || `<tr><td colspan="10">No skills matched this run</td></tr>`}</tbody></table></div>
   `);
 }
 

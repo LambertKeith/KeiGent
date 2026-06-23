@@ -276,6 +276,92 @@ describe("RunRecord", () => {
     })]);
   });
 
+  it("preserves injected and withheld skill match explanations in run records", () => {
+    const result = workflowResult();
+    const skillStep = result.childRuns[0]!.result.trajectory.steps.find((step) => step.kind === "skill_match");
+    if (!skillStep) throw new Error("missing skill match step");
+    skillStep.skillMatches = [
+      {
+        name: "file-write",
+        status: "verified",
+        score: 12,
+        signals: ["tag:file"],
+        matched: true,
+        injected: true,
+        matchedBy: ["tag:file"],
+        confidence: "high",
+        includedBody: true,
+        riskDelta: "declared R2",
+        evalCoverage: ["file-write-success"],
+      },
+      {
+        name: "candidate-browser",
+        status: "candidate",
+        score: 7,
+        signals: ["tag:browser"],
+        matched: true,
+        injected: false,
+        matchedBy: ["tag:browser"],
+        confidence: "medium",
+        includedBody: false,
+        exclusionReason: "candidate_not_enabled",
+        evalCoverage: ["candidate-browser-positive"],
+      },
+      {
+        name: "blocked-shell",
+        status: "blocked",
+        score: 9,
+        signals: ["tag:shell"],
+        matched: true,
+        injected: false,
+        matchedBy: ["tag:shell"],
+        confidence: "medium",
+        includedBody: false,
+        exclusionReason: "blocked",
+        blockedReason: "unsafe shell command",
+      },
+    ];
+    result.childRuns[0]!.trajectory = result.childRuns[0]!.result.trajectory;
+    result.trajectory.childRuns = result.childRuns;
+
+    const record = buildRunRecordFromWorkflowResult(result, { id: "run_skill_explanations" });
+
+    expect(record.skills).toEqual([
+      expect.objectContaining({
+        name: "file-write",
+        status: "verified",
+        reason: "tag:file",
+        injected: true,
+        matched: true,
+        score: 12,
+        confidence: "high",
+        includedBody: true,
+        riskDelta: "R2",
+        evalCoverage: ["file-write-success"],
+      }),
+      expect.objectContaining({
+        name: "candidate-browser",
+        status: "candidate",
+        reason: "tag:browser",
+        injected: false,
+        matched: true,
+        score: 7,
+        confidence: "medium",
+        includedBody: false,
+        exclusionReason: "candidate_not_enabled",
+        evalCoverage: ["candidate-browser-positive"],
+      }),
+      expect.objectContaining({
+        name: "blocked-shell",
+        status: "blocked",
+        injected: false,
+        matched: true,
+        exclusionReason: "blocked",
+        blockedReason: "unsafe shell command",
+      }),
+    ]);
+  });
+
   it("does not treat empty evidence as verified success", () => {
     const withoutEvidence = workflowResult("success");
     withoutEvidence.evidence = [];

@@ -119,6 +119,12 @@ export interface SkillRunSummary {
   injected: boolean;
   riskDelta: RiskLevel | "R0";
   evalCoverage: string[];
+  matched?: boolean;
+  score?: number;
+  confidence?: SkillMatchExplanation["confidence"];
+  includedBody?: boolean;
+  exclusionReason?: SkillMatchExplanation["exclusionReason"];
+  blockedReason?: string;
 }
 
 export interface ToolRunSummary {
@@ -879,6 +885,12 @@ function summarizeSkills(result: WorkflowResult): SkillRunSummary[] {
     injected: match.injected,
     riskDelta: parseRiskDelta(match.riskDelta),
     evalCoverage: (match.evalCoverage ?? []).map(redactText),
+    ...(typeof match.matched === "boolean" ? { matched: match.matched } : {}),
+    ...(typeof match.score === "number" ? { score: match.score } : {}),
+    ...(match.confidence ? { confidence: match.confidence } : {}),
+    ...(typeof match.includedBody === "boolean" ? { includedBody: match.includedBody } : {}),
+    ...(match.exclusionReason ? { exclusionReason: match.exclusionReason } : {}),
+    ...(match.blockedReason ? { blockedReason: redactText(match.blockedReason) } : {}),
   }));
 }
 
