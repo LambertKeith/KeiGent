@@ -642,7 +642,7 @@ next actions
 
 不要急着让 judge 自动打分。
 
-当前实现备注（2026-06-10）：已新增 deterministic L3 operator scenario fixture，覆盖 repo acceptance、failure triage、skill promotion review、Workbench review、governed execution、automation no-op review、readonly connector review；输出 accepted/deferred/rejected、confidence、false-confidence risks、blocking issues、next actions 与 evidence links。CLI 额外提供 `eval operator --packet` 生成人工验收 packet，并提供 `eval operator --acceptance <signoff.json>` 将人类 reviewer 的 JSON sign-off 校验为 `operator-human-acceptance` 结构化记录。fixture、packet 与 sign-off 校验都不等同真人审证本身，最终接受仍需要人类 reviewer 检查证据后签署或覆盖决定。
+当前实现备注（2026-06-23）：已新增 deterministic L3 operator scenario fixture，覆盖 repo acceptance、failure triage、skill promotion review、Workbench review、governed execution、automation no-op review、readonly connector review；输出 accepted/deferred/rejected、confidence、false-confidence risks、blocking issues、next actions 与 evidence links。CLI 额外提供 `eval operator --packet` 生成人工验收 packet，并提供 `eval operator --acceptance <signoff.json>` 将人类 reviewer 的 JSON sign-off 校验为 `operator-human-acceptance` 结构化记录。当前 P2-02 audit delta 独立绑定 proof boundary、evidence inspected、override reason、next actions 与 false-confidence risk acceptance；fixture、packet 与 sign-off 校验都不等同真人审证本身，最终接受仍需要人类 reviewer 检查证据后签署或覆盖决定。
 
 ### 7.5 Observability / Debug Package
 

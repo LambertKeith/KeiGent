@@ -380,11 +380,15 @@ P2 的目标是把本地 Agent Operations 系统做得更完整，但仍坚持 r
 
 **目标**：进入真实 operator 旅程验收，但不让 judge 自动替代人类 reviewer。
 
+**L3 operator scenario eval audit 规范**：[`../../docs/superpowers/specs/2026-06-23-l3-operator-scenario-eval-audit-design.md`](../../docs/superpowers/specs/2026-06-23-l3-operator-scenario-eval-audit-design.md)。
+
 **建议场景**：Repo acceptance、Failure triage、Skill promotion review、Workbench review、Governed execution、Automation no-op review、Connector readonly review。
 
 **评审输出**：accepted / deferred / rejected、confidence、false confidence risks、blocking issues、next actions、evidence links。
 
 **边界**：fixture、packet、sign-off 校验都不等同真人审证本身；最终接受仍需要人类 reviewer 检查证据后签署或覆盖决定。
+
+**当前增量**：[`../evals/18-l3-operator-scenario-eval-audit-delta-2026-06-23.md`](../evals/18-l3-operator-scenario-eval-audit-delta-2026-06-23.md) 将现有 L3 operator scenario fixture、acceptance packet 与 human sign-off validation 拆为独立 P2-02 验收包，绑定 proof boundary、evidence inspected、override reason 和 false-confidence risk acceptance。
 
 ### P2-03：Observability / Debug Package
 
