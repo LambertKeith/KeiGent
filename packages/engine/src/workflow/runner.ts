@@ -9,6 +9,7 @@ import {
   collectWorkspaceArtifacts,
   createIsolatedWorkspace,
   detectWorkspaceConflicts,
+  type WorkspaceArtifactSet,
 } from "../worktree-isolation.js";
 import { buildAutonomySummary } from "./autonomy.js";
 import type {
@@ -91,11 +92,15 @@ export class WorkflowRunner {
       policy: spec.policy,
     };
 
-    const { childRun, timedOut } = await this.executeChild(spec, child, emit);
+    const { childRun, timedOut, workspaceArtifacts } = await this.executeChild(spec, child, emit);
+    const childRuns = attachWorkspaceConflicts(
+      [childRun],
+      workspaceArtifacts ? [workspaceArtifacts] : [],
+    );
 
     const durationMs = Date.now() - startMs;
-    const budgetUsage = computeBudgetUsage([childRun], durationMs);
-    const budgetFailure = findBudgetFailure(spec, budgetUsage, [childRun]);
+    const budgetUsage = computeBudgetUsage(childRuns, durationMs);
+    const budgetFailure = findBudgetFailure(spec, budgetUsage, childRuns);
     const verification = evaluateVerification(spec, childRun);
     const mappedExit = timedOut
       ? "timeout"
@@ -119,7 +124,7 @@ export class WorkflowRunner {
       durationMs,
       exitReason: mappedExit,
       finalResponse: childRun.result.finalResponse,
-      childRuns: [childRun],
+      childRuns,
       evidence: workflowEvidence,
       events,
       emit,
@@ -153,7 +158,11 @@ export class WorkflowRunner {
     };
     const reviewerRun = await this.executeChild(input.spec, reviewer, input.emit);
 
-    const childRuns = [workerRun.childRun, reviewerRun.childRun];
+    const childRuns = attachWorkspaceConflicts(
+      [workerRun.childRun, reviewerRun.childRun],
+      [workerRun.workspaceArtifacts, reviewerRun.workspaceArtifacts]
+        .filter((item): item is WorkspaceArtifactSet => Boolean(item)),
+    );
     const durationMs = Date.now() - input.startMs;
     const budgetUsage = computeBudgetUsage(childRuns, durationMs);
     const budgetFailure = findBudgetFailure(input.spec, budgetUsage, childRuns);
@@ -197,7 +206,7 @@ export class WorkflowRunner {
     spec: WorkflowSpec,
     child: ChildRunSpec,
     emit: (event: WorkflowEvent) => void,
-  ): Promise<{ childRun: ChildRunResult; timedOut: boolean }> {
+  ): Promise<{ childRun: ChildRunResult; timedOut: boolean; workspaceArtifacts?: WorkspaceArtifactSet }> {
     emit({ kind: "child_start", workflowId: spec.id, childRunId: child.id, role: child.role });
     const workspace = spec.workspaceIsolation
       ? await createIsolatedWorkspace({
@@ -232,7 +241,7 @@ export class WorkflowRunner {
       timedOut = isTimeoutError(error);
       childResult = makeSyntheticErrorLoopResult(child.task, timedOut ? "[workflow] timeout" : errorMessage(error));
     }
-    const workspaceSummary = workspace
+    const workspaceResult = workspace
       ? await summarizeChildWorkspace(workspace, {
           cleanupMode: cleanupModeFor(spec.workspaceIsolation?.cleanupMode, childResult.exitReason, timedOut),
           reason: timedOut ? "workflow timeout" : childResult.exitReason === "success" ? undefined : `child exited with ${childResult.exitReason}`,
@@ -244,11 +253,15 @@ export class WorkflowRunner {
       role: child.role,
       result: childResult,
       trajectory: childResult.trajectory,
-      ...(workspaceSummary ? { workspace: workspaceSummary } : {}),
+      ...(workspaceResult ? { workspace: workspaceResult.summary } : {}),
     };
 
     emit({ kind: "child_done", workflowId: spec.id, childRunId: child.id, exitReason: childResult.exitReason });
-    return { childRun, timedOut };
+    return {
+      childRun,
+      timedOut,
+      ...(workspaceResult ? { workspaceArtifacts: workspaceResult.artifactSet } : {}),
+    };
   }
 
   private finish(input: {
@@ -319,37 +332,61 @@ export class WorkflowRunner {
 async function summarizeChildWorkspace(
   workspace: Awaited<ReturnType<typeof createIsolatedWorkspace>>,
   options: { cleanupMode: ChildWorkspaceCleanupMode; reason?: string },
-): Promise<ChildWorkspaceSummary> {
+): Promise<{ summary: ChildWorkspaceSummary; artifactSet: WorkspaceArtifactSet }> {
   const artifacts = await collectWorkspaceArtifacts(workspace);
   const workspaceWithArtifacts = { ...workspace, artifacts };
-  const conflicts = detectWorkspaceConflicts([{ workspace: workspaceWithArtifacts, artifacts }]);
 
   if (options.cleanupMode === "remove") {
     await cleanupIsolatedWorkspace(workspaceWithArtifacts, { mode: "remove" });
     return {
-      workspaceId: workspace.workspaceId,
-      branchName: workspace.branchName,
-      workspacePath: workspace.workspacePath,
-      manifestPath: workspace.manifestPath,
-      status: workspace.status,
-      cleanupMode: "remove",
-      artifacts,
-      conflicts,
+      summary: {
+        workspaceId: workspace.workspaceId,
+        branchName: workspace.branchName,
+        workspacePath: workspace.workspacePath,
+        manifestPath: workspace.manifestPath,
+        status: workspace.status,
+        cleanupMode: "remove",
+        artifacts,
+        conflicts: [],
+      },
+      artifactSet: { workspace: workspaceWithArtifacts, artifacts },
     };
   }
 
   await cleanupIsolatedWorkspace(workspaceWithArtifacts, { mode: "mark_abandoned", reason: options.reason });
   return {
-    workspaceId: workspace.workspaceId,
-    branchName: workspace.branchName,
-    workspacePath: workspace.workspacePath,
-    manifestPath: workspace.manifestPath,
-    status: "abandoned",
-    cleanupMode: "mark_abandoned",
-    ...(options.reason ? { abandonedReason: options.reason } : {}),
-    artifacts,
-    conflicts,
+    summary: {
+      workspaceId: workspace.workspaceId,
+      branchName: workspace.branchName,
+      workspacePath: workspace.workspacePath,
+      manifestPath: workspace.manifestPath,
+      status: "abandoned",
+      cleanupMode: "mark_abandoned",
+      ...(options.reason ? { abandonedReason: options.reason } : {}),
+      artifacts,
+      conflicts: [],
+    },
+    artifactSet: { workspace: workspaceWithArtifacts, artifacts },
   };
+}
+
+function attachWorkspaceConflicts(
+  childRuns: ChildRunResult[],
+  artifactSets: WorkspaceArtifactSet[],
+): ChildRunResult[] {
+  if (artifactSets.length < 2) return childRuns;
+
+  const conflicts = detectWorkspaceConflicts(artifactSets);
+  if (conflicts.length === 0) return childRuns;
+
+  for (const child of childRuns) {
+    if (!child.workspace) continue;
+    child.workspace = {
+      ...child.workspace,
+      conflicts: conflicts.filter((conflict) => conflict.workspaceIds.includes(child.workspace!.workspaceId)),
+    };
+  }
+  return childRuns;
 }
 
 function cleanupModeFor(

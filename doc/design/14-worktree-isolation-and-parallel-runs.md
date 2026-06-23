@@ -106,6 +106,8 @@ createWorkflowSpec({
 
 `detectWorkspaceConflicts()` 只报告相同 `relativePath` 被多个 workspace 产出的情况。
 
+`WorkflowRunner` 在显式 `workspaceIsolation` 下会把跨 child conflict summary 写回每个相关 child workspace summary。
+
 它证明：
 
 - 哪些 child run 产出同一路径；
@@ -134,7 +136,7 @@ abandoned workspace 是产品对象，不应静默丢弃。后续 debug bundle �
 接入状态：
 
 1. RunRecord child summary 增加 `workspaceId`。（已完成：child summary 可携带 workspace id、branch、cleanup state、artifact 与 conflict 摘要。）
-2. Workflow child runner 在显式 `workspaceIsolation` 配置下创建 workspace。（已完成：成功可 remove，失败/超时可 mark abandoned。）
+2. Workflow child runner 在显式 `workspaceIsolation` 配置下创建 workspace。（已完成：成功可 remove，失败/超时可 mark abandoned，跨 child 同路径 artifact conflict 会进入 child workspace summary。）
 3. ToolRegistry file tools 将 child workspace 作为 sandbox root。（已完成：production child adapter 将 workspace path 传给 `LoopEngine`。）
 4. Reviewer 通过 artifact / diff / test report 审查，不写 worker workspace。
 5. Workbench Run Detail 展示 workspace id、artifacts、conflicts、cleanup state。（已完成：Run Detail 的 Child workspaces 面板展示这些审计字段。）

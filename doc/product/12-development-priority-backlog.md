@@ -296,6 +296,8 @@ Does not prove: no hidden failures outside this scope.
 
 **先决文档**：`doc/design/14-worktree-isolation-and-parallel-runs.md` 必须保持为事实源。
 
+**Worktree Isolation conflict summary 规范**：[`../../docs/superpowers/specs/2026-06-23-worktree-isolation-conflict-summary-design.md`](../../docs/superpowers/specs/2026-06-23-worktree-isolation-conflict-summary-design.md)。
+
 **最小能力**：
 
 - create isolated workspace；
@@ -306,6 +308,8 @@ Does not prove: no hidden failures outside this scope.
 - parent / child run mapping。
 
 **验收标准**：每个 child run 有 workspace id；cleanup 可控；abandoned work 有记录；reviewer 不直接在 worker workspace 写；artifact 能回收；failure 不污染主 workspace。
+
+**当前增量**：[`../evals/14-worktree-isolation-conflict-summary-delta-2026-06-23.md`](../evals/14-worktree-isolation-conflict-summary-delta-2026-06-23.md) 强化 workflow-level 跨 child artifact conflict summary，保证 `WorkflowResult` 与 workflow trajectory 可审计。
 
 ### P1-04：Schema Migration / Redaction Hardening
 

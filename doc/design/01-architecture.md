@@ -311,7 +311,7 @@ Worktree isolation 当前是 P1 foundation，不是 fanout 产品化。
 当前不提供：
 
 - 真实 `git worktree add` provider。
-- workflow runner 自动创建 child workspace。
+- workflow runner 默认不会自动创建 child workspace；显式 `workspaceIsolation` 配置下才创建。
 - 自动 merge 或冲突解决。
 
 详见 [`14-worktree-isolation-and-parallel-runs.md`](14-worktree-isolation-and-parallel-runs.md)。

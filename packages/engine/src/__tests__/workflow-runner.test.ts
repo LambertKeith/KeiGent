@@ -807,6 +807,58 @@ describe("WorkflowRunner", () => {
     await expect(readFile(join(childWorkspace!, ".keigent-workspace.json"), "utf8")).resolves.toContain("\"status\": \"abandoned\"");
   });
 
+  it("summarizes cross-child workspace conflicts for isolated reviewed loops", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "keigent-workflow-conflict-"));
+    const reviewedTask = task({
+      successDef: {
+        goal: "Review rubric",
+        assertions: [{ description: "reviewer accepts result", signal: "text" }],
+      },
+    });
+    const runner = new WorkflowRunner({
+      async runChild(child, options) {
+        await writeFile(join(options!.workspacePath!, "shared-result.txt"), child.role, "utf8");
+        return child.role === "worker"
+          ? loopResult({ finalResponse: "worker done" })
+          : loopResult({
+              finalResponse: "review passed",
+              checkpointsPassed: 1,
+              trajectory: trajectory({
+                steps: [{
+                  iteration: 1,
+                  kind: "checkpoint",
+                  checkpointDesc: "reviewer accepts result",
+                  verdictPassed: true,
+                  verdictEvidence: "accepted",
+                  snapshot: { raw: {} },
+                }],
+              }),
+            });
+      },
+    });
+
+    const result = await runner.run(createWorkflowSpec({
+      id: "wf-isolated-conflict",
+      task: reviewedTask,
+      mode: "reviewed-loop",
+      workspaceIsolation: { rootDir, cleanupMode: "remove" },
+    }));
+
+    const expectedConflict = {
+      relativePath: "shared-result.txt",
+      workspaceIds: ["ws_wf_isolated_conflict_worker_1", "ws_wf_isolated_conflict_reviewer_1"],
+      childRunIds: ["wf-isolated-conflict:worker-1", "wf-isolated-conflict:reviewer-1"],
+    };
+    expect(result.childRuns.map((child) => child.workspace?.conflicts)).toEqual([
+      [expectedConflict],
+      [expectedConflict],
+    ]);
+    expect(result.trajectory.childRuns.map((child) => child.workspace?.conflicts)).toEqual([
+      [expectedConflict],
+      [expectedConflict],
+    ]);
+  });
+
   it("marks budget_exceeded when aggregate priced provider cost exceeds the workflow budget", async () => {
     const child = loopResult({
       providerUsage: {
