@@ -73,7 +73,7 @@ rg "P2-02|L3 Operator Scenario Eval|operator-human-acceptance|Fixture results ar
 
 Expected: all commands pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-06-23-l3-operator-scenario-eval-audit-design.md docs/superpowers/plans/2026-06-23-l3-operator-scenario-eval-audit.md doc/evals/18-l3-operator-scenario-eval-audit-delta-2026-06-23.md doc/evals/README.md doc/product/12-development-priority-backlog.md doc/product/09-agent-operations-maturity-roadmap.md
