@@ -46,7 +46,39 @@ describe("workflow planner", () => {
 
     expect(spec.mode).toBe("reviewed-loop");
     expect(spec.budget.maxChildRuns).toBeGreaterThanOrEqual(2);
-    expect(spec.policy).toMatchObject({ verifierReadonly: true, allowExternalSideEffects: false });
+    expect(spec.policy).toMatchObject({
+      reviewerReadonly: true,
+      verifierReadonly: true,
+      maxPermission: "readonly",
+      maxRiskLevel: "R0",
+      allowExternalSideEffects: false,
+    });
+  });
+
+  it("does not let caller-provided reviewed-loop policy widen reviewer permissions", () => {
+    const spec = createWorkflowSpec({
+      id: "wf-reviewed-wide-policy",
+      task: task({
+        successDef: {
+          goal: "Review rubric",
+          assertions: [{ description: "reviewer accepts result", signal: "text" }],
+        },
+      }),
+      mode: "reviewed-loop",
+      policy: {
+        maxPermission: "dangerous",
+        maxRiskLevel: "R5",
+        allowExternalSideEffects: true,
+      },
+    });
+
+    expect(spec.policy).toMatchObject({
+      reviewerReadonly: true,
+      verifierReadonly: true,
+      maxPermission: "readonly",
+      maxRiskLevel: "R0",
+      allowExternalSideEffects: false,
+    });
   });
 
   it("attaches a default review rubric for reviewed-loop", () => {

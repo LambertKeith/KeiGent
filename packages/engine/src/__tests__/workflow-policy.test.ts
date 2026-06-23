@@ -34,7 +34,21 @@ describe("workflow policy helpers", () => {
     expect(isToolAllowedByWorkflowPolicy(tool({ permission: "readonly", riskLevel: "R1", sideEffect: "external" }), policy, "worker")).toBe(false);
   });
 
-  it("forces reviewer and legacy verifier children to readonly tools when verifierReadonly is enabled", () => {
+  it("forces reviewer children to readonly tools when reviewerReadonly is enabled", () => {
+    const policy: WorkflowPolicy = {
+      maxPermission: "dangerous",
+      maxRiskLevel: "R5",
+      allowExternalSideEffects: true,
+      reviewerReadonly: true,
+    };
+
+    expect(isToolAllowedByWorkflowPolicy(tool({ permission: "readonly", sideEffect: "none" }), policy, "reviewer")).toBe(true);
+    expect(isToolAllowedByWorkflowPolicy(tool({ permission: "write", sideEffect: "local" }), policy, "reviewer")).toBe(false);
+    expect(isToolAllowedByWorkflowPolicy(tool({ permission: "readonly", sideEffect: "external" }), policy, "reviewer")).toBe(false);
+    expect(isToolAllowedByWorkflowPolicy(tool({ permission: "write", sideEffect: "local" }), policy, "worker")).toBe(true);
+  });
+
+  it("keeps legacy verifierReadonly compatibility for reviewer and verifier children", () => {
     const policy: WorkflowPolicy = {
       maxPermission: "dangerous",
       maxRiskLevel: "R5",

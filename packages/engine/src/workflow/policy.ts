@@ -21,6 +21,11 @@ const RISK_ORDER: Record<RiskLevel, number> = {
 export function isToolAllowedByWorkflowPolicy(tool: ToolDef, policy: WorkflowPolicy | undefined, role: WorkflowChildRole): boolean {
   if (!policy) return true;
 
+  if (policy.reviewerReadonly === true && role === "reviewer") {
+    if (tool.permission !== "readonly") return false;
+    if (tool.sideEffect !== "none") return false;
+  }
+
   if (policy.verifierReadonly === true && (role === "reviewer" || role === "verifier")) {
     if (tool.permission !== "readonly") return false;
     if (tool.sideEffect !== "none") return false;

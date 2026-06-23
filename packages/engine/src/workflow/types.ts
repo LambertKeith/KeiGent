@@ -73,6 +73,8 @@ export interface WorkflowPolicy {
   allowExternalSideEffects?: boolean;
   /** Parent-approved resource scopes that may be inherited by child execution. */
   approvalScopes?: string[];
+  /** Force reviewer children to readonly/no-side-effect tools. */
+  reviewerReadonly?: boolean;
   /** Force verifier children to readonly/no-side-effect tools. */
   verifierReadonly?: boolean;
   /** P0 compatibility flag retained for existing callers. */

@@ -236,6 +236,8 @@ P1 的目标是把 KeiGent 从“可审计单次 run”推进到“本地 operat
 
 **目标**：把 maker / checker 分离做成产品语义，而不是同一模型自证成功。
 
+**Reviewed-loop V1 规范**：[`../../docs/superpowers/specs/2026-06-23-reviewed-loop-v1-design.md`](../../docs/superpowers/specs/2026-06-23-reviewed-loop-v1-design.md)。
+
 **目标流程**：
 
 ```text
@@ -255,6 +257,8 @@ worker 执行
 - parent 能汇总 worker / reviewer 结果；
 - Workbench 能区分 worker / reviewer timeline；
 - reviewed-loop 有 real-world L2 fixture。
+
+**当前增量**：[`../evals/12-reviewed-loop-v1-delta-2026-06-23.md`](../evals/12-reviewed-loop-v1-delta-2026-06-23.md) 显式化 `reviewerReadonly` policy contract，并验证宽松 caller policy 不会放宽 reviewer child。
 
 ### P1-02：Local Automation Triage
 

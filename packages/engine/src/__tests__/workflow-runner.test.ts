@@ -154,7 +154,13 @@ describe("WorkflowRunner", () => {
     expect(seenChildren[1]).toMatchObject({
       id: "wf-reviewed:reviewer-1",
       role: "reviewer",
-      policy: { verifierReadonly: true, allowExternalSideEffects: false },
+      policy: {
+        reviewerReadonly: true,
+        verifierReadonly: true,
+        maxPermission: "readonly",
+        maxRiskLevel: "R0",
+        allowExternalSideEffects: false,
+      },
     });
     expect(events.filter((event) => event.kind === "child_start").map((event) => [event.childRunId, event.role])).toEqual([
       ["wf-reviewed:worker-1", "worker"],
@@ -170,6 +176,103 @@ describe("WorkflowRunner", () => {
     );
     expect(result.finalResponse).toContain("worker done");
     expect(result.finalResponse).toContain("review passed");
+  });
+
+  it("does not let a wide workflow policy widen reviewer child permissions", async () => {
+    const reviewedTask = task({
+      successDef: {
+        goal: "Review rubric",
+        assertions: [{ description: "reviewer accepts result", signal: "text" }],
+      },
+    });
+    const seenChildren: Array<{ role: string; policy?: unknown }> = [];
+    const runner = new WorkflowRunner({
+      async runChild(child) {
+        seenChildren.push({ role: child.role, policy: child.policy });
+        return child.role === "worker"
+          ? loopResult({ finalResponse: "worker done" })
+          : loopResult({
+              finalResponse: "review passed",
+              checkpointsPassed: 1,
+              trajectory: trajectory({
+                steps: [{
+                  iteration: 1,
+                  kind: "checkpoint",
+                  checkpointDesc: "reviewer accepts result",
+                  verdictPassed: true,
+                  verdictEvidence: "accepted",
+                  snapshot: { raw: {} },
+                }],
+              }),
+            });
+      },
+    });
+
+    await runner.run(createWorkflowSpec({
+      id: "wf-reviewed-wide",
+      task: reviewedTask,
+      mode: "reviewed-loop",
+      policy: {
+        maxPermission: "dangerous",
+        maxRiskLevel: "R5",
+        allowExternalSideEffects: true,
+      },
+    }));
+
+    expect(seenChildren.find((child) => child.role === "reviewer")?.policy).toMatchObject({
+      reviewerReadonly: true,
+      verifierReadonly: true,
+      maxPermission: "readonly",
+      maxRiskLevel: "R0",
+      allowExternalSideEffects: false,
+    });
+  });
+
+  it("does not let reviewer success override worker failure", async () => {
+    const reviewedTask = task({
+      successDef: {
+        goal: "Review rubric",
+        assertions: [{ description: "reviewer accepts result", signal: "text" }],
+      },
+    });
+    const runner = new WorkflowRunner({
+      async runChild(child) {
+        return child.role === "worker"
+          ? loopResult({ exitReason: "error", finalResponse: "worker failed" })
+          : loopResult({
+              finalResponse: "review passed",
+              checkpointsPassed: 1,
+              trajectory: trajectory({
+                steps: [{
+                  iteration: 1,
+                  kind: "checkpoint",
+                  checkpointDesc: "reviewer accepts result",
+                  verdictPassed: true,
+                  verdictEvidence: "reviewer accepted worker output",
+                  snapshot: { raw: {} },
+                }],
+              }),
+            });
+      },
+    });
+
+    const result = await runner.run(createWorkflowSpec({ id: "wf-reviewed-worker-fails", task: reviewedTask, mode: "reviewed-loop" }));
+
+    expect(result.exitReason).toBe("child_error");
+    expect(result.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: "child_result",
+        passed: false,
+        message: "worker exited with error",
+        sourceChildRunId: "wf-reviewed-worker-fails:worker-1",
+      }),
+      expect.objectContaining({
+        kind: "checkpoint",
+        passed: true,
+        message: "reviewer accepted worker output",
+        sourceChildRunId: "wf-reviewed-worker-fails:reviewer-1",
+      }),
+    ]));
   });
 
   it("records reviewed-loop rubric and reviewer issues without letting reviewer override worker evidence", async () => {

@@ -3,6 +3,7 @@ import { buildEvidenceBundle } from "../evidence.js";
 import { failureSummaryForWorkflowExit } from "../failures.js";
 import type { Assertion, LoopResult, ProgressEvent, ProviderUsageSummary, Task, Trajectory } from "../types.js";
 import { addProviderUsage } from "../provider-usage.js";
+import { reviewerReadonlyPolicy } from "./planner.js";
 import {
   cleanupIsolatedWorkspace,
   collectWorkspaceArtifacts,
@@ -148,11 +149,7 @@ export class WorkflowRunner {
         ...input.spec.rootTask,
         goal: `${input.spec.goal}\n\nReview worker result:\n${workerRun.childRun.result.finalResponse}`,
       },
-      policy: {
-        ...input.spec.policy,
-        verifierReadonly: true,
-        allowExternalSideEffects: false,
-      },
+      policy: reviewerReadonlyPolicy(input.spec.policy),
     };
     const reviewerRun = await this.executeChild(input.spec, reviewer, input.emit);
 

@@ -40,7 +40,7 @@ export function createWorkflowSpec(input: {
     throw new Error("reviewed-loop requires budget.maxChildRuns >= 2");
   }
   const policy = mode === "reviewed-loop"
-    ? { ...input.policy, verifierReadonly: true, allowExternalSideEffects: false }
+    ? reviewerReadonlyPolicy(input.policy)
     : input.policy;
 
   return {
@@ -67,5 +67,16 @@ function defaultReviewRubric(task: Task): ReviewRubric {
     forbiddenClaims: ["Do not claim reviewer acceptance without a passed reviewer checkpoint."],
     falseConfidenceRisks: ["Reviewer approval cannot override failed worker evidence."],
     blockingIssueRules: ["Any failed reviewer checkpoint is blocking."],
+  };
+}
+
+export function reviewerReadonlyPolicy(policy: WorkflowPolicy | undefined): WorkflowPolicy {
+  return {
+    ...policy,
+    reviewerReadonly: true,
+    verifierReadonly: true,
+    maxPermission: "readonly",
+    maxRiskLevel: "R0",
+    allowExternalSideEffects: false,
   };
 }
