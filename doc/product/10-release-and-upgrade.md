@@ -135,6 +135,8 @@ git diff --check
 
 `corepack pnpm verify:node` 是 release gate，必须在 Node.js `>=22.19.0` 环境中通过。较低 Node 版本可以用于本地探索和部分开发验证，但不得作为正式 release acceptance 结果。
 
+GitHub Actions CI 定义位于 `.github/workflows/ci.yml`，在 Node.js `22.19.0` 上运行 deterministic release gates：install、`verify:node`、check、test、build、first-run guide bin JSON、upgrade-check guide bin JSON 和 `runs list --compact` bin JSON。该 workflow 不需要真实 API secret，也不运行 browser verification。
+
 Browser 验收应显式使用已安装的 Playwright browser cache，例如：
 
 ```bash
@@ -156,6 +158,7 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/data/home/.cache/ms-playwright corepack pnpm --fil
 - `node packages/cli/bin/keigent.mjs guide first-run --compact` 输出为可解析 JSON，并明确 `does_not_write_config`、`does_not_run_network_checks`、`does_not_claim_product_health`。
 - `node packages/cli/bin/keigent.mjs guide upgrade-check --compact` 输出为可解析 JSON，并明确 `does_not_modify_config`、`does_not_migrate_run_store`、`does_not_claim_upgrade_safe`。
 - `corepack pnpm --filter @keigent/cli start doctor --compact` 输出为可解析 JSON。
+- `.github/workflows/ci.yml` 使用 Node.js `22.19.0`，并运行 release-quality deterministic gates。
 - `node packages/cli/bin/keigent.mjs runs list --compact` 输出为可解析 JSON，并包含只读 `migrationReport`，不得静默写回 legacy / unsupported RunRecord。
 - `node packages/cli/bin/keigent.mjs skill list --compact` 输出为可解析 JSON，并展示非执行状态 skill 的只读治理信息。
 - `corepack pnpm --filter @keigent/cli start web --api --print` 输出 Workbench URL、API URL 和 `VITE_KEIGENT_API_URL` dev command。

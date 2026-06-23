@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - agent-operations-next-round
+  pull_request:
+    branches:
+      - main
+      - agent-operations-next-round
+
+jobs:
+  verify:
+    name: Node 22.19 release gates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Verify Node release version
+        run: corepack pnpm verify:node
+
+      - name: Typecheck
+        run: corepack pnpm -r check
+
+      - name: Test
+        run: corepack pnpm -r test
+
+      - name: Build
+        run: corepack pnpm -r --if-present build
+
+      - name: Verify clean first-run guide bin output
+        run: node packages/cli/bin/keigent.mjs guide first-run --compact
+
+      - name: Verify clean upgrade guide bin output
+        run: node packages/cli/bin/keigent.mjs guide upgrade-check --compact
+
+      - name: Verify clean runs list bin output
+        run: node packages/cli/bin/keigent.mjs runs list --compact

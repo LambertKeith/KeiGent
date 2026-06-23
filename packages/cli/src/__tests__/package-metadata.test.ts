@@ -79,4 +79,20 @@ describe("CLI package metadata", () => {
       }),
     });
   });
+
+  it("declares Node 22.19 CI gates for release packaging", async () => {
+    const repoRoot = join(process.cwd(), "../..");
+    const workflow = await readFile(join(repoRoot, ".github/workflows/ci.yml"), "utf8");
+
+    expect(workflow).toContain("node-version: 22.19.0");
+    expect(workflow).toContain("corepack prepare pnpm@10.33.2 --activate");
+    expect(workflow).toContain("corepack pnpm install --frozen-lockfile");
+    expect(workflow).toContain("corepack pnpm verify:node");
+    expect(workflow).toContain("corepack pnpm -r check");
+    expect(workflow).toContain("corepack pnpm -r test");
+    expect(workflow).toContain("corepack pnpm -r --if-present build");
+    expect(workflow).toContain("node packages/cli/bin/keigent.mjs guide first-run --compact");
+    expect(workflow).toContain("node packages/cli/bin/keigent.mjs guide upgrade-check --compact");
+    expect(workflow).toContain("node packages/cli/bin/keigent.mjs runs list --compact");
+  });
 });

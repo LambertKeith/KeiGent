@@ -423,6 +423,8 @@ observability-summary.json
 
 **验收标准**：新用户能按 first-run guide 完成配置与最小 eval；config upgrade 有兼容边界；doctor 给出可执行修复建议；release checklist 可复现。
 
+**当前增量**：[`../evals/20-release-packaging-upgrade-audit-delta-2026-06-23.md`](../evals/20-release-packaging-upgrade-audit-delta-2026-06-23.md) 将现有 release / upgrade path 拆为独立 P2-04 验收包，并补齐 Node 22.19 GitHub Actions CI workflow，绑定 first-run guide、upgrade-check、release checklist、config compatibility、doctor diagnostics 与 clean bin shim JSON gates。
+
 ### P2-05：Performance / Budget Controls
 
 **目标**：让 loop 不失控。

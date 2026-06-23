@@ -21,6 +21,7 @@
 | 验收报告 | [17 Readonly Connector Baseline Audit Delta](17-readonly-connector-baseline-audit-delta-2026-06-23.md) | P2-01 Readonly Connector Baseline 的当前验收 audit delta |
 | 验收报告 | [18 L3 Operator Scenario Eval Audit Delta](18-l3-operator-scenario-eval-audit-delta-2026-06-23.md) | P2-02 L3 Operator Scenario Eval 的当前验收 audit delta |
 | 验收报告 | [19 Observability Debug Package Audit Delta](19-observability-debug-package-audit-delta-2026-06-23.md) | P2-03 Observability / Debug Package 的当前验收 audit delta |
+| 验收报告 | [20 Release Packaging Upgrade Audit Delta](20-release-packaging-upgrade-audit-delta-2026-06-23.md) | P2-04 Release / Packaging / Upgrade Path 的当前验收 audit delta |
 
 当前本地 L2 fixture 基线入口：
 
