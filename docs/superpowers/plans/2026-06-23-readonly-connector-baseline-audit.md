@@ -69,7 +69,7 @@ rg "P2-01|Readonly Connector Baseline|readonly connector|sourceCollected|github_
 
 Expected: all commands pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-06-23-readonly-connector-baseline-audit-design.md docs/superpowers/plans/2026-06-23-readonly-connector-baseline-audit.md doc/evals/17-readonly-connector-baseline-audit-delta-2026-06-23.md doc/evals/README.md doc/product/12-development-priority-backlog.md doc/product/09-agent-operations-maturity-roadmap.md
