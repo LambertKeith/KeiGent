@@ -88,11 +88,20 @@ export async function runAutomationCommand(
       print(options, "No triage candidates found.");
       print(options, `Status: no-op`);
       print(options, `Scope: ${scope}`);
+      print(options, `Automation record: ${outputReport.automationRecord.path}`);
       print(options, `Report: ${reportPath}`);
+      print(options, `Trajectory: ${trajectoryPath}`);
+      print(options, `Next action: ${outputReport.nextAction}`);
       print(options, `Does not prove: ${outputReport.automationRecord.doesNotProve.join("; ")}`);
       return;
     }
 
+    print(options, `Triage candidates: ${outputReport.totalCandidates}`);
+    print(options, `Automation record: ${outputReport.automationRecord.path}`);
+    print(options, `Report: ${reportPath}`);
+    print(options, `Trajectory: ${trajectoryPath}`);
+    print(options, `Next action: ${outputReport.nextAction}`);
+    print(options, `Source runs: ${outputReport.sourceRunIds.join(", ")}`);
     for (const candidate of candidates) {
       print(options, `${candidate.runId}\t${candidate.status}\t${candidate.reason}\t${candidate.nextAction}`);
     }

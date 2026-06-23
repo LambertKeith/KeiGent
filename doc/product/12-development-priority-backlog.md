@@ -264,6 +264,8 @@ worker 执行
 
 **目标**：做第一个低风险 automation，用于本地 run store 的失败/降级/证据缺口 triage。
 
+**Local Automation Triage 规范**：[`../../docs/superpowers/specs/2026-06-23-local-automation-triage-design.md`](../../docs/superpowers/specs/2026-06-23-local-automation-triage-design.md)。
+
 **建议入口**：
 
 ```bash
@@ -285,6 +287,8 @@ Does not prove: no hidden failures outside this scope.
 ```
 
 **验收用例**：无 failed runs -> no-op；failed assertion -> blocking issue；degraded run -> review needed；missing evidence -> insufficient evidence；stale schema -> migration warning；report contains source run ids。
+
+**当前增量**：[`../evals/13-local-automation-triage-delta-2026-06-23.md`](../evals/13-local-automation-triage-delta-2026-06-23.md) 强化默认 human 输出，显式展示 automation record、report、trajectory、source run ids、next action 与 no-op proof boundary。
 
 ### P1-03：Worktree Isolation Foundation
 

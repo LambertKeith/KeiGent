@@ -83,6 +83,25 @@ describe("automation commands", () => {
     });
   });
 
+  it("prints no-op local triage record paths and next action in the default human output", async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), "keigent-automation-noop-human-"));
+    await saveRunRecord(record("run_ok"), { runsDir });
+    const output = capture();
+
+    await runAutomationCommand(["triage", "local"], { runsDir, stdout: output.stdout });
+
+    expect(output.lines).toEqual([
+      "No triage candidates found.",
+      "Status: no-op",
+      "Scope: last 20 runs",
+      expect.stringContaining("Automation record: "),
+      expect.stringContaining("Report: "),
+      expect.stringContaining("Trajectory: "),
+      "Next action: Review automation scope before treating no-op as health.",
+      "Does not prove: No hidden failures outside this scope.",
+    ]);
+  });
+
   it("reports failed, degraded, unknown, and missing-evidence runs with source ids", async () => {
     const runsDir = await mkdtemp(join(tmpdir(), "keigent-automation-candidates-"));
     await saveRunRecord(record("run_failed", {
@@ -170,6 +189,28 @@ describe("automation commands", () => {
       status: "attention_required",
       sourceRunIds: expect.arrayContaining(["run_failed", "run_degraded", "run_missing_evidence", "run_unknown"]),
     });
+  });
+
+  it("prints attention-required local triage record paths, source ids, and next action in the default human output", async () => {
+    const runsDir = await mkdtemp(join(tmpdir(), "keigent-automation-candidates-human-"));
+    await saveRunRecord(record("run_failed", {
+      status: "failed",
+      evidence: { status: "failed", total: 1, passed: 0, failed: 1, sources: ["assertion"], blocking: ["missing output"] },
+      nextAction: "Inspect the failed assertion.",
+    }), { runsDir });
+    const output = capture();
+
+    await runAutomationCommand(["triage", "local"], { runsDir, stdout: output.stdout });
+
+    expect(output.lines).toEqual([
+      "Triage candidates: 1",
+      expect.stringContaining("Automation record: "),
+      expect.stringContaining("Report: "),
+      expect.stringContaining("Trajectory: "),
+      "Next action: Review 1 triage candidates before retrying or accepting affected runs.",
+      "Source runs: run_failed",
+      "run_failed\tfailed\tblocking_failure\tInspect the failed assertion.",
+    ]);
   });
 
   it("triages legacy records with migration warnings even when normalized as successful", async () => {
