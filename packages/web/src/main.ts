@@ -1,12 +1,14 @@
 import { NAV_ITEMS, type AppSection } from "./app/nav.js";
 import { hashForSection, parseHashRoute, type WorkbenchRoute } from "./app/hash-route.js";
 import { apiBaseUrlFromEnv, createKeigentApiClient } from "./api/client.js";
+import { createApiConnectionMonitor, type ApiConnectionState } from "./api/connection.js";
+import { buildChatWorkbenchView, renderChatWorkbench } from "./chat/workbench.js";
 import { appendProgressEvents } from "./conversation/live-console.js";
-import type { NormalizeRunOptions, ProgressEvent } from "./conversation/normalize.js";
-import { auditHandoffFromStreamEvent, progressEventsFromStreamEvent, renderWebRunLauncher, type WebRunAuditHandoff, type WebRunStreamEvent } from "./conversation/web-run.js";
+import type { NormalizeRunOptions } from "./conversation/normalize.js";
+import { auditHandoffFromStreamEvent, progressEventsFromStreamEvent, type WebRunAuditHandoff, type WebRunStreamEvent } from "./conversation/web-run.js";
 import { normalizeRealWorldEvalReport } from "./dashboard/report-model.js";
 import { renderRealWorldEvalDashboard, sampleRealWorldEvalDashboardView } from "./dashboard/workbench.js";
-import { SAMPLE_CONFIG_VIEW, deriveConfigStatus } from "./config/config-view.js";
+import { SAMPLE_CONFIG_VIEW, deriveConfigStatus, normalizeConfigPageView } from "./config/config-view.js";
 import { demoRunRecords } from "./runs/demo-records.js";
 import { buildRunWorkbenchView, renderRunWorkbench } from "./runs/workbench.js";
 import { buildSkillWorkbenchView, renderSkillWorkbench, sampleSkillInputs } from "./skills/workbench.js";
@@ -16,27 +18,19 @@ import type { SkillLibraryInput } from "./skills/model.js";
 
 const apiBaseUrl = apiBaseUrlFromEnv(import.meta.env as Record<string, unknown>);
 const apiClient = apiBaseUrl ? createKeigentApiClient({ baseUrl: apiBaseUrl }) : undefined;
+const apiConnectionMonitor = createApiConnectionMonitor(apiClient, apiBaseUrl);
+let apiConnectionState: ApiConnectionState = apiConnectionMonitor.state();
+let mountVersion = 0;
 let activeRunSource: EventSource | undefined;
 let launcherError: string | undefined;
 let latestAuditHandoff: WebRunAuditHandoff | undefined;
+let latestRunRecord: unknown | undefined;
 
-const demoEvents: ProgressEvent[] = [
-  { kind: "profile_selected", profile: "convergent-exec", via: "rule", ruleId: "skill_match", rationale: "任务匹配执行 skill file-write", signals: ["skill:file-write", "score:17"] },
-  { kind: "skills_matched", skills: ["file-write", "checkpoint-verify"] },
-  { kind: "iteration_start", iteration: 1 },
-  { kind: "tool_call", iteration: 1, toolName: "file_write", args: { path: "hello.txt", apiKey: "redacted-before-display" } },
-  { kind: "tool_result", iteration: 1, toolName: "file_write", result: "created", succeeded: true },
-  { kind: "checkpoint", iteration: 1, desc: "File exists" },
-  { kind: "verdict", iteration: 1, passed: true, evidence: "hello.txt exists" },
-  { kind: "done", exitReason: "success", finalResponse: "hello.txt created" },
-];
-
-const demoTask = { goal: "Create hello.txt and verify it" };
 let conversationRun: NormalizeRunOptions = {
-  id: "demo",
-  mode: "replay",
-  task: demoTask,
-  events: demoEvents,
+  id: "draft",
+  mode: "live",
+  task: { goal: "" },
+  events: [],
 };
 
 const demoSkillLibrary: SkillLibraryInput = {
@@ -93,11 +87,10 @@ function renderShell(section: AppSection, content: string): string {
 }
 
 async function renderSection(route: WorkbenchRoute): Promise<string> {
+  if (route.section === "chat") return renderChat();
   if (route.section === "runs") return renderRuns(route.selectedRunId);
-  if (route.section === "conversation") return renderConversation();
-  if (route.section === "dashboard") return renderDashboard(route.evalDatasetId);
   if (route.section === "skills") return renderSkills();
-  return renderConfig();
+  return renderSettings(route.evalDatasetId);
 }
 
 async function renderRuns(selectedRunId?: string): Promise<string> {
@@ -113,13 +106,14 @@ async function renderRuns(selectedRunId?: string): Promise<string> {
   return renderRunWorkbench(buildRunWorkbenchView(demoRunRecords, selectedRunId));
 }
 
-function renderConversation(): string {
-  return renderWebRunLauncher({
-    apiEnabled: Boolean(apiClient),
+function renderChat(): string {
+  return renderChatWorkbench(buildChatWorkbenchView({
+    apiEnabled: apiConnectionState.connected,
     run: conversationRun,
     ...(launcherError ? { error: launcherError } : {}),
     ...(latestAuditHandoff ? { auditHandoff: latestAuditHandoff } : {}),
-  });
+    ...(latestRunRecord ? { runRecord: latestRunRecord } : {}),
+  }));
 }
 
 async function renderDashboard(evalDatasetId?: string): Promise<string> {
@@ -142,34 +136,64 @@ function renderSkills(): string {
   return renderSkillWorkbench(buildSkillWorkbenchView(demoSkillLibrary));
 }
 
-function renderConfig(): string {
-  const status = deriveConfigStatus(SAMPLE_CONFIG_VIEW);
+function renderConfig(connection: ApiConnectionState): string {
+  const view = normalizeConfigPageView({
+    fields: SAMPLE_CONFIG_VIEW.fields.map((field) => ({
+      label: field.label,
+      effectiveValue: field.effectiveValue,
+      source: field.source,
+      ...(field.secret !== undefined ? { secret: field.secret } : {}),
+      issues: field.issues,
+    })),
+    doctorIssues: SAMPLE_CONFIG_VIEW.doctorIssues,
+    apiConnection: { connected: connection.connected, ...(connection.baseUrl ? { baseUrl: connection.baseUrl } : {}) },
+  });
+  const status = deriveConfigStatus(view);
+  const apiConnection = view.apiConnection
+    ? `<section class="panel ${view.apiConnection.connected ? "" : "warning"}"><h2>API connection</h2><p><strong>${escapeHtml(view.apiConnection.label)}</strong></p><p>${escapeHtml(view.apiConnection.nextAction)}</p></section>`
+    : "";
   return `
-    <section class="hero"><p class="eyebrow">Config</p><h1>Source-aware configuration.</h1><p>No hardcoded keys, no raw secrets, no ambiguity about env/file/default precedence.</p></section>
-    <section class="panel"><h2>Status: ${status}</h2><div class="config-table">${SAMPLE_CONFIG_VIEW.fields.map((field) => `<div><strong>${field.label}</strong><span>${field.effectiveValue}</span><small>${field.source}</small></div>`).join("")}</div></section>
-    <section class="panel warning"><h2>Doctor issues</h2>${SAMPLE_CONFIG_VIEW.doctorIssues.map((issue) => `<p><strong>${issue.code}</strong> — ${issue.message}</p>`).join("")}</section>
+    <section class="hero"><p class="eyebrow">Settings</p><h1>Source-aware configuration.</h1><p>No hardcoded keys, no raw secrets, no ambiguity about env/file/default precedence.</p></section>
+    ${apiConnection}
+    <section class="panel"><h2>Status: ${status}</h2><div class="config-table">${view.fields.map((field) => `<div><strong>${escapeHtml(field.label)}</strong><span>${escapeHtml(field.effectiveValue)}</span><small>${field.source}</small></div>`).join("")}</div></section>
+    <section class="panel warning"><h2>Doctor issues</h2>${view.doctorIssues.map((issue) => `<p><strong>${escapeHtml(issue.code)}</strong> — ${escapeHtml(issue.message)}</p>`).join("")}</section>
   `;
 }
 
+async function renderSettings(evalDatasetId?: string): Promise<string> {
+  const config = renderConfig(apiConnectionState);
+  const evalPanel = await renderDashboard(evalDatasetId);
+  return `${config}<section class="settings-divider"></section>${evalPanel}`;
+}
+
 async function mount(route: WorkbenchRoute = parseHashRoute(window.location.hash)) {
+  const version = ++mountVersion;
   const app = document.querySelector<HTMLDivElement>("#app");
   if (!app) throw new Error("missing #app");
   app.innerHTML = renderShell(route.section, `<section class="hero compact"><p class="eyebrow">Loading</p><h1>Loading Workbench.</h1></section>`);
-  app.innerHTML = renderShell(route.section, await renderSection(route));
+  const content = await renderSection(route);
+  if (version !== mountVersion) return;
+  app.innerHTML = renderShell(route.section, content);
   for (const button of app.querySelectorAll<HTMLButtonElement>("[data-section]")) {
     button.addEventListener("click", () => {
       window.location.hash = hashForSection(button.dataset.section as AppSection);
     });
   }
-  if (route.section === "conversation") wireWebRunLauncher(app);
+  if (route.section === "chat") wireWebRunLauncher(app);
+}
+
+async function refreshApiConnection(options: { force?: boolean } = {}): Promise<void> {
+  apiConnectionState = await apiConnectionMonitor.refresh(options);
+  void mount();
 }
 
 window.addEventListener("hashchange", () => {
   void mount();
 });
 
-if (!window.location.hash) window.location.hash = hashForSection("runs");
+if (!window.location.hash) window.location.hash = hashForSection("chat");
 else void mount();
+void refreshApiConnection({ force: true });
 
 function wireWebRunLauncher(app: HTMLDivElement): void {
   const form = app.querySelector<HTMLFormElement>("[data-web-run-form]");
@@ -188,11 +212,13 @@ async function startWebRun(goal: string): Promise<void> {
   activeRunSource?.close();
   launcherError = undefined;
   latestAuditHandoff = undefined;
+  latestRunRecord = undefined;
   conversationRun = { id: "starting", mode: "live", task: { goal }, events: [] };
-  void mount({ section: "conversation" });
+  void mount();
 
   try {
-    if (!apiClient) throw new Error("Local API is not connected");
+    apiConnectionState = await apiConnectionMonitor.refresh();
+    if (!apiClient || !apiConnectionState.connected) throw new Error("Local API is not connected");
     const session = await apiClient.startRun(goal);
     conversationRun = { ...conversationRun, id: session.id };
     const source = apiClient.openRunEvents(session.id);
@@ -204,20 +230,34 @@ async function startWebRun(goal: string): Promise<void> {
         const events = progressEventsFromStreamEvent(streamEvent);
         if (events.length > 0) {
           conversationRun = appendProgressEvents(conversationRun, events);
-          void mount({ section: "conversation" });
+          void mount();
         }
         const handoff = auditHandoffFromStreamEvent(streamEvent);
         if (handoff) {
           latestAuditHandoff = handoff;
-          window.location.hash = handoff.href;
+          void mount();
+          void refreshLatestRunRecord(handoff.recordId);
         }
         if (streamEvent.kind === "run_finished" || streamEvent.kind === "run_error") source.close();
       });
     }
-    void mount({ section: "conversation" });
+    void mount();
   } catch (error) {
     launcherError = error instanceof Error ? error.message : String(error);
     conversationRun = appendProgressEvents(conversationRun, [{ kind: "done", exitReason: "error", finalResponse: launcherError }]);
-    void mount({ section: "conversation" });
+    void mount();
+  }
+}
+
+async function refreshLatestRunRecord(recordId: string): Promise<void> {
+  if (!apiClient) return;
+  try {
+    const store = await apiClient.fetchRunStore();
+    latestRunRecord = store.records.find((record) => {
+      return Boolean(record && typeof record === "object" && "id" in record && record.id === recordId);
+    });
+    void mount();
+  } catch {
+    // Chat keeps the live evidence summary if the run store has not refreshed yet.
   }
 }

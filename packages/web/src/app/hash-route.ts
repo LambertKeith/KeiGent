@@ -7,7 +7,7 @@ export interface WorkbenchRoute {
   evalDatasetId?: string;
 }
 
-const sections = new Set<AppSection>(["runs", "conversation", "dashboard", "skills", "config"]);
+const sections = new Set<AppSection>(["chat", "runs", "skills", "settings"]);
 
 export function parseHashRoute(hash: string): WorkbenchRoute {
   const normalized = hash.startsWith("#") ? hash.slice(1) : hash;
@@ -20,18 +20,22 @@ export function parseHashRoute(hash: string): WorkbenchRoute {
 
   if (head === "eval") {
     if (second === "real-world" && third) {
-      return { section: "dashboard", evalKind: "real-world", evalDatasetId: third };
+      return { section: "settings", evalKind: "real-world", evalDatasetId: third };
     }
     return second
-      ? { section: "dashboard", evalKind: "generic", evalDatasetId: second }
-      : { section: "dashboard" };
+      ? { section: "settings", evalKind: "generic", evalDatasetId: second }
+      : { section: "settings" };
+  }
+
+  if (head === "conversation" || head === "config" || head === "dashboard") {
+    return { section: head === "conversation" ? "chat" : "settings" };
   }
 
   if (sections.has(head as AppSection)) {
     return { section: head as AppSection };
   }
 
-  return { section: "runs" };
+  return { section: "chat" };
 }
 
 export function hashForSection(section: AppSection): string {

@@ -17,6 +17,11 @@ export interface RunSessionPayload {
   eventsHref: string;
 }
 
+export interface ApiHealthPayload {
+  status: string;
+  service: string;
+}
+
 export type RealWorldEvalReportPayload = unknown;
 
 export type EventSourceConstructor = new (url: string) => EventSource;
@@ -28,6 +33,7 @@ export interface KeigentApiClientOptions {
 }
 
 export interface KeigentApiClient {
+  fetchHealth(): Promise<ApiHealthPayload>;
   fetchRunStore(): Promise<RunStorePayload>;
   fetchLatestRealWorldEvalReport(datasetId: string): Promise<RealWorldEvalReportPayload>;
   startRun(goal: string): Promise<RunSessionPayload>;
@@ -45,6 +51,15 @@ export function createKeigentApiClient(options: KeigentApiClientOptions): Keigen
   const EventSourceImpl = options.eventSource;
 
   return {
+    async fetchHealth() {
+      const response = await fetcher(`${baseUrl}/api/health`, {
+        headers: { accept: "application/json" },
+      });
+      if (!response.ok) {
+        throw new Error(`Web API request failed: GET /api/health ${response.status}`);
+      }
+      return await response.json() as ApiHealthPayload;
+    },
     async fetchRunStore() {
       const response = await fetcher(`${baseUrl}/api/runs`, {
         headers: { accept: "application/json" },

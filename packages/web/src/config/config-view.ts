@@ -17,6 +17,7 @@ export interface ConfigPageView {
   doctorIssues: { code: string; severity: "info" | "warning" | "error"; message: string }[];
   offlineDoctor?: DoctorPanelView;
   onlineDoctor?: OnlineDoctorView;
+  apiConnection?: ApiConnectionView;
 }
 
 export interface ConfigFieldInput {
@@ -39,10 +40,20 @@ export interface OnlineDoctorView {
   label: string;
 }
 
+export interface ApiConnectionView {
+  connected: boolean;
+  label: string;
+  nextAction: string;
+}
+
 export interface NormalizeConfigPageOptions {
   fields: ConfigFieldInput[];
   doctorIssues: ConfigPageView["doctorIssues"];
   onlineDoctorRequested?: boolean;
+  apiConnection?: {
+    connected: boolean;
+    baseUrl?: string;
+  };
 }
 
 export function deriveConfigStatus(view: Pick<ConfigPageView, "fields" | "doctorIssues">): ConfigStatus {
@@ -86,6 +97,22 @@ export function normalizeConfigPageView(options: NormalizeConfigPageOptions): Co
       requiresExplicitAction: !onlineEnabled,
       label: onlineEnabled ? "Online doctor requested" : "Online doctor requires explicit action",
     },
+    ...(options.apiConnection ? { apiConnection: apiConnectionView(options.apiConnection) } : {}),
+  };
+}
+
+function apiConnectionView(input: NonNullable<NormalizeConfigPageOptions["apiConnection"]>): ApiConnectionView {
+  if (input.connected) {
+    return {
+      connected: true,
+      label: input.baseUrl ? `Local API connected: ${input.baseUrl}` : "Local API connected",
+      nextAction: "Use Chat to start a run.",
+    };
+  }
+  return {
+    connected: false,
+    label: "Local API not connected",
+    nextAction: "Start KeiGent with corepack pnpm --filter @keigent/cli start web --api.",
   };
 }
 

@@ -60,4 +60,27 @@ describe("config page view model", () => {
 
     expect(view.fields[0]?.effectiveValue).toBe("{\"input\":2.5,\"output\":10,\"cacheRead\":0.25,\"cacheWrite\":3}");
   });
+
+  it("normalizes local API connection status for Settings", () => {
+    const connected = normalizeConfigPageView({
+      fields: [],
+      doctorIssues: [],
+      apiConnection: { connected: true, baseUrl: "http://127.0.0.1:5174" },
+    });
+    const unavailable = normalizeConfigPageView({
+      fields: [],
+      doctorIssues: [],
+      apiConnection: { connected: false },
+    });
+
+    expect(connected.apiConnection).toMatchObject({
+      connected: true,
+      label: "Local API connected: http://127.0.0.1:5174",
+    });
+    expect(unavailable.apiConnection).toMatchObject({
+      connected: false,
+      label: "Local API not connected",
+    });
+    expect(unavailable.apiConnection?.nextAction).toContain("web --api");
+  });
 });

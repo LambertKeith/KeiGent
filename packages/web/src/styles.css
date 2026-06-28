@@ -62,6 +62,197 @@ h2 { margin: 0 0 14px; letter-spacing: 0; font-size: 18px; }
   padding: 22px;
 }
 .panel.warning { border-color: #efb0a6; background: #fff3f0; }
+.chat-shell {
+  display: grid;
+  gap: 18px;
+  max-width: 1180px;
+}
+.chat-hero {
+  max-width: 820px;
+}
+.chat-hero h1 {
+  max-width: 720px;
+}
+.chat-hero p:not(.eyebrow) {
+  color: #667085;
+  font-size: 16px;
+  line-height: 1.6;
+  max-width: 720px;
+}
+.chat-composer-panel,
+.chat-result,
+.chat-evidence-summary,
+.execution-details {
+  border: 1px solid #dfe3ea;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(20, 30, 55, .05);
+}
+.chat-composer-panel {
+  padding: 18px;
+  border-color: #b9cbe7;
+}
+.chat-composer {
+  display: grid;
+  gap: 12px;
+}
+.chat-composer label {
+  display: grid;
+  gap: 8px;
+  color: #475467;
+  font-weight: 800;
+}
+.chat-composer textarea {
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  border: 1px solid #c9d4e5;
+  border-radius: 8px;
+  padding: 14px;
+  color: #232936;
+  background: #fbfcfe;
+  font: inherit;
+  line-height: 1.5;
+}
+.chat-composer textarea:focus {
+  outline: 3px solid rgba(47, 111, 237, .18);
+  border-color: #2f6fed;
+}
+.chat-composer textarea:disabled {
+  background: #f1f4f8;
+  color: #667085;
+}
+.chat-actions,
+.chat-secondary-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.chat-actions button {
+  min-height: 42px;
+  border: 1px solid #263b5e;
+  border-radius: 8px;
+  background: #263b5e;
+  color: #ffffff;
+  padding: 0 18px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.chat-actions button:disabled {
+  border-color: #b7c1d0;
+  background: #dfe3ea;
+  color: #667085;
+  cursor: not-allowed;
+}
+.connection-state,
+.chat-hint,
+.chat-error {
+  color: #667085;
+  margin: 0;
+}
+.chat-hint code {
+  overflow-wrap: anywhere;
+}
+.chat-error {
+  color: #b42318;
+  font-weight: 800;
+}
+.chat-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.chat-status {
+  min-height: 92px;
+  border: 1px solid #dfe3ea;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 16px;
+}
+.chat-status span {
+  display: block;
+  color: #667085;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.chat-status strong {
+  display: block;
+  color: #232936;
+  font-size: 22px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.chat-result,
+.chat-evidence-summary {
+  padding: 22px;
+}
+.chat-result p,
+.chat-evidence-summary p {
+  color: #475467;
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.chat-result.muted p {
+  color: #667085;
+}
+.secondary-action {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  border: 1px solid #263b5e;
+  border-radius: 8px;
+  color: #263b5e;
+  padding: 0 14px;
+  text-decoration: none;
+  font-weight: 800;
+}
+.execution-details {
+  padding: 0;
+  overflow: hidden;
+}
+.execution-details > summary {
+  cursor: pointer;
+  padding: 16px 18px;
+  color: #263b5e;
+  font-weight: 800;
+}
+.execution-details[open] {
+  padding-bottom: 18px;
+}
+.execution-details[open] > summary {
+  border-bottom: 1px solid #dfe3ea;
+  margin-bottom: 18px;
+}
+.compact-timeline {
+  margin: 0 18px;
+}
+.compact-timeline ul {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.compact-timeline li {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #e6e9ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+}
+.compact-timeline span {
+  color: #667085;
+  overflow-wrap: anywhere;
+}
+.execution-details .hero,
+.execution-details .run-stats,
+.execution-details .workbench-grid {
+  margin-left: 18px;
+  margin-right: 18px;
+}
 .run-launcher { margin-bottom: 18px; }
 .run-launcher-form { display: grid; gap: 12px; }
 .run-launcher-form label { display: grid; gap: 8px; color: #475467; font-weight: 700; }
@@ -205,7 +396,7 @@ td { overflow-wrap: anywhere; }
 @media (max-width: 1050px) {
   #app { grid-template-columns: 1fr; }
   .sidebar { position: relative; height: auto; }
-  .grid.three, .grid.kpis, .run-stats, .workbench-grid, .split-panels { grid-template-columns: 1fr; }
+  .grid.three, .grid.kpis, .run-stats, .workbench-grid, .split-panels, .chat-status-grid { grid-template-columns: 1fr; }
   .run-list-panel { position: static; max-height: none; }
   .main { padding: 24px; }
 }

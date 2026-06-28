@@ -1,0 +1,2 @@
+Apache License 2.0. Original frontend-design skill source: claude-plugins-official/frontend-design.
+

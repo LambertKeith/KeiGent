@@ -43,6 +43,24 @@ describe("Workbench API client", () => {
     });
   });
 
+  it("checks the local Web API health endpoint before enabling connected UI", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      status: "ok",
+      service: "keigent-web-api",
+    }), { status: 200 }));
+    const client = createKeigentApiClient({ baseUrl: "http://127.0.0.1:5174", fetcher });
+
+    const health = await client.fetchHealth();
+
+    expect(fetcher).toHaveBeenCalledWith("http://127.0.0.1:5174/api/health", expect.objectContaining({
+      headers: { accept: "application/json" },
+    }));
+    expect(health).toMatchObject({
+      status: "ok",
+      service: "keigent-web-api",
+    });
+  });
+
   it("fetches the latest real-world eval report from the local Web API", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({
       datasetId: "local-real-task-v1",
@@ -107,6 +125,15 @@ describe("Workbench API client", () => {
     });
 
     await expect(client.fetchRunStore()).rejects.toThrow("Web API request failed: GET /api/runs 404");
+  });
+
+  it("fails loudly when the local Web API health endpoint is unavailable", async () => {
+    const client = createKeigentApiClient({
+      baseUrl: "http://127.0.0.1:5174",
+      fetcher: async () => new Response("down", { status: 503 }),
+    });
+
+    await expect(client.fetchHealth()).rejects.toThrow("Web API request failed: GET /api/health 503");
   });
 
   it("fails loudly when the latest real-world eval report is missing", async () => {

@@ -55,6 +55,24 @@ describe("web run launcher", () => {
     expect(progressEventsFromStreamEvent(streamEvent)).toEqual([{ kind: "iteration_start", iteration: 1 }]);
   });
 
+  it("does not create progress events for run_started or parent workflow events", () => {
+    expect(progressEventsFromStreamEvent({
+      kind: "run_started",
+      runId: "web_123",
+      goal: "Check config",
+    })).toEqual([]);
+    expect(progressEventsFromStreamEvent({
+      kind: "workflow_event",
+      runId: "web_123",
+      event: {
+        kind: "workflow_start",
+        workflowId: "wf_123",
+        mode: "single-loop",
+        goal: "Check config",
+      },
+    })).toEqual([]);
+  });
+
   it("turns terminal run events into live console done events", () => {
     const streamEvent: WebRunStreamEvent = {
       kind: "run_finished",
@@ -69,6 +87,18 @@ describe("web run launcher", () => {
       kind: "done",
       exitReason: "budget_exceeded",
       finalResponse: "budget stopped the run",
+    }]);
+  });
+
+  it("turns run_error events into failed done events", () => {
+    expect(progressEventsFromStreamEvent({
+      kind: "run_error",
+      runId: "web_123",
+      message: "boom",
+    })).toEqual([{
+      kind: "done",
+      exitReason: "error",
+      finalResponse: "boom",
     }]);
   });
 

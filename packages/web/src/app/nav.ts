@@ -1,4 +1,4 @@
-export type AppSection = "runs" | "conversation" | "dashboard" | "skills" | "config";
+export type AppSection = "chat" | "runs" | "skills" | "settings";
 
 export interface NavItem {
   id: AppSection;
@@ -8,19 +8,14 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   {
+    id: "chat",
+    label: "Chat",
+    description: "Start a KeiGent run and see the result first.",
+  },
+  {
     id: "runs",
     label: "Runs",
     description: "Review saved RunRecords, evidence, risk, and replay status.",
-  },
-  {
-    id: "conversation",
-    label: "Conversation",
-    description: "Inspect one live or replayed KeiGent loop run.",
-  },
-  {
-    id: "dashboard",
-    label: "Dashboard",
-    description: "Measure eval, replay, and orchestrator health.",
   },
   {
     id: "skills",
@@ -28,8 +23,8 @@ export const NAV_ITEMS: NavItem[] = [
     description: "Review skill status, match reasons, and eval coverage.",
   },
   {
-    id: "config",
-    label: "Config",
+    id: "settings",
+    label: "Settings",
     description: "Review source-aware local configuration safely.",
   },
 ];
